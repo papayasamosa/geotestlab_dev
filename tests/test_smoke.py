@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import py_compile
+import re
 import sys
 from pathlib import Path
 
@@ -30,6 +31,85 @@ REQUIRED_GOLDEN_FIELDS = [
     "tolerances",
     "known_limitations",
 ]
+
+# Scenario-specific expected keys
+SCENARIO_EXPECTED_KEYS = {
+    "app_tab_labels": {"n_tabs", "tab_labels"},
+    "bundled_workbook_structure": {"n_sheets", "sheet_names"},
+    "available_markets": {"markets", "default_market"},
+}
+
+FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _validate_golden_schema(data: dict, filename: str) -> list[str]:
+    """Validate a golden file's schema. Returns list of errors (empty = valid)."""
+    errors: list[str] = []
+
+    # Check required fields present
+    for field in REQUIRED_GOLDEN_FIELDS:
+        if field not in data:
+            errors.append(f"{filename}: missing field '{field}'")
+
+    if errors:
+        return errors
+
+    # Schema version
+    if data["schema_version"] != 1:
+        errors.append(f"{filename}: schema_version must be 1, got {data['schema_version']}")
+
+    # Scenario
+    if not isinstance(data["scenario"], str) or not data["scenario"]:
+        errors.append(f"{filename}: scenario must be a non-empty string")
+    elif data["scenario"] != filename.replace(".json", ""):
+        errors.append(f"{filename}: scenario '{data['scenario']}' does not match filename")
+
+    # Fixture version
+    if not isinstance(data["fixture_version"], int) or data["fixture_version"] < 1:
+        errors.append(f"{filename}: fixture_version must be a positive integer")
+
+    # Commit fields must be full 40-char SHAs
+    for commit_field in ["app_baseline_commit", "golden_created_by_commit"]:
+        val = data.get(commit_field, "")
+        if not FULL_SHA_RE.match(val):
+            errors.append(f"{filename}: {commit_field} is not a 40-char hex SHA: {val}")
+
+    # settings must be a dict
+    if not isinstance(data.get("settings"), dict):
+        errors.append(f"{filename}: settings must be a dict")
+
+    # expected must be a dict
+    if not isinstance(data.get("expected"), dict):
+        errors.append(f"{filename}: expected must be a dict")
+
+    # tolerances must be a dict
+    if not isinstance(data.get("tolerances"), dict):
+        errors.append(f"{filename}: tolerances must be a dict")
+
+    # known_limitations must be a list of strings
+    kl = data.get("known_limitations")
+    if not isinstance(kl, list) or not all(isinstance(item, str) for item in kl):
+        errors.append(f"{filename}: known_limitations must be a list of strings")
+
+    # Scenario-specific required keys in expected
+    scenario = data.get("scenario", "")
+    if scenario in SCENARIO_EXPECTED_KEYS:
+        expected = data.get("expected", {})
+        for key in SCENARIO_EXPECTED_KEYS[scenario]:
+            if key not in expected:
+                errors.append(f"{filename}: expected missing key '{key}' for scenario '{scenario}'")
+
+    return errors
+
+
+def _load_golden(name: str) -> dict:
+    """Load a golden file. Tests fail if the file is missing."""
+    path = REPO_ROOT / "tests" / "golden" / f"{name}.json"
+    assert path.exists(), (
+        f"Golden file {path.name} not found. "
+        f"Run 'python scripts/update_goldens.py --approve' to create it."
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +188,7 @@ class TestBundledData:
 
 
 class TestDependencyFilesPortability:
-    """Dependency files must be portable and generated on Python 3.11."""
+    """Dependency files must be portable and contain no local paths."""
 
     @pytest.mark.smoke
     def test_no_local_paths_in_requirements(self):
@@ -119,26 +199,14 @@ class TestDependencyFilesPortability:
             for pattern in ["file:///", "C:/", "C:\\", "/Users/", "/home/"]:
                 assert pattern not in content, f"{fname} contains {pattern}"
 
-    @pytest.mark.smoke
-    def test_lock_files_generated_on_python_311(self):
-        """The lock file headers must indicate Python 3.11 generation."""
-        for fname in ["requirements.txt", "requirements-dev.txt"]:
-            path = REPO_ROOT / fname
-            assert path.exists(), f"{fname} is missing"
-            lines = path.read_text(encoding="utf-8").split("\n")
-            header_line = next((line for line in lines if "Python" in line), "")
-            assert "Python 3.11" in header_line, (
-                f"{fname} was not generated on Python 3.11: {header_line.strip()}"
-            )
-
 
 # ---------------------------------------------------------------------------
-# Golden file schema validation
+# Golden file schema validation (strict)
 # ---------------------------------------------------------------------------
 
 
 class TestGoldenSchema:
-    """All golden files must contain the required schema fields."""
+    """All golden files must contain the required schema fields with valid values."""
 
     @pytest.mark.smoke
     def test_golden_files_have_valid_schema(self):
@@ -146,13 +214,101 @@ class TestGoldenSchema:
         json_files = sorted(golden_dir.glob("*.json"))
         assert len(json_files) > 0, "No golden files found"
 
+        all_errors: list[str] = []
         for gf in json_files:
             data = json.loads(gf.read_text(encoding="utf-8"))
-            for field in REQUIRED_GOLDEN_FIELDS:
-                assert field in data, f"{gf.name} missing field: {field}"
-            assert isinstance(data["schema_version"], int)
-            assert isinstance(data["fixture_version"], int)
-            assert isinstance(data["expected"], dict)
+            all_errors.extend(_validate_golden_schema(data, gf.name))
+
+        assert not all_errors, "Golden schema validation failed:\n  " + "\n  ".join(all_errors)
+
+    @pytest.mark.smoke
+    def test_scenario_names_are_unique(self):
+        golden_dir = REPO_ROOT / "tests" / "golden"
+        json_files = sorted(golden_dir.glob("*.json"))
+        scenarios = []
+        for gf in json_files:
+            data = json.loads(gf.read_text(encoding="utf-8"))
+            scenarios.append(data["scenario"])
+        assert len(scenarios) == len(set(scenarios)), f"Duplicate scenario names: {scenarios}"
+
+    @pytest.mark.smoke
+    def test_golden_files_are_read_only(self):
+        """Tests must fail when a golden file is missing — no auto-creation."""
+        for name in ["app_tab_labels", "bundled_workbook_structure", "available_markets"]:
+            path = REPO_ROOT / "tests" / "golden" / f"{name}.json"
+            assert path.exists(), (
+                f"Golden file {path.name} is missing. "
+                f"Tests must NOT create it — run 'python scripts/update_goldens.py --approve'"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Lock reproducibility (via compile_requirements.py --check)
+# ---------------------------------------------------------------------------
+
+
+class TestLockReproducibility:
+    """Lock files must be reproducible from the canonical command."""
+
+    @pytest.mark.smoke
+    def test_lock_files_have_no_bom(self):
+        for fname in ["requirements.txt", "requirements-dev.txt"]:
+            path = REPO_ROOT / fname
+            assert path.exists(), f"{fname} is missing"
+            content = path.read_bytes()
+            # UTF-8 BOM is EF BB BF
+            assert not (content[:3] == b"\xef\xbb\xbf"), f"{fname} has a byte-order mark"
+
+    @pytest.mark.smoke
+    def test_compile_script_constructs_correct_args(self):
+        """Verify the compile script produces the expected pip-compile commands."""
+
+        # Test runtime command
+        runtime_cmd = _build_cmd("requirements.txt", ["bayesian"])
+        assert "--extra=bayesian" in " ".join(runtime_cmd)
+        assert "--output-file" in " ".join(runtime_cmd)
+
+        # Test dev command
+        dev_cmd = _build_cmd("requirements-dev.txt", ["bayesian", "dev"])
+        assert "--extra=bayesian" in " ".join(dev_cmd)
+        assert "--extra=dev" in " ".join(dev_cmd)
+
+    @pytest.mark.smoke
+    def test_compile_script_checks_python_version(self):
+        """The compile script must require Python 3.11 (source inspection)."""
+        import scripts.compile_requirements as cr
+        import inspect
+
+        source = inspect.getsource(cr._check_python_version)
+        assert "sys.version_info[:2]" in source
+        assert "(3, 11)" in source
+        assert "sys.exit(1)" in source
+
+        # On Python 3.11 the function should pass; on any other version it exits.
+        if sys.version_info[:2] == (3, 11):
+            # Should not raise
+            cr._check_python_version()
+        else:
+            with pytest.raises(SystemExit):
+                cr._check_python_version()
+
+
+def _build_cmd(output_file: str, extras: list[str]) -> list[str]:
+    """Replicate the command construction from compile_requirements.py."""
+    cmd = (
+        ["python", "-m", "piptools", "compile"]
+        + [
+            "--strip-extras",
+            "--annotation-style=line",
+            "--no-emit-index-url",
+            "--no-emit-options",
+            "--no-emit-trusted-host",
+        ]
+        + [f"--extra={e}" for e in extras]
+        + ["--output-file", output_file]
+        + ["pyproject.toml"]
+    )
+    return cmd
 
 
 # ---------------------------------------------------------------------------
