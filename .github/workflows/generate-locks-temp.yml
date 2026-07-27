@@ -2,6 +2,8 @@ name: Generate locks (temporary)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/linux-canonical-locks]
 
 jobs:
   generate:
