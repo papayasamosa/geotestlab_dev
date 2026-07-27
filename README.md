@@ -57,6 +57,12 @@ GeoTestLab supports a four-stage workflow through four tabs:
 
 ## Dependency management
 
+Canonical lock platform: Linux, Python 3.11.
+
+`requirements.txt` and `requirements-dev.txt` are release and CI locks generated
+on Linux Python 3.11. Windows development is supported, but strict byte-for-byte
+Windows transitive dependency locking is not currently promised.
+
 Runtime dependencies are declared in `pyproject.toml` (loose version ranges) and pinned into lock files:
 
 ```bash
@@ -67,7 +73,7 @@ python -m piptools compile --extra=bayesian --strip-extras --annotation-style=li
 python -m piptools compile --extra=bayesian --extra=dev --strip-extras --annotation-style=line --no-emit-index-url --no-emit-options --no-emit-trusted-host --output-file=requirements-dev.txt pyproject.toml
 ```
 
-**Important**: Always regenerate lock files in a clean Python 3.11 environment. Do not edit `requirements.txt` or `requirements-dev.txt` by hand.
+**Important**: Always regenerate lock files in a clean Linux Python 3.11 environment (matching CI). Do not edit `requirements.txt` or `requirements-dev.txt` by hand.
 
 ## Lint and test
 
