@@ -1,0 +1,78 @@
+{
+  "app_baseline_commit": "281063d2e59213dbab5781addd07cf4413550e69",
+  "expected": {
+    "actual_total": 538.4603755168093,
+    "controls": [
+      "Aberdeenshire",
+      "Angus"
+    ],
+    "counterfactual_reliability": "\ud83d\udfe2 High confidence",
+    "counterfactual_total": 564.7693338476504,
+    "dw_stat": 1.8320493252638552,
+    "errors": [],
+    "exception": false,
+    "frequency_radio_options": [
+      "Weekly",
+      "Daily"
+    ],
+    "lag_drop_metadata": {
+      "lag_drop_pct": 5.691056910569105,
+      "rows_after_lag_drop": 116,
+      "rows_before_lag_drop": 123,
+      "rows_dropped_due_to_lag": 7
+    },
+    "lag_periods": 7,
+    "median_placebo_uplift": 18.948839415529164,
+    "n_folds": 17,
+    "n_placebos": 17,
+    "n_pre_periods": 106,
+    "n_selected_features": 4,
+    "placebo_p_value_one_sided": 1.0,
+    "placebo_p_value_two_sided": 0.0,
+    "placebo_percentile_rank": 0.0,
+    "placebo_range_lower": -1.7639979046817644,
+    "placebo_range_upper": 26.08986995282223,
+    "placebo_z_score": -5.317745539564142,
+    "rmse": 3.127885327518047,
+    "rolling_bias_pct_mean": -2.7350982226738947,
+    "rolling_rmse_mean": 4.581935915933323,
+    "rolling_smape_mean": 4.105961036815511,
+    "run_button_disabled_before_run": false,
+    "smape": 2.695215998560519,
+    "time_series_frequency": "daily",
+    "uplift": -26.30895833084105,
+    "uplift_pct": -4.658354615609855,
+    "warnings": []
+  },
+  "fixture_version": 1,
+  "golden_created_by_commit": "66268a7da2fc3b04288dd969fef139bdf1d85b2c",
+  "known_limitations": [
+    "Daily lag length is fixed at 7 periods (get_frequency_config); changing that mapping would change rows-dropped-to-lag here."
+  ],
+  "scenario": "numerical_daily_evaluation",
+  "schema_version": 1,
+  "settings": {
+    "control_regions": [
+      "Aberdeenshire",
+      "Angus"
+    ],
+    "fixture": "write_daily_kpi_xlsx",
+    "frequency": "daily",
+    "include_lagged_controls": true,
+    "mode": "Evaluate",
+    "n_days": 150,
+    "seed": 321,
+    "test_region": "Aberdeen City"
+  },
+  "tolerances": {
+    "actual_total": 0.0001,
+    "counterfactual_total": 0.0001,
+    "dw_stat": 1e-06,
+    "rmse": 0.0001,
+    "rolling_rmse_mean": 0.0001,
+    "rolling_smape_mean": 0.0001,
+    "smape": 0.0001,
+    "uplift": 0.0001,
+    "uplift_pct": 0.0001
+  }
+}

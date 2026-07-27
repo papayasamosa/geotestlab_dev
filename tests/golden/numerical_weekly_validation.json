@@ -1,0 +1,61 @@
+{
+  "app_baseline_commit": "281063d2e59213dbab5781addd07cf4413550e69",
+  "expected": {
+    "controls": [
+      "Aberdeenshire",
+      "Angus"
+    ],
+    "counterfactual_reliability": "\ud83d\udfe1 Moderate confidence",
+    "dw_stat": 1.3760191555053718,
+    "errors": [],
+    "exception": false,
+    "lag_drop_metadata": null,
+    "lag_periods": 1,
+    "median_placebo_uplift": 6.830943156753364,
+    "n_folds": 20,
+    "n_placebos": 40,
+    "n_pre_periods": 60,
+    "n_selected_features": 2,
+    "placebo_p_value_one_sided": NaN,
+    "placebo_p_value_two_sided": NaN,
+    "placebo_percentile_rank": NaN,
+    "placebo_range_lower": -8.545675817091434,
+    "placebo_range_upper": 20.221263744949525,
+    "placebo_z_score": NaN,
+    "rmse": 3.091463008697416,
+    "rolling_bias_pct_mean": -1.4841488470339785,
+    "rolling_rmse_mean": 3.3735151863652524,
+    "rolling_smape_mean": 2.721036072456616,
+    "smape": 2.539556090103994,
+    "time_series_frequency": "weekly",
+    "uplift": null,
+    "uplift_pct": null,
+    "warnings": []
+  },
+  "fixture_version": 1,
+  "golden_created_by_commit": "66268a7da2fc3b04288dd969fef139bdf1d85b2c",
+  "known_limitations": [
+    "Rolling-origin folds and the underlying ElasticNetCV fit depend on scikit-learn's numerical implementation; pinned scikit-learn version keeps this reproducible."
+  ],
+  "scenario": "numerical_weekly_validation",
+  "schema_version": 1,
+  "settings": {
+    "control_regions": [
+      "Aberdeenshire",
+      "Angus"
+    ],
+    "fixture": "write_simple_kpi_xlsx",
+    "mode": "Design",
+    "n_weeks": 60,
+    "seed": 123,
+    "test_region": "Aberdeen City"
+  },
+  "tolerances": {
+    "dw_stat": 1e-06,
+    "rmse": 0.0001,
+    "rolling_bias_pct_mean": 0.0001,
+    "rolling_rmse_mean": 0.0001,
+    "rolling_smape_mean": 0.0001,
+    "smape": 0.0001
+  }
+}

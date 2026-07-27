@@ -1,0 +1,42 @@
+{
+  "app_baseline_commit": "281063d2e59213dbab5781addd07cf4413550e69",
+  "expected": {
+    "control_count": 4,
+    "controls": [
+      "RegionB",
+      "RegionC",
+      "RegionD",
+      "RegionE"
+    ],
+    "errors": [],
+    "exception": false,
+    "mean_abs_smd": 0.9034092445131533,
+    "period_count": 20,
+    "test_region": [
+      "RegionA"
+    ],
+    "warnings": [],
+    "weighted_structural_distance": 4.9016996164590445
+  },
+  "fixture_version": 1,
+  "golden_created_by_commit": "66268a7da2fc3b04288dd969fef139bdf1d85b2c",
+  "known_limitations": [],
+  "scenario": "numerical_kpi_pattern",
+  "schema_version": 1,
+  "settings": {
+    "fixture": "write_aggregated_kpi_xlsx",
+    "n_weeks": 20,
+    "regions": [
+      "RegionA",
+      "RegionB",
+      "RegionC",
+      "RegionD",
+      "RegionE"
+    ],
+    "seed": 55
+  },
+  "tolerances": {
+    "mean_abs_smd": 1e-06,
+    "weighted_structural_distance": 1e-06
+  }
+}
