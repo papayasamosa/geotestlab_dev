@@ -49,3 +49,6 @@ htmlcov/
 
 # --- Temp files ---
 .__atomic-*
+
+# --- Pytest temp ---
+.pytest_tmp/

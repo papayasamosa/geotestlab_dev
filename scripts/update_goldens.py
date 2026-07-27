@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -23,21 +24,33 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_DIR = REPO_ROOT / "tests" / "golden"
 
 
+def _git_cmd(*args: str) -> str:
+    """Run a git command and return trimmed stdout.  Raises on failure."""
+    try:
+        result = subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            timeout=30,
+            check=True,
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(
+            f"Git command failed: git {' '.join(args)}\nstderr: {e.stderr.strip()}"
+        ) from e
+    except FileNotFoundError as e:
+        raise SystemExit(f"Git is not available: {e}") from e
+
+
 def _current_commit() -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-        timeout=30,
-    )
-    return result.stdout.strip()
+    return _git_cmd("rev-parse", "HEAD")
 
 
 def _app_baseline_commit() -> str:
-    """Return the commit at which the app was last meaningfully changed.
-    For now we use HEAD, but this could be pinned to a specific ref."""
-    return _current_commit()
+    """Return the full SHA of the last commit that changed the live app file."""
+    return _git_cmd("log", "-1", "--format=%H", "--", "geotestmatch.py")
 
 
 def _write_safe(path: Path, payload: dict) -> None:
@@ -143,13 +156,28 @@ def main():
     )
     args = parser.parse_args()
 
+    # Never run in CI
+    if os.environ.get("CI"):
+        raise SystemExit("Golden files must not be updated in CI.")
+
     if not args.approve:
         print("Use --approve to confirm golden update.")
         sys.exit(1)
 
+    # Verify the golden directory and working tree are accessible
+    if not GOLDEN_DIR.exists():
+        raise SystemExit(f"Golden directory not found: {GOLDEN_DIR}")
+    try:
+        _git_cmd("rev-parse", "--git-dir")
+    except SystemExit:
+        print("WARNING: Working tree metadata unavailable; commit fields may be incorrect.")
+
     print("Updating golden files...")
-    print(f"  App baseline commit: {_app_baseline_commit()}")
+    print(f"  App baseline commit (last change to geotestmatch.py): {_app_baseline_commit()}")
     print(f"  Current commit:      {_current_commit()}")
+    print("  Files to write:")
+    for name in ["app_tab_labels", "bundled_workbook_structure", "available_markets"]:
+        print(f"    {GOLDEN_DIR / name}.json")
     update_app_tab_labels()
     update_bundled_workbook_structure()
     update_available_markets()

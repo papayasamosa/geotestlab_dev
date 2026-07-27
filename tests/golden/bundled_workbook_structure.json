@@ -1,5 +1,5 @@
 {
-  "app_baseline_commit": "e964eb5",
+  "app_baseline_commit": "407f4a502a8726e6dd23b0257de1f4134b5af0ce",
   "expected": {
     "n_sheets": 9,
     "sheet_names": [
@@ -15,7 +15,7 @@
     ]
   },
   "fixture_version": 1,
-  "golden_created_by_commit": "e964eb5",
+  "golden_created_by_commit": "6b35f6863e27263c17c06b32159959ef89f29efd",
   "known_limitations": [
     "Sheet count may change when markets are added or removed."
   ],
