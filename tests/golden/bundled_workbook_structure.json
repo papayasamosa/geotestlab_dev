@@ -1,0 +1,19 @@
+{
+  "baseline_commit": "fbd6cc6",
+  "fixture_version": "1.0",
+  "scenario": "bundled_workbook_structure",
+  "data": {
+    "n_sheets": 9,
+    "sheet_names": [
+      "UK",
+      "Ireland",
+      "Canada",
+      "Australia",
+      "New Zealand",
+      "Sweden",
+      "Germany",
+      "Italy",
+      "Mexico"
+    ]
+  }
+}

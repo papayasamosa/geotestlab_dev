@@ -38,9 +38,6 @@ class TestMainAppSyntax:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(
-    reason="Streamlit AppTest not yet operational — will be enabled after CI verification"
-)
 class TestLiveAppStartup:
     """End-to-end tests against the live Streamlit application.
 
@@ -62,7 +59,8 @@ class TestLiveAppStartup:
 
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
         app.run(timeout=120)
-        assert "GeoTestLab" in app.title
+        assert len(app.title) > 0
+        assert "GeoTestLab" in app.title[0].value
 
     @pytest.mark.smoke
     def test_app_has_four_workflow_tabs(self):
@@ -73,14 +71,34 @@ class TestLiveAppStartup:
         assert len(app.tabs) >= 4
 
     @pytest.mark.smoke
-    def test_sidebar_controls_exist(self):
+    def test_sidebar_renders(self):
         from streamlit.testing.v1 import AppTest
 
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
         app.run(timeout=120)
-        # The app populates the sidebar with data-quality info
-        # after loading the bundled workbook — verify it rendered
+        # The sidebar should render without throwing
         assert app.sidebar is not None
+
+    @pytest.mark.smoke
+    def test_market_selectbox_exists(self):
+        """The app should have a market/sheet selectbox in the sidebar."""
+        from streamlit.testing.v1 import AppTest
+
+        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        app.run(timeout=120)
+        # Look for a selectbox labelled "Market" or "Sheet"
+        selectboxes = [s for s in app.sidebar.selectbox if "market" in s.label.lower()]
+        assert len(selectboxes) > 0, "No market selectbox found in sidebar"
+
+    @pytest.mark.smoke
+    def test_app_has_no_uncaught_exceptions(self):
+        from streamlit.testing.v1 import AppTest
+
+        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        app.run(timeout=120)
+        # Check for script errors — the app may produce warnings but no
+        # unhandled exceptions should terminate execution.
+        assert not app.exception, f"App raised: {app.exception}"
 
 
 # ---------------------------------------------------------------------------
