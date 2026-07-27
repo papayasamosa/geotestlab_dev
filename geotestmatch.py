@@ -1,27 +1,23 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.neighbors import NearestNeighbors
-from scipy import stats
-import altair as alt
-import plotly.express as px
-import random
-from typing import Tuple, List, Dict
-import warnings
-import unicodedata
 import io
+import random
 import re
+import unicodedata
+
+import altair as alt
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+from scipy import stats
+
 # pymc and arviz imported lazily inside the Bayesian tab to avoid
 # segfaults and Numba errors at startup on Python 3.14
-
-
 # New imports for validation module
-from sklearn.linear_model import ElasticNetCV, RidgeCV, ElasticNet
-from sklearn.model_selection import TimeSeriesSplit
+from sklearn.linear_model import ElasticNet, ElasticNetCV
 from sklearn.metrics import mean_squared_error, r2_score
-
-warnings.filterwarnings("ignore")
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
 
 # ------------------------------------------------------------
 # App configuration
@@ -29,12 +25,14 @@ warnings.filterwarnings("ignore")
 
 st.set_page_config(page_title="TEST GeoTestLab", layout="wide")
 
+
 def load_css(path: str = "styles.css") -> None:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     except FileNotFoundError:
         pass
+
 
 load_css()
 
@@ -44,7 +42,8 @@ load_css()
 # and only the download buttons (Excel export + the three chart-data downloads) shrink.
 # Added here inline rather than relying on styles.css, since that file isn't guaranteed
 # to be present in every environment.
-st.markdown("""
+st.markdown(
+    """
 <style>
 div[data-testid="stDownloadButton"] button {
     font-size: 0.75rem;
@@ -55,10 +54,14 @@ div[data-testid="stDownloadButton"] button p {
     font-size: 0.75rem;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 st.title("TEST GeoTestLab")
-st.caption("Build statistically balanced test and control groups for geo-testing — no coding required.")
+st.caption(
+    "Build statistically balanced test and control groups for geo-testing — no coding required."
+)
 
 # ------------------------------------------------------------
 # Configuration constants
@@ -71,17 +74,23 @@ CONFIG = {
     "smd_thresholds": {"good": 0.20, "high": 0.50},
     "cache_ttl": 3600,
     "max_display_features": 10,
-    "missing_threshold": 20,          # % missing above which we warn
+    "missing_threshold": 20,  # % missing above which we warn
     "outlier_std_threshold": 5,
-    "ess_min_threshold": 500,         # softer threshold for ESS (was 1000)
+    "ess_min_threshold": 500,  # softer threshold for ESS (was 1000)
     # ---- Method comparison / Counterfactual Confidence traffic-light bands ----
     # Single source of truth for the classify_* helper functions below. Durbin-Watson
     # bands are practical interpretation bands, not formal critical-value tests — see
     # classify_autocorrelation_risk().
     "reliability_thresholds": {
-        "durbin_watson_low_band": (1.5, 2.5),          # 🟢 Low autocorrelation risk
-        "durbin_watson_moderate_low_band": (1.2, 1.5),  # 🟡 Moderate (positive autocorrelation side)
-        "durbin_watson_moderate_high_band": (2.5, 2.8), # 🟡 Moderate (negative autocorrelation side)
+        "durbin_watson_low_band": (1.5, 2.5),  # 🟢 Low autocorrelation risk
+        "durbin_watson_moderate_low_band": (
+            1.2,
+            1.5,
+        ),  # 🟡 Moderate (positive autocorrelation side)
+        "durbin_watson_moderate_high_band": (
+            2.5,
+            2.8,
+        ),  # 🟡 Moderate (negative autocorrelation side)
         "overfitting_gap_pp": {"low_max": 3, "moderate_max": 5},
         "rolling_smape_pct": {"low_max": 10, "moderate_max": 15},
         "rolling_bias_pct": {"low_max": 5, "moderate_max": 10},
@@ -107,6 +116,7 @@ METHOD_DATA_OPTIMISED = "Data-Optimised Controls"
 METHOD_DATA_OPTIMISED_EXCL = "Data-Optimised Controls (Excluding Force-Exclude Regions)"
 METHOD_USER_SELECTED = "User Selected Test and Control"
 
+
 def detect_date_columns(df_raw):
     """
     Returns the columns in a raw uploaded KPI DataFrame that are real datetime column
@@ -116,7 +126,9 @@ def detect_date_columns(df_raw):
     format and the newer multi-aggregation-level format.
     """
     from datetime import datetime as _dt
+
     return [c for c in df_raw.columns if isinstance(c, (pd.Timestamp, _dt))]
+
 
 def detect_metric_column(non_date_cols):
     """Best-guess the metric-name column by header text ('Metric', case-insensitive).
@@ -125,6 +137,7 @@ def detect_metric_column(non_date_cols):
         if isinstance(c, str) and c.strip().lower() == "metric":
             return c
     return None
+
 
 def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None):
     """
@@ -180,7 +193,8 @@ def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None):
     df_long = df_raw.melt(
         id_vars=[region_col, metric_col_resolved],
         value_vars=date_cols if date_cols else None,
-        var_name="date", value_name="kpi"
+        var_name="date",
+        value_name="kpi",
     )
     df_long = df_long.rename(columns={region_col: "region_raw", metric_col_resolved: "metric_name"})
     df_long["date"] = pd.to_datetime(df_long["date"], errors="coerce")
@@ -190,6 +204,7 @@ def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None):
     df_long["kpi"] = pd.to_numeric(df_long["kpi"], errors="coerce")
     df_long = df_long.dropna(subset=["kpi"])
     return df_long
+
 
 def build_region_mapping(df_long, valid_regions, adobe_to_geo):
     """
@@ -208,6 +223,7 @@ def build_region_mapping(df_long, valid_regions, adobe_to_geo):
     all_geomatch_regions = set(valid_regions)
     df_long["region_clean"] = df_long["region_raw"].astype(str).str.strip()
     df_long["mapped_geo"] = df_long["region_clean"].map(adobe_to_geo)
+
     def final_region_name(row):
         if pd.notna(row["mapped_geo"]):
             return row["mapped_geo"]
@@ -215,12 +231,15 @@ def build_region_mapping(df_long, valid_regions, adobe_to_geo):
             return row["region_clean"]
         else:
             return None
+
     df_long["region"] = df_long.apply(final_region_name, axis=1)
     return df_long
+
 
 def apply_geo_aggregation(df_long, geo_col):
     agg_df = df_long.groupby(["date", "region"])["kpi"].sum().reset_index()
     return agg_df
+
 
 def build_model_matrix(agg_df, control_list, test_regions):
     """
@@ -234,9 +253,23 @@ def build_model_matrix(agg_df, control_list, test_regions):
     NOTE: this changed from returning `model` alone to returning `(model, matrix_diagnostics)`.
     All callers in this file have been updated accordingly.
     """
-    test_agg = agg_df[agg_df["region"].isin(test_regions)].groupby("date")["kpi"].sum().reset_index().rename(columns={"kpi": "test_kpi"})
-    control_wide = agg_df[agg_df["region"].isin(control_list)].pivot(index="date", columns="region", values="kpi").reset_index()
-    merged = test_agg.merge(control_wide, on="date", how="inner").sort_values("date").reset_index(drop=True)
+    test_agg = (
+        agg_df[agg_df["region"].isin(test_regions)]
+        .groupby("date")["kpi"]
+        .sum()
+        .reset_index()
+        .rename(columns={"kpi": "test_kpi"})
+    )
+    control_wide = (
+        agg_df[agg_df["region"].isin(control_list)]
+        .pivot(index="date", columns="region", values="kpi")
+        .reset_index()
+    )
+    merged = (
+        test_agg.merge(control_wide, on="date", how="inner")
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
 
     rows_before_dropna = len(merged)
     # Which control columns actually have missing values (only meaningful control columns,
@@ -247,7 +280,9 @@ def build_model_matrix(agg_df, control_list, test_regions):
     model = merged.dropna().reset_index(drop=True)
     rows_after_dropna = len(model)
     rows_dropped = rows_before_dropna - rows_after_dropna
-    pct_rows_dropped = (rows_dropped / rows_before_dropna * 100.0) if rows_before_dropna > 0 else 0.0
+    pct_rows_dropped = (
+        (rows_dropped / rows_before_dropna * 100.0) if rows_before_dropna > 0 else 0.0
+    )
 
     matrix_diagnostics = {
         "rows_before_dropna": rows_before_dropna,
@@ -258,7 +293,10 @@ def build_model_matrix(agg_df, control_list, test_regions):
     }
     return model, matrix_diagnostics
 
-def add_lagged_control_features(model_df, control_list, lags=(1,), frequency_config=None, time_series_frequency=None):
+
+def add_lagged_control_features(
+    model_df, control_list, lags=(1,), frequency_config=None, time_series_frequency=None
+):
     """
     Add lagged versions of each control KPI column.
 
@@ -305,7 +343,9 @@ def add_lagged_control_features(model_df, control_list, lags=(1,), frequency_con
                              missing (most relevant for the daily calendar-day lag).
     """
     if frequency_config is None:
-        frequency_config = get_frequency_config(time_series_frequency if time_series_frequency is not None else "weekly")
+        frequency_config = get_frequency_config(
+            time_series_frequency if time_series_frequency is not None else "weekly"
+        )
     use_date_based_lag = frequency_config.get("frequency") == "daily"
 
     model_df_lagged = model_df.sort_values("date").reset_index(drop=True).copy()
@@ -341,7 +381,11 @@ def add_lagged_control_features(model_df, control_list, lags=(1,), frequency_con
     model_df_lagged = model_df_lagged.dropna(subset=lag_cols_all).reset_index(drop=True)
     rows_after_lag_drop = len(model_df_lagged)
     rows_dropped_due_to_lag = rows_before_lag_drop - rows_after_lag_drop
-    lag_drop_pct = (rows_dropped_due_to_lag / rows_before_lag_drop * 100.0) if rows_before_lag_drop > 0 else 0.0
+    lag_drop_pct = (
+        (rows_dropped_due_to_lag / rows_before_lag_drop * 100.0)
+        if rows_before_lag_drop > 0
+        else 0.0
+    )
 
     model_feature_cols = list(control_list) + lag_cols_all
     lag_drop_metadata = {
@@ -351,6 +395,7 @@ def add_lagged_control_features(model_df, control_list, lags=(1,), frequency_con
         "lag_drop_pct": lag_drop_pct,
     }
     return model_df_lagged, model_feature_cols, lagged_feature_map, lag_drop_metadata
+
 
 def durbin_watson_stat(residuals):
     """
@@ -362,10 +407,11 @@ def durbin_watson_stat(residuals):
     residuals = residuals[np.isfinite(residuals)]
     if len(residuals) < 3:
         return np.nan
-    denom = np.sum(residuals ** 2)
+    denom = np.sum(residuals**2)
     if denom == 0:
         return np.nan
     return np.sum(np.diff(residuals) ** 2) / denom
+
 
 def _is_valid_number(v):
     """
@@ -385,6 +431,7 @@ def _is_valid_number(v):
     except (TypeError, ValueError):
         return False
     return True
+
 
 def classify_autocorrelation_risk(dw_stat):
     """
@@ -421,6 +468,7 @@ def classify_autocorrelation_risk(dw_stat):
     else:
         return "🔴 High"
 
+
 def calculate_overfit_gap(pre_smape, rolling_smape):
     """
     Overfitting Gap: how much worse the model performs out-of-sample (rolling-origin)
@@ -436,6 +484,7 @@ def calculate_overfit_gap(pre_smape, rolling_smape):
     if not _is_valid_number(pre_smape) or not _is_valid_number(rolling_smape):
         return np.nan
     return float(rolling_smape) - float(pre_smape)
+
 
 def classify_overfitting_risk(overfit_gap_smape):
     """
@@ -455,6 +504,7 @@ def classify_overfitting_risk(overfit_gap_smape):
         return "🟡 Moderate"
     return "🔴 High"
 
+
 def classify_rolling_validation_error(rolling_smape_mean):
     """
     Short traffic-light rating for the method comparison table row "Rolling Validation
@@ -473,6 +523,7 @@ def classify_rolling_validation_error(rolling_smape_mean):
         return "🟡 Moderate"
     return "🔴 High"
 
+
 def classify_rolling_bias_risk(rolling_bias_pct):
     """
     Short traffic-light rating for the method comparison table row "Rolling Bias Risk",
@@ -487,6 +538,7 @@ def classify_rolling_bias_risk(rolling_bias_pct):
     if abs(rolling_bias_pct) <= _t["moderate_max"]:
         return "🟡 Moderate"
     return "🔴 High"
+
 
 def combine_reliability_ratings(component_ratings):
     """
@@ -527,6 +579,7 @@ def combine_reliability_ratings(component_ratings):
     (Internal variable/function names still use "reliability" for backward
     compatibility; all user-facing labels use "Counterfactual Confidence".)
     """
+
     def _sym(key):
         v = component_ratings.get(key)
         return v.split(" ", 1)[0] if v else "⚪"
@@ -554,6 +607,7 @@ def combine_reliability_ratings(component_ratings):
     if any(s in ("🔴", "🟡") for s in available_secondary):
         return "🟡 Moderate confidence"
     return "🟢 High confidence"
+
 
 def get_reliability_drivers(component_ratings):
     """
@@ -588,9 +642,12 @@ def get_reliability_drivers(component_ratings):
     reds = [f"high {k}" for k in priority_order if symbols.get(k) == "🔴"]
     yellows = [f"moderate {k}" for k in priority_order if symbols.get(k) == "🟡"]
     drivers = reds + yellows
-    fallback = "validation checks failed" if overall == "🔴 Low confidence" else "elevated validation risk"
+    fallback = (
+        "validation checks failed" if overall == "🔴 Low confidence" else "elevated validation risk"
+    )
     detail = " + ".join(drivers) if drivers else fallback
     return f"{detail[:1].upper()}{detail[1:]}"
+
 
 # ------------------------------------------------------------
 # Frequency-awareness helpers (weekly vs daily time series)
@@ -636,6 +693,7 @@ def get_frequency_config(time_series_frequency):
         "default_placebo_length_periods": 4,
     }
 
+
 def infer_time_series_frequency(dates):
     """
     Infer whether a collection of dates looks daily or weekly, based on the median
@@ -666,6 +724,7 @@ def infer_time_series_frequency(dates):
     else:
         return "unknown"
 
+
 def format_range(lower, upper, suffix="", decimals=1):
     """
     Consistently formats a (lower, upper) range as "{lower}{suffix} to {upper}{suffix}",
@@ -688,6 +747,7 @@ def format_range(lower, upper, suffix="", decimals=1):
         return "N/A"
     fmt = f"{{:.{decimals}f}}"
     return f"{fmt.format(lower)}{suffix} to {fmt.format(upper)}{suffix}"
+
 
 def build_chart_data_xlsx(sheets):
     """
@@ -717,17 +777,20 @@ def build_chart_data_xlsx(sheets):
             )
     return buffer.getvalue()
 
+
 def smape(actual, pred):
     denom = (np.abs(actual) + np.abs(pred)) / 2
     denom = np.where(denom == 0, 1e-8, denom)
     return np.mean(np.abs(actual - pred) / denom) * 100
 
+
 def compute_metrics(actual, pred):
-    corr = np.corrcoef(actual, pred)[0,1]
+    corr = np.corrcoef(actual, pred)[0, 1]
     r2 = r2_score(actual, pred)
     s = smape(actual, pred)
     rmse = np.sqrt(mean_squared_error(actual, pred))
     return corr, r2, s, rmse
+
 
 def summarize_mcmc_diagnostics(summary_df, n_divergences=None, n_total_draws=None):
     """
@@ -749,27 +812,29 @@ def summarize_mcmc_diagnostics(summary_df, n_divergences=None, n_total_draws=Non
     treated as a hard fail here, unlike the other three which use tolerance bands.
     """
     summary_df = summary_df.astype(float)
-    
-    max_rhat = summary_df['r_hat'].max()
-    min_ess = min(summary_df['ess_bulk'].min(), summary_df['ess_tail'].min())
-    max_mcse_sd = (summary_df['mcse_mean'] / summary_df['sd']).max()
-    
+
+    max_rhat = summary_df["r_hat"].max()
+    min_ess = min(summary_df["ess_bulk"].min(), summary_df["ess_tail"].min())
+    max_mcse_sd = (summary_df["mcse_mean"] / summary_df["sd"]).max()
+
     rhat_ok = max_rhat <= 1.01
-    ess_ok = min_ess >= CONFIG["ess_min_threshold"]   # softer threshold
+    ess_ok = min_ess >= CONFIG["ess_min_threshold"]  # softer threshold
     mcse_ok = max_mcse_sd < 0.10
     divergence_ok = (n_divergences is None) or (n_divergences == 0)
     divergence_rate = (
         (n_divergences / n_total_draws) if (n_divergences is not None and n_total_draws) else None
     )
-    
+
     overall_ok = rhat_ok and ess_ok and mcse_ok and divergence_ok
     status = "✅ Good" if overall_ok else "⚠️ Review needed"
-    
+
     messages = []
     if not rhat_ok:
         messages.append(f"R‑hat > 1.01 (max = {max_rhat:.3f}) – chains may not have converged.")
     if not ess_ok:
-        messages.append(f"Effective sample size < {CONFIG['ess_min_threshold']} (min = {min_ess:.0f}) – try increasing draws/tune.")
+        messages.append(
+            f"Effective sample size < {CONFIG['ess_min_threshold']} (min = {min_ess:.0f}) – try increasing draws/tune."
+        )
     if not mcse_ok:
         messages.append(f"MCSE/SD > 10% (max = {max_mcse_sd:.1%}) – sampling error may be high.")
     if not divergence_ok:
@@ -779,22 +844,23 @@ def summarize_mcmc_diagnostics(summary_df, n_divergences=None, n_total_draws=Non
             "in the region the sampler avoided, not just noisier. Try a higher target_accept, more "
             "tuning steps, or reparameterizing the model."
         )
-    
+
     return {
-        'max_rhat': max_rhat,
-        'min_ess': min_ess,
-        'max_mcse_sd_ratio': max_mcse_sd,
-        'n_divergences': n_divergences,
-        'divergence_rate': divergence_rate,
-        'rhat_ok': rhat_ok,
-        'ess_ok': ess_ok,
-        'mcse_ok': mcse_ok,
-        'divergence_ok': divergence_ok,
-        'overall_ok': overall_ok,
-        'status': status,
-        'messages': messages
+        "max_rhat": max_rhat,
+        "min_ess": min_ess,
+        "max_mcse_sd_ratio": max_mcse_sd,
+        "n_divergences": n_divergences,
+        "divergence_rate": divergence_rate,
+        "rhat_ok": rhat_ok,
+        "ess_ok": ess_ok,
+        "mcse_ok": mcse_ok,
+        "divergence_ok": divergence_ok,
+        "overall_ok": overall_ok,
+        "status": status,
+        "messages": messages,
     }
-    
+
+
 def calculate_structural_prior_sigmas(
     agg_df,
     test_regions,
@@ -817,20 +883,21 @@ def calculate_structural_prior_sigmas(
     """
     # 1. Keep only features present in agg_df and numeric
     valid_features = [
-        f for f in feature_cols
-        if f in agg_df.columns and pd.api.types.is_numeric_dtype(agg_df[f])
+        f for f in feature_cols if f in agg_df.columns and pd.api.types.is_numeric_dtype(agg_df[f])
     ]
 
     # Edge case: no valid features
     if not valid_features:
         prior_sigmas = np.repeat(0.5, len(control_regions))
-        df_out = pd.DataFrame({
-            "Control Region": control_regions,
-            "Structural Distance": np.nan,
-            "Structural Similarity": np.nan,
-            "Prior Sigma": prior_sigmas,
-            "Prior Type": "Standard weak prior",
-        })
+        df_out = pd.DataFrame(
+            {
+                "Control Region": control_regions,
+                "Structural Distance": np.nan,
+                "Structural Similarity": np.nan,
+                "Prior Sigma": prior_sigmas,
+                "Prior Type": "Standard weak prior",
+            }
+        )
         return prior_sigmas, df_out
 
     # 2. Impute missing values if helper is available
@@ -849,13 +916,15 @@ def calculate_structural_prior_sigmas(
         region_df[valid_features] = scaler.fit_transform(region_df[valid_features].fillna(0))
     except Exception:
         prior_sigmas = np.repeat(0.5, len(control_regions))
-        df_out = pd.DataFrame({
-            "Control Region": control_regions,
-            "Structural Distance": np.nan,
-            "Structural Similarity": np.nan,
-            "Prior Sigma": prior_sigmas,
-            "Prior Type": "Standard weak prior",
-        })
+        df_out = pd.DataFrame(
+            {
+                "Control Region": control_regions,
+                "Structural Distance": np.nan,
+                "Structural Similarity": np.nan,
+                "Prior Sigma": prior_sigmas,
+                "Prior Type": "Standard weak prior",
+            }
+        )
         return prior_sigmas, df_out
 
     # 4. Population-weighted test-group profile
@@ -870,13 +939,15 @@ def calculate_structural_prior_sigmas(
     test_features = test_rows[valid_features].values
     if len(test_features) == 0:
         prior_sigmas = np.repeat(0.5, len(control_regions))
-        df_out = pd.DataFrame({
-            "Control Region": control_regions,
-            "Structural Distance": np.nan,
-            "Structural Similarity": np.nan,
-            "Prior Sigma": prior_sigmas,
-            "Prior Type": "Standard weak prior",
-        })
+        df_out = pd.DataFrame(
+            {
+                "Control Region": control_regions,
+                "Structural Distance": np.nan,
+                "Structural Similarity": np.nan,
+                "Prior Sigma": prior_sigmas,
+                "Prior Type": "Standard weak prior",
+            }
+        )
         return prior_sigmas, df_out
 
     test_profile_z = np.average(test_features, axis=0, weights=pop_weights)
@@ -908,13 +979,15 @@ def calculate_structural_prior_sigmas(
     else:
         # All NaN — fall back to uniform
         prior_sigmas = np.repeat(0.5, len(control_regions))
-        df_out = pd.DataFrame({
-            "Control Region": control_regions,
-            "Structural Distance": np.nan,
-            "Structural Similarity": np.nan,
-            "Prior Sigma": prior_sigmas,
-            "Prior Type": "Standard weak prior",
-        })
+        df_out = pd.DataFrame(
+            {
+                "Control Region": control_regions,
+                "Structural Distance": np.nan,
+                "Structural Similarity": np.nan,
+                "Prior Sigma": prior_sigmas,
+                "Prior Type": "Standard weak prior",
+            }
+        )
         return prior_sigmas, df_out
 
     similarities = 1.0 / (1.0 + distances)
@@ -922,31 +995,35 @@ def calculate_structural_prior_sigmas(
     # 7. Edge case: single control or all similarities identical
     if len(control_regions) == 1 or (similarities.max() - similarities.min()) < 1e-8:
         prior_sigmas = np.repeat(0.5, len(control_regions))
-        df_out = pd.DataFrame({
+        df_out = pd.DataFrame(
+            {
+                "Control Region": control_regions,
+                "Structural Distance": np.round(distances, 3),
+                "Structural Similarity": np.round(similarities, 3),
+                "Prior Sigma": np.round(prior_sigmas, 3),
+                "Prior Type": "Standard weak prior",
+            }
+        )
+        return prior_sigmas, df_out
+
+    # 8. Continuous scaling to [min_sigma, max_sigma]
+    similarity_scaled = (similarities - similarities.min()) / (
+        similarities.max() - similarities.min() + 1e-8
+    )
+    prior_sigmas = min_sigma + similarity_scaled * (max_sigma - min_sigma)
+    prior_sigmas = np.clip(prior_sigmas, min_sigma, max_sigma)
+
+    prior_types = ["Structurally informed" for _ in control_regions]
+
+    df_out = pd.DataFrame(
+        {
             "Control Region": control_regions,
             "Structural Distance": np.round(distances, 3),
             "Structural Similarity": np.round(similarities, 3),
             "Prior Sigma": np.round(prior_sigmas, 3),
-            "Prior Type": "Standard weak prior",
-        })
-        return prior_sigmas, df_out
-
-    # 8. Continuous scaling to [min_sigma, max_sigma]
-    similarity_scaled = (similarities - similarities.min()) / (similarities.max() - similarities.min() + 1e-8)
-    prior_sigmas = min_sigma + similarity_scaled * (max_sigma - min_sigma)
-    prior_sigmas = np.clip(prior_sigmas, min_sigma, max_sigma)
-
-    prior_types = [
-        "Structurally informed" for _ in control_regions
-    ]
-
-    df_out = pd.DataFrame({
-        "Control Region": control_regions,
-        "Structural Distance": np.round(distances, 3),
-        "Structural Similarity": np.round(similarities, 3),
-        "Prior Sigma": np.round(prior_sigmas, 3),
-        "Prior Type": prior_types,
-    })
+            "Prior Type": prior_types,
+        }
+    )
 
     return prior_sigmas.astype(float), df_out
 
@@ -957,6 +1034,7 @@ def safe_tscv(n_splits, n_periods):
         return None
     n = min(n_splits, n_periods // 3)
     return TimeSeriesSplit(n_splits=max(2, n))
+
 
 def build_regularized_model(method_name, n_periods, n_splits_pref=5, fixed_alpha=1.0):
     """
@@ -983,12 +1061,22 @@ def build_regularized_model(method_name, n_periods, n_splits_pref=5, fixed_alpha
     tscv = safe_tscv(n_splits_pref, n_periods)
     if tscv is not None:
         if method_name == "enet":
-            model = ElasticNetCV(l1_ratio=[.1, .3, .5, .7, .9, .95], alphas=np.logspace(-4, 4, 50),
-                                  cv=tscv, max_iter=10000, random_state=42)
+            model = ElasticNetCV(
+                l1_ratio=[0.1, 0.3, 0.5, 0.7, 0.9, 0.95],
+                alphas=np.logspace(-4, 4, 50),
+                cv=tscv,
+                max_iter=10000,
+                random_state=42,
+            )
         else:  # lasso
-            model = ElasticNetCV(l1_ratio=1, alphas=np.logspace(-4, 4, 100),
-                                  cv=tscv, max_iter=10000, random_state=42)
-        return model, "TimeSeriesSplit cross-validation used to select regularisation strength.", True
+            model = ElasticNetCV(
+                l1_ratio=1, alphas=np.logspace(-4, 4, 100), cv=tscv, max_iter=10000, random_state=42
+            )
+        return (
+            model,
+            "TimeSeriesSplit cross-validation used to select regularisation strength.",
+            True,
+        )
     # Too few pre-period observations for safe, leakage-free time-series CV. This
     # fixed-alpha fit is exploratory only: it is NOT statistically equivalent to
     # cross-validated model selection and must not feed Counterfactual Confidence
@@ -1002,9 +1090,18 @@ def build_regularized_model(method_name, n_periods, n_splits_pref=5, fixed_alpha
     )
     return model, cv_status, False
 
+
 @st.cache_data(ttl=CONFIG["cache_ttl"], show_spinner=False)
-def rolling_origin_validation(X, y, horizon=4, min_training_periods=13, dates=None, n_splits=5, model_type="enet",
-                               min_training_weeks=None):
+def rolling_origin_validation(
+    X,
+    y,
+    horizon=4,
+    min_training_periods=13,
+    dates=None,
+    n_splits=5,
+    model_type="enet",
+    min_training_weeks=None,
+):
     """
     Expanding-window rolling origin validation.
     Trains on rows 0:start_idx, tests on rows start_idx:start_idx+horizon.
@@ -1035,15 +1132,33 @@ def rolling_origin_validation(X, y, horizon=4, min_training_periods=13, dates=No
     if min_training_weeks is not None:
         min_training_periods = min_training_weeks
     n = len(y)
-    empty_df = pd.DataFrame(columns=[
-        "fold_number", "training_periods", "forecast_horizon_periods",
-        "training_weeks", "forecast_horizon_weeks",
-        "smape", "rmse", "bias", "bias_pct", "uplift_error", "uplift_error_pct",
-        "train_start_date", "train_end_date", "test_start_date", "test_end_date",
-        "used_cv_fallback"
-    ])
+    empty_df = pd.DataFrame(
+        columns=[
+            "fold_number",
+            "training_periods",
+            "forecast_horizon_periods",
+            "training_weeks",
+            "forecast_horizon_weeks",
+            "smape",
+            "rmse",
+            "bias",
+            "bias_pct",
+            "uplift_error",
+            "uplift_error_pct",
+            "train_start_date",
+            "train_end_date",
+            "test_start_date",
+            "test_end_date",
+            "used_cv_fallback",
+        ]
+    )
     if n < min_training_periods + horizon:
-        return empty_df, np.nan, np.nan, "No folds: insufficient pre-period history for rolling-origin validation."
+        return (
+            empty_df,
+            np.nan,
+            np.nan,
+            "No folds: insufficient pre-period history for rolling-origin validation.",
+        )
 
     folds = []
     fold_num = 0
@@ -1053,7 +1168,7 @@ def rolling_origin_validation(X, y, horizon=4, min_training_periods=13, dates=No
         _all_starts = _all_starts[::_step][:20]
     for start_idx in _all_starts:
         train_X, train_y = X[:start_idx], y[:start_idx]
-        test_X, test_y = X[start_idx:start_idx + horizon], y[start_idx:start_idx + horizon]
+        test_X, test_y = X[start_idx : start_idx + horizon], y[start_idx : start_idx + horizon]
         if len(test_y) < horizon:
             continue
 
@@ -1064,7 +1179,9 @@ def rolling_origin_validation(X, y, horizon=4, min_training_periods=13, dates=No
         if model_type not in ("enet", "lasso"):
             return empty_df, np.nan, np.nan, "Unsupported model_type"
 
-        model, fold_cv_status, fold_used_cv = build_regularized_model(model_type, len(train_y), n_splits_pref=3)
+        model, fold_cv_status, fold_used_cv = build_regularized_model(
+            model_type, len(train_y), n_splits_pref=3
+        )
         used_cv_fallback = not fold_used_cv
 
         model.fit(train_X_scaled, train_y)
@@ -1089,28 +1206,35 @@ def rolling_origin_validation(X, y, horizon=4, min_training_periods=13, dates=No
             train_start_date = train_end_date = test_start_date = test_end_date = None
 
         fold_num += 1
-        folds.append({
-            "fold_number": fold_num,
-            "training_periods": start_idx,
-            "forecast_horizon_periods": horizon,
-            # Backward-compatible aliases
-            "training_weeks": start_idx,
-            "forecast_horizon_weeks": horizon,
-            "smape": fold_smape,
-            "rmse": fold_rmse,
-            "bias": bias,
-            "bias_pct": bias_pct,
-            "uplift_error": uplift_error,
-            "uplift_error_pct": uplift_error_pct,
-            "train_start_date": train_start_date,
-            "train_end_date": train_end_date,
-            "test_start_date": test_start_date,
-            "test_end_date": test_end_date,
-            "used_cv_fallback": used_cv_fallback,
-        })
+        folds.append(
+            {
+                "fold_number": fold_num,
+                "training_periods": start_idx,
+                "forecast_horizon_periods": horizon,
+                # Backward-compatible aliases
+                "training_weeks": start_idx,
+                "forecast_horizon_weeks": horizon,
+                "smape": fold_smape,
+                "rmse": fold_rmse,
+                "bias": bias,
+                "bias_pct": bias_pct,
+                "uplift_error": uplift_error,
+                "uplift_error_pct": uplift_error_pct,
+                "train_start_date": train_start_date,
+                "train_end_date": train_end_date,
+                "test_start_date": test_start_date,
+                "test_end_date": test_end_date,
+                "used_cv_fallback": used_cv_fallback,
+            }
+        )
 
     if not folds:
-        return empty_df, np.nan, np.nan, "No folds: insufficient pre-period history for rolling-origin validation."
+        return (
+            empty_df,
+            np.nan,
+            np.nan,
+            "No folds: insufficient pre-period history for rolling-origin validation.",
+        )
 
     fold_df = pd.DataFrame(folds)
     n_fallback_folds = int(fold_df["used_cv_fallback"].sum())
@@ -1128,7 +1252,9 @@ def rolling_origin_validation(X, y, horizon=4, min_training_periods=13, dates=No
         rolling_rmse_mean = np.nan
 
     if n_fallback_folds == 0:
-        cv_status = "TimeSeriesSplit cross-validation used to select regularisation strength in all folds."
+        cv_status = (
+            "TimeSeriesSplit cross-validation used to select regularisation strength in all folds."
+        )
     elif n_cv_folds == 0:
         cv_status = (
             "Insufficient history for TimeSeriesSplit in all folds; only exploratory fixed-alpha "
@@ -1142,6 +1268,7 @@ def rolling_origin_validation(X, y, horizon=4, min_training_periods=13, dates=No
             f"validation metrics (based on the remaining {n_cv_folds} TimeSeriesSplit-CV fold(s))."
         )
     return fold_df, rolling_smape_mean, rolling_rmse_mean, cv_status
+
 
 def classify_validation_method(fold_df, main_model_used_cv_fallback):
     """
@@ -1161,7 +1288,12 @@ def classify_validation_method(fold_df, main_model_used_cv_fallback):
     separately via the "cv_status" string, shown in the "Technical validation
     details" expander rather than in the headline table.
     """
-    if main_model_used_cv_fallback or fold_df is None or fold_df.empty or "used_cv_fallback" not in fold_df.columns:
+    if (
+        main_model_used_cv_fallback
+        or fold_df is None
+        or fold_df.empty
+        or "used_cv_fallback" not in fold_df.columns
+    ):
         return "⚪ Insufficient validation history"
     n_fallback_folds = int(fold_df["used_cv_fallback"].sum())
     if n_fallback_folds == 0:
@@ -1170,6 +1302,7 @@ def classify_validation_method(fold_df, main_model_used_cv_fallback):
         return "🟡 Partial rolling-origin validation"
     else:
         return "⚪ Insufficient validation history"
+
 
 def _warn_on_row_loss(matrix_diagnostics):
     """
@@ -1196,6 +1329,7 @@ def _warn_on_row_loss(matrix_diagnostics):
             f"Controls with missing values: {', '.join(matrix_diagnostics.get('control_columns_with_missing', [])) or 'none'}."
         )
 
+
 def _warn_on_cv_fallback(method_name, main_model_used_cv_fallback, fold_df):
     """
     Surfaces a warning whenever TimeSeriesSplit cross-validation couldn't be used —
@@ -1218,6 +1352,7 @@ def _warn_on_cv_fallback(method_name, main_model_used_cv_fallback, fold_df):
             "Those folds were fit exploratorily with a fixed regularisation strength and are excluded "
             "from the rolling-origin validation metrics and Counterfactual Confidence shown here."
         )
+
 
 def _summarize_rolling_origin_folds(fold_df):
     """
@@ -1254,13 +1389,23 @@ def _summarize_rolling_origin_folds(fold_df):
     return {
         "rolling_smape_p90": float(np.percentile(cv_fold_df["smape"], 90)),
         "rolling_bias_pct_mean": float(cv_fold_df["bias_pct"].mean()),
-        "rolling_uplift_error_pct_median": float(np.median(valid_uplift_errs)) if len(valid_uplift_errs) else np.nan,
+        "rolling_uplift_error_pct_median": float(np.median(valid_uplift_errs))
+        if len(valid_uplift_errs)
+        else np.nan,
         "rolling_uplift_error_pct_lower": lower,
         "rolling_uplift_error_pct_upper": upper,
     }
 
-def _run_placebo_windows(model_pre, model_feature_cols, dates_pre, min_training_periods, placebo_len, method_name,
-                          max_windows=40):
+
+def _run_placebo_windows(
+    model_pre,
+    model_feature_cols,
+    dates_pre,
+    min_training_periods,
+    placebo_len,
+    method_name,
+    max_windows=40,
+):
     """
     Simulates a fake intervention across all available historical pre-period windows
     ("placebo testing"): repeatedly trains on an expanding window and evaluates on the
@@ -1295,12 +1440,16 @@ def _run_placebo_windows(model_pre, model_feature_cols, dates_pre, min_training_
 
     for start_idx in all_starts:
         train_dates = dates_pre[:start_idx]
-        test_dates = dates_pre[start_idx:start_idx + placebo_len]
+        test_dates = dates_pre[start_idx : start_idx + placebo_len]
         # Slice from the already-lagged pre-period matrix — this preserves lagged
         # features computed from the full continuous series rather than recomputing
         # (and losing the first row of) each placebo window independently.
-        m_train = model_pre[(model_pre["date"] >= train_dates[0]) & (model_pre["date"] <= train_dates[-1])]
-        m_test = model_pre[(model_pre["date"] >= test_dates[0]) & (model_pre["date"] <= test_dates[-1])]
+        m_train = model_pre[
+            (model_pre["date"] >= train_dates[0]) & (model_pre["date"] <= train_dates[-1])
+        ]
+        m_test = model_pre[
+            (model_pre["date"] >= test_dates[0]) & (model_pre["date"] <= test_dates[-1])
+        ]
         if len(m_train) < min_training_periods or m_test.empty:
             continue
 
@@ -1310,7 +1459,9 @@ def _run_placebo_windows(model_pre, model_feature_cols, dates_pre, min_training_
         y_te = m_test["test_kpi"].values
         scaler_p = StandardScaler()
         X_tr_scaled = scaler_p.fit_transform(X_tr)
-        model_p, _placebo_cv_status, _placebo_used_cv = build_regularized_model(method_name, len(y_tr), n_splits_pref=3)
+        model_p, _placebo_cv_status, _placebo_used_cv = build_regularized_model(
+            method_name, len(y_tr), n_splits_pref=3
+        )
         model_p.fit(X_tr_scaled, y_tr)
         pred_p = model_p.predict(scaler_p.transform(X_te))
 
@@ -1323,7 +1474,10 @@ def _run_placebo_windows(model_pre, model_feature_cols, dates_pre, min_training_
 
     return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses
 
-def _summarize_placebo_results(placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, uplift):
+
+def _summarize_placebo_results(
+    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, uplift
+):
     """
     Summarizes the raw per-window placebo lists from _run_placebo_windows() into the
     metrics shown in the "Placebo Testing" and "Observed Uplift vs Placebos" table
@@ -1335,11 +1489,20 @@ def _summarize_placebo_results(placebos, placebo_uplift_pcts, placebo_smapes, pl
     """
     if not placebos:
         return {
-            "median_uplift": np.nan, "p2_5": np.nan, "p97_5": np.nan,
-            "median_placebo_smape": np.nan, "p95_placebo_smape": np.nan,
-            "median_placebo_rmse": np.nan, "p95_placebo_rmse": np.nan,
-            "median_placebo_uplift_pct": np.nan, "p2_5_pct": np.nan, "p97_5_pct": np.nan,
-            "percentile_rank": np.nan, "p_one_sided": np.nan, "p_two_sided": np.nan, "z_score": np.nan,
+            "median_uplift": np.nan,
+            "p2_5": np.nan,
+            "p97_5": np.nan,
+            "median_placebo_smape": np.nan,
+            "p95_placebo_smape": np.nan,
+            "median_placebo_rmse": np.nan,
+            "p95_placebo_rmse": np.nan,
+            "median_placebo_uplift_pct": np.nan,
+            "p2_5_pct": np.nan,
+            "p97_5_pct": np.nan,
+            "percentile_rank": np.nan,
+            "p_one_sided": np.nan,
+            "p_two_sided": np.nan,
+            "z_score": np.nan,
         }
 
     median_uplift = np.median(placebos)
@@ -1349,24 +1512,38 @@ def _summarize_placebo_results(placebos, placebo_uplift_pcts, placebo_smapes, pl
     median_placebo_rmse = np.median(placebo_rmses) if placebo_rmses else np.nan
     p95_placebo_rmse = np.percentile(placebo_rmses, 95) if placebo_rmses else np.nan
     median_placebo_uplift_pct = np.median(placebo_uplift_pcts) if placebo_uplift_pcts else np.nan
-    p2_5_pct, p97_5_pct = np.percentile(placebo_uplift_pcts, [2.5, 97.5]) if placebo_uplift_pcts else (np.nan, np.nan)
+    p2_5_pct, p97_5_pct = (
+        np.percentile(placebo_uplift_pcts, [2.5, 97.5]) if placebo_uplift_pcts else (np.nan, np.nan)
+    )
 
     if uplift is not None:
         percentile_rank = np.mean(np.array(placebos) < uplift) * 100
         p_one_sided = np.mean(np.array(placebos) >= uplift)
         mean_placebo = np.mean(placebos)
-        p_two_sided = np.mean(np.abs(np.array(placebos) - mean_placebo) >= np.abs(uplift - mean_placebo))
+        p_two_sided = np.mean(
+            np.abs(np.array(placebos) - mean_placebo) >= np.abs(uplift - mean_placebo)
+        )
         z_score = (uplift - mean_placebo) / (np.std(placebos) + 1e-12)
     else:
         percentile_rank = p_one_sided = p_two_sided = z_score = np.nan
 
     return {
-        "median_uplift": median_uplift, "p2_5": p2_5, "p97_5": p97_5,
-        "median_placebo_smape": median_placebo_smape, "p95_placebo_smape": p95_placebo_smape,
-        "median_placebo_rmse": median_placebo_rmse, "p95_placebo_rmse": p95_placebo_rmse,
-        "median_placebo_uplift_pct": median_placebo_uplift_pct, "p2_5_pct": p2_5_pct, "p97_5_pct": p97_5_pct,
-        "percentile_rank": percentile_rank, "p_one_sided": p_one_sided, "p_two_sided": p_two_sided, "z_score": z_score,
+        "median_uplift": median_uplift,
+        "p2_5": p2_5,
+        "p97_5": p97_5,
+        "median_placebo_smape": median_placebo_smape,
+        "p95_placebo_smape": p95_placebo_smape,
+        "median_placebo_rmse": median_placebo_rmse,
+        "p95_placebo_rmse": p95_placebo_rmse,
+        "median_placebo_uplift_pct": median_placebo_uplift_pct,
+        "p2_5_pct": p2_5_pct,
+        "p97_5_pct": p97_5_pct,
+        "percentile_rank": percentile_rank,
+        "p_one_sided": p_one_sided,
+        "p_two_sided": p_two_sided,
+        "z_score": z_score,
     }
+
 
 # ------------------------------------------------------------
 # AR(1) predictive-residual simulation (Bayesian TBR intervals)
@@ -1388,8 +1565,9 @@ def ar1_gap_steps(last_date, next_date, frequency_config):
         return 1
 
 
-def simulate_ar1_predictive_residuals(post_rho, post_sigma, n_periods, rng,
-                                      e_start=None, n_gap_steps=1):
+def simulate_ar1_predictive_residuals(
+    post_rho, post_sigma, n_periods, rng, e_start=None, n_gap_steps=1
+):
     """
     Simulate AR(1) residual paths for posterior predictive counterfactuals.
 
@@ -1425,7 +1603,7 @@ def simulate_ar1_predictive_residuals(post_rho, post_sigma, n_periods, rng,
     sigma = np.asarray(post_sigma, dtype=float)
     n_draws = len(sigma)
     if e_start is None:
-        denom = np.sqrt(np.clip(1.0 - rho ** 2, 1e-12, None))
+        denom = np.sqrt(np.clip(1.0 - rho**2, 1e-12, None))
         prev = rng.normal(0.0, 1.0, size=n_draws) * (sigma / denom)
         warmup = 0  # already stationary; no warm-up needed
     else:
@@ -1485,11 +1663,13 @@ def compute_power_curve(placebo_uplift_pcts, effect_grid_pct=None, alpha=0.05):
     for x in effect_grid_pct:
         shifted_up = pcts * (1.0 + x / 100.0) + x
         shifted_dn = pcts * (1.0 - x / 100.0) - x
-        rows.append({
-            "effect_pct": float(x),
-            "power_lift": float(np.mean(shifted_up > thr_hi)),
-            "power_drop": float(np.mean(shifted_dn < thr_lo)),
-        })
+        rows.append(
+            {
+                "effect_pct": float(x),
+                "power_lift": float(np.mean(shifted_up > thr_hi)),
+                "power_drop": float(np.mean(shifted_dn < thr_lo)),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -1501,13 +1681,27 @@ def find_mde(power_df, column, target_power=0.8):
     return float(hit["effect_pct"].iloc[0]) if not hit.empty else None
 
 
-def run_validation_method(agg_df, control_list, test_regions, method_name,
-                          pre_start, pre_end, test_start=None, test_end=None,
-                          use_post=False, post_start=None, post_end=None,
-                          compute_uplift=True, placebo_length_weeks=None,
-                          min_training_weeks=13, include_lagged_controls=False,
-                          time_series_frequency="weekly", placebo_length_periods=None,
-                          min_training_periods=None, frequency_config=None):
+def run_validation_method(
+    agg_df,
+    control_list,
+    test_regions,
+    method_name,
+    pre_start,
+    pre_end,
+    test_start=None,
+    test_end=None,
+    use_post=False,
+    post_start=None,
+    post_end=None,
+    compute_uplift=True,
+    placebo_length_weeks=None,
+    min_training_weeks=13,
+    include_lagged_controls=False,
+    time_series_frequency="weekly",
+    placebo_length_periods=None,
+    min_training_periods=None,
+    frequency_config=None,
+):
     """
     Run a single validation method (ElasticNet or LASSO).
     Returns a dict with metrics, predictions, placebo results, etc.
@@ -1558,15 +1752,19 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
     combined_end = max(combined_end_candidates)
 
     full_mask = (agg_df["date"] >= pre_start) & (agg_df["date"] <= combined_end)
-    model_full, matrix_diagnostics = build_model_matrix(agg_df[full_mask], control_list, test_regions)
+    model_full, matrix_diagnostics = build_model_matrix(
+        agg_df[full_mask], control_list, test_regions
+    )
 
     # ---- Row-loss diagnostics: warn when a meaningful share of rows were dropped because
     # the test series or a selected control had missing KPI values for some dates. ----
     _warn_on_row_loss(matrix_diagnostics)
 
     if include_lagged_controls:
-        model_full, model_feature_cols, lagged_feature_map, lag_drop_metadata = add_lagged_control_features(
-            model_full, control_list, lags=(lag_periods,), frequency_config=frequency_config
+        model_full, model_feature_cols, lagged_feature_map, lag_drop_metadata = (
+            add_lagged_control_features(
+                model_full, control_list, lags=(lag_periods,), frequency_config=frequency_config
+            )
         )
     else:
         model_feature_cols = list(control_list)
@@ -1582,8 +1780,9 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
     if _missing_feature_cols:
         st.error(
             "Could not build the validation model — the following control region(s) have no "
-            "matching data in the uploaded KPI file: " + ", ".join(map(str, _missing_feature_cols)) +
-            ". This usually means the aggregation level or region names in this file don't match "
+            "matching data in the uploaded KPI file: "
+            + ", ".join(map(str, _missing_feature_cols))
+            + ". This usually means the aggregation level or region names in this file don't match "
             "the ones used in Region Matching."
         )
         st.stop()
@@ -1601,7 +1800,9 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
 
     # Determine model type from method_name
     # method_name is either "enet" or "lasso"
-    model, main_model_cv_status, main_model_used_cv = build_regularized_model(method_name, len(y_pre), n_splits_pref=5)
+    model, main_model_cv_status, main_model_used_cv = build_regularized_model(
+        method_name, len(y_pre), n_splits_pref=5
+    )
     main_model_used_cv_fallback = not main_model_used_cv
     model.fit(X_pre_scaled, y_pre)
     y_pred_pre = model.predict(X_pre_scaled)
@@ -1613,13 +1814,18 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
 
     # Rolling-origin validation (using the same model type)
     # horizon matches placebo_length_periods so both use the same window length
-    cv_horizon = placebo_length_periods if placebo_length_periods is not None else frequency_config["default_validation_horizon_periods"]
+    cv_horizon = (
+        placebo_length_periods
+        if placebo_length_periods is not None
+        else frequency_config["default_validation_horizon_periods"]
+    )
     fold_df, rolling_smape_mean, rolling_rmse_mean, rolling_cv_status = rolling_origin_validation(
-        X_pre, y_pre,
+        X_pre,
+        y_pre,
         horizon=cv_horizon,
         min_training_periods=min_training_periods,
         dates=dates_pre,
-        model_type=method_name
+        model_type=method_name,
     )
     # Backwards-compat aliases
     holdout_smape_mean = rolling_smape_mean
@@ -1721,7 +1927,9 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
     )
 
     # Placebo summary statistics (use the same functions)
-    _placebo_summary = _summarize_placebo_results(placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, uplift)
+    _placebo_summary = _summarize_placebo_results(
+        placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, uplift
+    )
     median_uplift = _placebo_summary["median_uplift"]
     p2_5 = _placebo_summary["p2_5"]
     p97_5 = _placebo_summary["p97_5"]
@@ -1765,23 +1973,27 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
     for feat in model_feature_cols:
         base_region, term_type = _feature_to_region_and_term(feat)
         coeff_val = float(coeff_dict[feat])
-        selected_df_rows.append({
-            "Feature": feat,
-            "Base Region": base_region,
-            "Term Type": term_type,
-            "Coefficient": round(coeff_val, 4),
-            "Non-zero Coefficient": abs(coeff_val) > coeff_threshold,
-        })
+        selected_df_rows.append(
+            {
+                "Feature": feat,
+                "Base Region": base_region,
+                "Term Type": term_type,
+                "Coefficient": round(coeff_val, 4),
+                "Non-zero Coefficient": abs(coeff_val) > coeff_threshold,
+            }
+        )
     selected_df = pd.DataFrame(
         selected_df_rows,
-        columns=["Feature", "Base Region", "Term Type", "Coefficient", "Non-zero Coefficient"]
+        columns=["Feature", "Base Region", "Term Type", "Coefficient", "Non-zero Coefficient"],
     )
 
     selected_features = [row["Feature"] for row in selected_df_rows if row["Non-zero Coefficient"]]
     # selected_regions stays a clean list of base regions used (a region counts as
     # selected if either its same-period or lagged term has a non-zero coefficient).
-    selected = sorted({row["Base Region"] for row in selected_df_rows if row["Non-zero Coefficient"]},
-                       key=lambda r: control_list.index(r) if r in control_list else 0)
+    selected = sorted(
+        {row["Base Region"] for row in selected_df_rows if row["Non-zero Coefficient"]},
+        key=lambda r: control_list.index(r) if r in control_list else 0,
+    )
     n_candidates = len(control_list)
     n_selected = len(selected)
     n_removed = n_candidates - n_selected
@@ -1842,7 +2054,8 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
         "overfitting_risk": overfitting_risk,
         "validation_method_label": validation_method_label,
         "cv_status": cv_status,
-        "used_cv_fallback": main_model_used_cv_fallback or (not fold_df.empty and bool(fold_df["used_cv_fallback"].any())),
+        "used_cv_fallback": main_model_used_cv_fallback
+        or (not fold_df.empty and bool(fold_df["used_cv_fallback"].any())),
         "main_model_used_cv_fallback": main_model_used_cv_fallback,
         "n_selected_features": n_selected_features,
         "n_pre_periods": n_pre_periods,
@@ -1902,7 +2115,7 @@ def run_validation_method(agg_df, control_list, test_regions, method_name,
         "model_feature_cols": model_feature_cols,
         "lagged_feature_map": lagged_feature_map,
         "scaler": scaler,
-        "model": model
+        "model": model,
     }
 
 
@@ -1921,6 +2134,7 @@ def repair_text_value(v):
     s = s.replace("--", "–")
     return unicodedata.normalize("NFC", s)
 
+
 def clean_dataframe_text(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     obj_cols = df.select_dtypes(include=["object"]).columns
@@ -1928,13 +2142,15 @@ def clean_dataframe_text(df: pd.DataFrame) -> pd.DataFrame:
         df[c] = df[c].map(repair_text_value)
     return df
 
+
 def normalise_column_names(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
     df = df.loc[:, ~df.columns.str.contains("^Unnamed", case=False, na=False)]
     return df
 
-def inspect_excel_sheet(path: str, sheet_name: str) -> Dict:
+
+def inspect_excel_sheet(path: str, sheet_name: str) -> dict:
     try:
         df_raw = pd.read_excel(
             path,
@@ -1942,43 +2158,46 @@ def inspect_excel_sheet(path: str, sheet_name: str) -> Dict:
             engine="calamine",
             header=None,
             dtype=str,
-            keep_default_na=False
+            keep_default_na=False,
         )
         issues = []
         for row_idx, row in df_raw.iterrows():
             for col_idx, val in enumerate(row):
-                if val and str(val).startswith('#'):
-                    issues.append({'row': row_idx, 'col': col_idx, 'value': val})
-        return {'has_issues': len(issues) > 0, 'issues': issues[:10], 'total_issues': len(issues)}
+                if val and str(val).startswith("#"):
+                    issues.append({"row": row_idx, "col": col_idx, "value": val})
+        return {"has_issues": len(issues) > 0, "issues": issues[:10], "total_issues": len(issues)}
     except Exception as e:
-        return {'has_issues': True, 'error': str(e)}
+        return {"has_issues": True, "error": str(e)}
+
 
 # ------------------------------------------------------------
 # Excel workbook loading
 # ------------------------------------------------------------
 @st.cache_data(ttl=CONFIG["cache_ttl"])
-def get_workbook_sheet_names(path: str) -> List[str]:
+def get_workbook_sheet_names(path: str) -> list[str]:
     xl = pd.ExcelFile(path, engine="calamine")
     return xl.sheet_names
+
 
 @st.cache_data(ttl=CONFIG["cache_ttl"])
 def load_market_sheet(path: str, sheet_name: str) -> pd.DataFrame:
     try:
         df = pd.read_excel(path, sheet_name=sheet_name, engine="calamine", dtype=str)
-    except Exception as e:
+    except Exception:
         try:
             df = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl", dtype=str)
         except Exception as e2:
             st.error(f"Failed to load sheet with both engines: {e2}")
             raise
     df = normalise_column_names(df)
-    error_patterns = ['#N/A', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#NULL!']
+    error_patterns = ["#N/A", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#NULL!"]
     df = df.replace(error_patterns, pd.NA)
     df = clean_dataframe_text(df)
     df = df.dropna(axis=1, how="all")
     df = df.dropna(axis=0, how="all")
     df["Market"] = sheet_name
     return df
+
 
 def get_population_column(df: pd.DataFrame) -> str:
     if POPULATION_COL_RAW in df.columns:
@@ -1988,7 +2207,10 @@ def get_population_column(df: pd.DataFrame) -> str:
     candidates = [c for c in df.columns if c.strip().lower() in ["total population", "population"]]
     if candidates:
         return candidates[0]
-    raise ValueError("Could not find a population column. Expected 'Total Population' or 'Population'.")
+    raise ValueError(
+        "Could not find a population column. Expected 'Total Population' or 'Population'."
+    )
+
 
 def get_base_geography_column(df: pd.DataFrame) -> str:
     non_market_cols = [c for c in df.columns if c != "Market"]
@@ -1996,7 +2218,8 @@ def get_base_geography_column(df: pd.DataFrame) -> str:
         raise ValueError("Could not identify a base geography column.")
     return non_market_cols[0]
 
-def get_grouping_columns(df: pd.DataFrame) -> List[str]:
+
+def get_grouping_columns(df: pd.DataFrame) -> list[str]:
     pop_col = get_population_column(df)
     pop_idx = list(df.columns).index(pop_col)
     pre_population_cols = list(df.columns[:pop_idx])
@@ -2006,6 +2229,7 @@ def get_grouping_columns(df: pd.DataFrame) -> List[str]:
         grouping_cols = [get_base_geography_column(df)]
     return grouping_cols
 
+
 def standardise_population_column(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     pop_col = get_population_column(df)
@@ -2013,9 +2237,22 @@ def standardise_population_column(df: pd.DataFrame) -> pd.DataFrame:
         df = df.rename(columns={pop_col: POPULATION_COL})
     return df
 
-def get_numeric_metric_columns(df: pd.DataFrame, grouping_cols: List[str]) -> List[str]:
-    categorical_keywords = ['area', 'region', 'county', 'city', 'district', 'borough',
-                            'territory', 'province', 'state', 'country', 'name', 'code']
+
+def get_numeric_metric_columns(df: pd.DataFrame, grouping_cols: list[str]) -> list[str]:
+    categorical_keywords = [
+        "area",
+        "region",
+        "county",
+        "city",
+        "district",
+        "borough",
+        "territory",
+        "province",
+        "state",
+        "country",
+        "name",
+        "code",
+    ]
     excluded = set(grouping_cols + ["Market", ADOBE_COL, POPULATION_COL, POPULATION_COL_RAW])
     numeric_cols = []
     for c in df.columns:
@@ -2026,10 +2263,11 @@ def get_numeric_metric_columns(df: pd.DataFrame, grouping_cols: List[str]) -> Li
         if pd.api.types.is_numeric_dtype(df[c]):
             numeric_cols.append(c)
         else:
-            numeric_attempt = pd.to_numeric(df[c], errors='coerce')
+            numeric_attempt = pd.to_numeric(df[c], errors="coerce")
             if numeric_attempt.notna().sum() > len(df[c]) * 0.5:
                 numeric_cols.append(c)
     return numeric_cols
+
 
 def prepare_market_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df = standardise_population_column(df)
@@ -2043,17 +2281,20 @@ def prepare_market_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             sample = df[c].dropna().head(10)
             if len(sample) > 0:
                 sample_str = sample.astype(str)
-                looks_numeric = sample_str.str.match(r'^[\d\-\.\,]+$').all()
+                looks_numeric = sample_str.str.match(r"^[\d\-\.\,]+$").all()
                 if looks_numeric:
                     df[c] = pd.to_numeric(df[c], errors="coerce")
     df = df.dropna(subset=[POPULATION_COL])
     df = df[df[POPULATION_COL] > 0]
     return df
 
+
 # ------------------------------------------------------------
 # Aggregation helpers
 # ------------------------------------------------------------
-def weighted_average_vectorized(df: pd.DataFrame, value_cols: List[str], weight_col: str) -> pd.Series:
+def weighted_average_vectorized(
+    df: pd.DataFrame, value_cols: list[str], weight_col: str
+) -> pd.Series:
     result_dict = {}
     if not value_cols:
         result_dict[weight_col] = df[weight_col].sum()
@@ -2063,24 +2304,37 @@ def weighted_average_vectorized(df: pd.DataFrame, value_cols: List[str], weight_
     valid_mask = pd.notna(df[value_cols]).values
     weighted_sums = np.where(valid_mask, values * weights, 0).sum(axis=0)
     weight_sums = np.where(valid_mask, weights, 0).sum(axis=0)
-    results = np.divide(weighted_sums, weight_sums, out=np.full(weighted_sums.shape, np.nan, dtype=float), where=weight_sums != 0)
+    results = np.divide(
+        weighted_sums,
+        weight_sums,
+        out=np.full(weighted_sums.shape, np.nan, dtype=float),
+        where=weight_sums != 0,
+    )
     result_dict.update(dict(zip(value_cols, results)))
     result_dict[weight_col] = df[weight_col].sum()
     return pd.Series(result_dict)
 
+
 @st.cache_data(ttl=CONFIG["cache_ttl"])
-def aggregate_market_data(market_df: pd.DataFrame, grouping_col: str, numeric_metric_cols: List[str]) -> pd.DataFrame:
+def aggregate_market_data(
+    market_df: pd.DataFrame, grouping_col: str, numeric_metric_cols: list[str]
+) -> pd.DataFrame:
     keep_cols = ["Market", grouping_col, POPULATION_COL] + numeric_metric_cols
     keep_cols = [c for c in keep_cols if c in market_df.columns]
     df = market_df[keep_cols].copy()
     df = df.dropna(subset=[grouping_col, POPULATION_COL])
-    agg_df = df.groupby(grouping_col, dropna=True).apply(lambda x: weighted_average_vectorized(x, numeric_metric_cols, POPULATION_COL)).reset_index()
+    agg_df = (
+        df.groupby(grouping_col, dropna=True)
+        .apply(lambda x: weighted_average_vectorized(x, numeric_metric_cols, POPULATION_COL))
+        .reset_index()
+    )
     agg_df["Market"] = market_df["Market"].iloc[0]
     ordered_cols = ["Market", grouping_col, POPULATION_COL] + numeric_metric_cols
     ordered_cols = [c for c in ordered_cols if c in agg_df.columns]
     return agg_df[ordered_cols]
 
-def impute_missing_features(df: pd.DataFrame, feature_cols: List[str]) -> pd.DataFrame:
+
+def impute_missing_features(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
     df = df.copy()
     for c in feature_cols:
         if c in df.columns:
@@ -2089,6 +2343,7 @@ def impute_missing_features(df: pd.DataFrame, feature_cols: List[str]) -> pd.Dat
                 median_val = 0
             df[c] = df[c].fillna(median_val)
     return df
+
 
 @st.cache_data(ttl=CONFIG["cache_ttl"], show_spinner=False)
 def read_kpi_pattern_excel(file_bytes: bytes) -> pd.DataFrame:
@@ -2103,20 +2358,26 @@ def read_kpi_pattern_excel(file_bytes: bytes) -> pd.DataFrame:
         bio.seek(0)
         return pd.read_excel(bio, engine="openpyxl", header=0)
 
+
 # ------------------------------------------------------------
 # Matching metric helpers
 # ------------------------------------------------------------
-def weighted_profile(df: pd.DataFrame, features: List[str], population_col: str = POPULATION_COL) -> pd.Series:
+def weighted_profile(
+    df: pd.DataFrame, features: list[str], population_col: str = POPULATION_COL
+) -> pd.Series:
     """Population-weighted feature means. Falls back to equal-weighted means
     if the population column is missing, all-NaN, or sums to zero/negative."""
     if population_col in df.columns:
         w = pd.to_numeric(df[population_col], errors="coerce")
         if w.notna().any() and w.fillna(0).sum() > 0:
             w = w.fillna(0).values
-            return pd.Series({f: np.average(df[f].values, weights=w) for f in features}, index=features)
+            return pd.Series(
+                {f: np.average(df[f].values, weights=w) for f in features}, index=features
+            )
     return df[features].mean()
 
-def fit_structural_stats(eligible_df: pd.DataFrame, features: List[str]):
+
+def fit_structural_stats(eligible_df: pd.DataFrame, features: list[str]):
     """Fit ONE structural mean/std basis on the eligible region universe
     (selected test regions + full control candidate pool) for this run.
     Using the same basis for every candidate group is what makes
@@ -2125,16 +2386,29 @@ def fit_structural_stats(eligible_df: pd.DataFrame, features: List[str]):
     stds = eligible_df[features].std(ddof=0)
     return means, stds
 
-def calculate_metrics(test_df, control_df, features, weights_dict, eligible_means, eligible_stds, population_col=POPULATION_COL):
+
+def calculate_metrics(
+    test_df,
+    control_df,
+    features,
+    weights_dict,
+    eligible_means,
+    eligible_stds,
+    population_col=POPULATION_COL,
+):
     """
     eligible_means / eligible_stds: dict-like {feature: value}, fitted ONCE per run
     via fit_structural_stats() on the eligible region universe — NOT refit per candidate.
     Returns a dict (not an ambiguous tuple).
     """
     empty = {
-        "mean_abs_smd": 0.0, "weighted_structural_distance": 0.0, "smd_list": [],
-        "test_means": np.array([]), "control_means": np.array([]),
-        "raw_diffs": np.array([]), "weighted_contributions": np.array([]),
+        "mean_abs_smd": 0.0,
+        "weighted_structural_distance": 0.0,
+        "smd_list": [],
+        "test_means": np.array([]),
+        "control_means": np.array([]),
+        "raw_diffs": np.array([]),
+        "weighted_contributions": np.array([]),
     }
     if not features:
         return empty
@@ -2175,7 +2449,9 @@ def calculate_metrics(test_df, control_df, features, weights_dict, eligible_mean
         if feature_scale > 0 and np.isfinite(feature_scale):
             smd_list.append(abs(raw_diffs[i] / feature_scale))
         else:
-            smd_list.append(np.nan)  # flagged: feature has zero/invalid variance across the eligible pool
+            smd_list.append(
+                np.nan
+            )  # flagged: feature has zero/invalid variance across the eligible pool
     mean_abs_smd = float(np.nanmean(smd_list)) if smd_list else 0.0
 
     return {
@@ -2188,15 +2464,29 @@ def calculate_metrics(test_df, control_df, features, weights_dict, eligible_mean
         "weighted_contributions": weighted_contributions,
     }
 
+
 @st.cache_data(ttl=CONFIG["cache_ttl"])
-def calculate_metrics_cached(test_df, control_df, features_tuple, weights_tuple, eligible_means_tuple, eligible_stds_tuple):
+def calculate_metrics_cached(
+    test_df, control_df, features_tuple, weights_tuple, eligible_means_tuple, eligible_stds_tuple
+):
     features = list(features_tuple)
     weights_dict = dict(zip(features, weights_tuple))
     eligible_means = dict(zip(features, eligible_means_tuple))
     eligible_stds = dict(zip(features, eligible_stds_tuple))
-    return calculate_metrics(test_df, control_df, features, weights_dict, eligible_means, eligible_stds)
+    return calculate_metrics(
+        test_df, control_df, features, weights_dict, eligible_means, eligible_stds
+    )
 
-def make_fast_metrics_fn(pool_df, test_df_run, features, weights_dict, eligible_means, eligible_stds, population_col=POPULATION_COL):
+
+def make_fast_metrics_fn(
+    pool_df,
+    test_df_run,
+    features,
+    weights_dict,
+    eligible_means,
+    eligible_stds,
+    population_col=POPULATION_COL,
+):
     """Builds a vectorised scorer for candidate control groups drawn from a FIXED pool.
 
     Returns fast_metrics(idx_list) -> the same dict calculate_metrics() produces, where
@@ -2224,7 +2514,11 @@ def make_fast_metrics_fn(pool_df, test_df_run, features, weights_dict, eligible_
         pop_filled = None
 
     test_imputed = impute_missing_features(test_df_run, features)
-    test_profile = weighted_profile(test_imputed, features, population_col).values if features else np.array([])
+    test_profile = (
+        weighted_profile(test_imputed, features, population_col).values
+        if features
+        else np.array([])
+    )
 
     means_arr = np.array([eligible_means[f] for f in features], dtype=float)
     stds_arr = np.array([eligible_stds[f] for f in features], dtype=float)
@@ -2238,8 +2532,15 @@ def make_fast_metrics_fn(pool_df, test_df_run, features, weights_dict, eligible_
         # Rare edge cases (no features / empty candidate group) defer to the reference
         # implementation so behaviour is identical.
         if not features or len(idx_list) == 0:
-            return calculate_metrics(test_df_run, pool_df.loc[list(idx_list)], features,
-                                     weights_dict, eligible_means, eligible_stds, population_col)
+            return calculate_metrics(
+                test_df_run,
+                pool_df.loc[list(idx_list)],
+                features,
+                weights_dict,
+                eligible_means,
+                eligible_stds,
+                population_col,
+            )
         rows = [pos_map[i] for i in idx_list]
         Xg = X[rows]
         # Population-weighted control profile, with the same equal-weight fallback
@@ -2257,7 +2558,11 @@ def make_fast_metrics_fn(pool_df, test_df_run, features, weights_dict, eligible_
 
         raw_diffs = test_profile - control_profile
         smd_arr = np.where(valid_std, np.abs(raw_diffs) / safe_stds, np.nan)
-        mean_abs_smd = float(np.nanmean(smd_arr)) if smd_arr.size and not np.isnan(smd_arr).all() else (float("nan") if smd_arr.size else 0.0)
+        mean_abs_smd = (
+            float(np.nanmean(smd_arr))
+            if smd_arr.size and not np.isnan(smd_arr).all()
+            else (float("nan") if smd_arr.size else 0.0)
+        )
 
         return {
             "mean_abs_smd": mean_abs_smd,
@@ -2271,8 +2576,11 @@ def make_fast_metrics_fn(pool_df, test_df_run, features, weights_dict, eligible_
 
     return fast_metrics
 
+
 @st.cache_data(ttl=CONFIG["cache_ttl"])
-def preprocess_data(pool_df, test_df_run, active_features, weights, eligible_means_tuple, eligible_stds_tuple):
+def preprocess_data(
+    pool_df, test_df_run, active_features, weights, eligible_means_tuple, eligible_stds_tuple
+):
     """Nearest-neighbour candidate search uses the SAME fixed eligible-pool basis
     (eligible_means/eligible_stds) as calculate_metrics(), so the NN ranking is
     consistent with the Weighted Structural Distance objective."""
@@ -2286,6 +2594,7 @@ def preprocess_data(pool_df, test_df_run, active_features, weights, eligible_mea
     t_profile = weighted_profile(test_df_run, active_features, POPULATION_COL).values
     t_cent = (((t_profile - means_arr) / z_scale) * w_vec).reshape(1, -1)
     return w_vec, p_scaled, t_cent
+
 
 def stochastic_genetic_search(
     pool_df,
@@ -2326,7 +2635,9 @@ def stochastic_genetic_search(
     rng = np.random.default_rng(random_state)
 
     if n <= 0 or n > len(pool_indices):
-        empty_metrics = calculate_metrics_fn(test_df_run, pool_df.loc[[]], active_features, weights, eligible_means, eligible_stds)
+        empty_metrics = calculate_metrics_fn(
+            test_df_run, pool_df.loc[[]], active_features, weights, eligible_means, eligible_stds
+        )
         return [], empty_metrics, 0, convergence
 
     def score(idx_list):
@@ -2334,7 +2645,14 @@ def stochastic_genetic_search(
         if fast_metrics_fn is not None:
             metrics = fast_metrics_fn(idx_list)
         else:
-            metrics = calculate_metrics_fn(test_df_run, pool_df.loc[idx_list], active_features, weights, eligible_means, eligible_stds)
+            metrics = calculate_metrics_fn(
+                test_df_run,
+                pool_df.loc[idx_list],
+                active_features,
+                weights,
+                eligible_means,
+                eligible_stds,
+            )
         evaluated_count += 1
         return metrics["weighted_structural_distance"], metrics
 
@@ -2369,6 +2687,7 @@ def stochastic_genetic_search(
 
     return best_idx, best_metrics, evaluated_count, convergence
 
+
 # ------------------------------------------------------------
 # Validation and display helpers
 # ------------------------------------------------------------
@@ -2386,15 +2705,21 @@ def validate_data(df, required_cols, geo_col=None, market=None, level=None):
     missing_pct = df[required_cols].isnull().mean() * 100
     high_missing = missing_pct[missing_pct > CONFIG["missing_threshold"]]
     if len(high_missing) > 0:
-        issues.append(f"📊 High missing values (> {CONFIG['missing_threshold']}%): {dict(high_missing)}")
-        recommendations.append(f"💡 Consider removing from matching: {', '.join(high_missing.index[:3])}")
+        issues.append(
+            f"📊 High missing values (> {CONFIG['missing_threshold']}%): {dict(high_missing)}"
+        )
+        recommendations.append(
+            f"💡 Consider removing from matching: {', '.join(high_missing.index[:3])}"
+        )
     constant_cols = []
     for col in required_cols:
         if df[col].nunique(dropna=False) <= 1:
             constant_cols.append(col)
     if constant_cols:
         issues.append(f"⚠️ Constant features detected: {constant_cols[:5]}")
-        recommendations.append(f"💡 Remove these features because they do not help matching: {', '.join(constant_cols[:3])}")
+        recommendations.append(
+            f"💡 Remove these features because they do not help matching: {', '.join(constant_cols[:3])}"
+        )
     outlier_dict = {}
     for col in required_cols:
         if df[col].count() > 10:
@@ -2413,11 +2738,14 @@ def validate_data(df, required_cols, geo_col=None, market=None, level=None):
         issues.append(f"🔴 Extreme outliers detected (> {CONFIG['outlier_std_threshold']} std dev)")
         for col, regions in list(outlier_dict.items())[:3]:
             issues.append(f"   • {col}: {', '.join(str(r) for r in regions)}")
-        recommendations.append("💡 Investigate outlier regions for data errors or consider excluding them")
+        recommendations.append(
+            "💡 Investigate outlier regions for data errors or consider excluding them"
+        )
     if len(df) < 3:
         issues.append(f"⚠️ Very small sample size: {len(df)} geographies")
         recommendations.append("💡 Try a more granular geography grouping, if available")
     return issues, recommendations
+
 
 def reset_results():
     st.session_state.final_controls = None
@@ -2440,6 +2768,7 @@ def reset_results():
     st.session_state.bayesian_results = None
     st.session_state.bayesian_interpretation_visible = False
 
+
 def reset_manual_results():
     """Clear matching results but keep manual selections (test/control geos)."""
     st.session_state.final_controls = None
@@ -2460,7 +2789,10 @@ def reset_manual_results():
     st.session_state.bayesian_results = None
     st.session_state.bayesian_interpretation_visible = False
 
-def matching_setup_changed_since_last_run(run_snapshot, market, geography_level, match_mode, test_geos, weights):
+
+def matching_setup_changed_since_last_run(
+    run_snapshot, market, geography_level, match_mode, test_geos, weights
+):
     """
     Compare the CURRENT live setup against the frozen snapshot saved at the time of the
     last completed Run Match Analysis click. Returns True if anything that would affect
@@ -2483,11 +2815,13 @@ def matching_setup_changed_since_last_run(run_snapshot, market, geography_level,
         return True
     return False
 
+
 def is_proportion_series(series):
     s = series.dropna()
     if s.empty:
         return False
     return (s.min() >= 0) and (s.max() <= 1)
+
 
 def format_numeric_value(col_name, val, proportion_cols):
     if pd.isna(val):
@@ -2502,12 +2836,14 @@ def format_numeric_value(col_name, val, proportion_cols):
         return f"{val:.2f}"
     return f"{val:.3f}"
 
+
 def format_display_df(df, proportion_cols):
     out = df.copy()
     for c in out.columns:
         if pd.api.types.is_numeric_dtype(out[c]):
             out[c] = out[c].apply(lambda v: format_numeric_value(c, v, proportion_cols))
     return out
+
 
 def standardize_column_order(df, geo_col, active_features):
     base_order = ["Market", geo_col, POPULATION_COL]
@@ -2517,14 +2853,19 @@ def standardize_column_order(df, geo_col, active_features):
     ordered = [c for c in base_order if c in df.columns] + remaining
     return df[ordered]
 
+
 def calculate_experiment_population_coverage(test_regions, agg_df, geo_col, total_market_pop):
     if total_market_pop <= 0 or not test_regions:
         return 0.0
     test_pop = agg_df[agg_df[geo_col].isin(test_regions)][POPULATION_COL].sum()
     return (test_pop / total_market_pop) * 100
 
+
 def cleanup_session_state():
-    if st.session_state.get("final_controls") is not None and len(st.session_state.final_controls) > 100:
+    if (
+        st.session_state.get("final_controls") is not None
+        and len(st.session_state.final_controls) > 100
+    ):
         df = st.session_state.final_controls
         # Always keep geo_col and POPULATION_COL; fill remaining slots with other feature cols
         must_keep = [c for c in [geo_col, POPULATION_COL] if c in df.columns]
@@ -2532,13 +2873,22 @@ def cleanup_session_state():
         keep = must_keep + list(other_cols[: CONFIG["max_display_features"]])
         st.session_state.final_controls = df[keep]
 
+
 # ------------------------------------------------------------
 # Guided experiment group search
 # ------------------------------------------------------------
-def find_guided_test_group(agg_df, geo_col, total_market_pop,
-                           force_exp_include, force_exp_exclude,
-                           force_ctrl_include, force_ctrl_exclude,
-                           target_share, tolerance_pp, search_iterations=2000):
+def find_guided_test_group(
+    agg_df,
+    geo_col,
+    total_market_pop,
+    force_exp_include,
+    force_exp_exclude,
+    force_ctrl_include,
+    force_ctrl_exclude,
+    target_share,
+    tolerance_pp,
+    search_iterations=2000,
+):
     all_geos = set(agg_df[geo_col].unique())
     forced_test = set(force_exp_include)
     # Exclusions are one-sided: force_ctrl_exclude removes a region from the
@@ -2557,16 +2907,26 @@ def find_guided_test_group(agg_df, geo_col, total_market_pop,
     high = min(100, target_share + tolerance_pp) / 100
     best_set = list(forced_test)
     best_share = (forced_pop / total_market_pop) if total_market_pop > 0 else 0
-    best_dist = min(abs(best_share - low), abs(best_share - high)) if not (low <= best_share <= high) else 0
+    best_dist = (
+        min(abs(best_share - low), abs(best_share - high)) if not (low <= best_share <= high) else 0
+    )
     met = low <= best_share <= high
     if len(candidate) <= 16:
         from itertools import combinations
+
         for r in range(len(candidate) + 1):
             for comb in combinations(candidate, r):
                 trial = list(forced_test | set(comb))
-                share = agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop if total_market_pop > 0 else 0
+                share = (
+                    agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop
+                    if total_market_pop > 0
+                    else 0
+                )
                 d = 0 if (low <= share <= high) else min(abs(share - low), abs(share - high))
-                if (d < best_dist) or (d == best_dist and abs(share - (target_share / 100)) < abs(best_share - (target_share / 100))):
+                if (d < best_dist) or (
+                    d == best_dist
+                    and abs(share - (target_share / 100)) < abs(best_share - (target_share / 100))
+                ):
                     best_set, best_share, best_dist = trial, share, d
                     met = low <= share <= high
     else:
@@ -2574,12 +2934,20 @@ def find_guided_test_group(agg_df, geo_col, total_market_pop,
             k = random.randint(0, len(candidate))
             sampled = random.sample(candidate, k)
             trial = list(forced_test | set(sampled))
-            share = agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop if total_market_pop > 0 else 0
+            share = (
+                agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop
+                if total_market_pop > 0
+                else 0
+            )
             d = 0 if (low <= share <= high) else min(abs(share - low), abs(share - high))
-            if (d < best_dist) or (d == best_dist and abs(share - (target_share / 100)) < abs(best_share - (target_share / 100))):
+            if (d < best_dist) or (
+                d == best_dist
+                and abs(share - (target_share / 100)) < abs(best_share - (target_share / 100))
+            ):
                 best_set, best_share, best_dist = trial, share, d
                 met = low <= share <= high
     return best_set, best_share, met
+
 
 # ------------------------------------------------------------
 # Session state initialisation
@@ -2617,7 +2985,9 @@ if "match_results_stale" not in st.session_state:
 try:
     available_markets = sorted(get_workbook_sheet_names(DATA_PATH))
 except Exception as e:
-    st.error("We couldn't load the geography/population data file this app relies on. Please check that the data file is present and correctly formatted.")
+    st.error(
+        "We couldn't load the geography/population data file this app relies on. Please check that the data file is present and correctly formatted."
+    )
     with st.expander("Technical details"):
         st.code(f"{type(e).__name__}: {e}")
     st.stop()
@@ -2627,15 +2997,17 @@ _default_market_index = available_markets.index("UK") if "UK" in available_marke
 with st.sidebar:
     st.header("Matching Method")
     matching_method = st.radio(
-        "Matching method", ["Structural", "KPI Pattern"], key="matching_method_sidebar",
+        "Matching method",
+        ["Structural", "KPI Pattern"],
+        key="matching_method_sidebar",
         on_change=reset_results,
         help="**Structural** matches test/control regions on demographic profile (age, income, etc.) "
-             "from the built-in population dataset.\n\n"
-             "**KPI Pattern** matches regions on the shape of their own historical KPI trend instead — "
-             "use this when demographic data for your regions (e.g. custom TV/zip-code-derived regions) "
-             "isn't readily available."
+        "from the built-in population dataset.\n\n"
+        "**KPI Pattern** matches regions on the shape of their own historical KPI trend instead — "
+        "use this when demographic data for your regions (e.g. custom TV/zip-code-derived regions) "
+        "isn't readily available.",
     )
-    kpi_pattern_mode = (matching_method == "KPI Pattern")
+    kpi_pattern_mode = matching_method == "KPI Pattern"
     st.session_state["kpi_pattern_mode"] = kpi_pattern_mode
     st.write("---")
 
@@ -2646,16 +3018,23 @@ with st.sidebar:
 
     if not kpi_pattern_mode:
         st.header("1. Geography")
-        market = st.selectbox("Market", available_markets, index=_default_market_index, on_change=reset_results,
-                              help="Select the market whose regions you want to use for geo-testing.")
+        market = st.selectbox(
+            "Market",
+            available_markets,
+            index=_default_market_index,
+            on_change=reset_results,
+            help="Select the market whose regions you want to use for geo-testing.",
+        )
     else:
         st.header("1. Data Source")
         kpi_pattern_file = st.file_uploader(
-            "Upload aggregated KPI file", type=["xlsx"], key="kpi_pattern_sidebar_uploader",
+            "Upload aggregated KPI file",
+            type=["xlsx"],
+            key="kpi_pattern_sidebar_uploader",
             help="Column 1: raw key, not used (e.g. postcode). Columns 2..N-1: aggregation levels "
-                 "(e.g. TV Market, TV Region). One column named 'Metric': metric name. Remaining "
-                 "columns: one per date (weekly or daily).",
-            on_change=reset_results
+            "(e.g. TV Market, TV Region). One column named 'Metric': metric name. Remaining "
+            "columns: one per date (weekly or daily).",
+            on_change=reset_results,
         )
         market = "KPI Pattern"
         if kpi_pattern_file is not None:
@@ -2663,23 +3042,32 @@ with st.sidebar:
             _kp_date_cols = detect_date_columns(_kp_peek)
             _kp_non_date_cols = [c for c in _kp_peek.columns if c not in _kp_date_cols]
             if len(_kp_non_date_cols) < 3 or not _kp_date_cols:
-                st.error("File format not recognized — need a raw-key column, at least one aggregation-level "
-                         "column, a metric column, and date columns.")
+                st.error(
+                    "File format not recognized — need a raw-key column, at least one aggregation-level "
+                    "column, a metric column, and date columns."
+                )
             else:
                 _kp_metric_col = detect_metric_column(_kp_non_date_cols)
                 if _kp_metric_col is None:
-                    st.error("Couldn't find a column named 'Metric'. Please rename your metric-name column to 'Metric'.")
+                    st.error(
+                        "Couldn't find a column named 'Metric'. Please rename your metric-name column to 'Metric'."
+                    )
                 else:
                     st.session_state["kpi_pattern_metric_col"] = _kp_metric_col
                     _kp_agg_candidates = [c for c in _kp_non_date_cols[1:] if c != _kp_metric_col]
                     kpi_pattern_agg_col = st.selectbox(
-                        "Aggregation level", _kp_agg_candidates, key="kpi_pattern_agg_col_sidebar",
+                        "Aggregation level",
+                        _kp_agg_candidates,
+                        key="kpi_pattern_agg_col_sidebar",
                         on_change=reset_results,
-                        help="Which column to group and sum by — this becomes your geography level for matching."
+                        help="Which column to group and sum by — this becomes your geography level for matching.",
                     )
                     _kp_metric_values = sorted(_kp_peek[_kp_metric_col].dropna().unique().tolist())
                     kpi_pattern_metric_value = st.selectbox(
-                        "Metric", _kp_metric_values, key="kpi_pattern_metric_value_sidebar", on_change=reset_results
+                        "Metric",
+                        _kp_metric_values,
+                        key="kpi_pattern_metric_value_sidebar",
+                        on_change=reset_results,
                     )
                     _kp_dates_sorted = sorted(_kp_date_cols)
                     _kp_date_labels = [d.strftime("%d %b %y") for d in _kp_dates_sorted]
@@ -2691,13 +3079,19 @@ with st.sidebar:
                     _kp_date_col1, _kp_date_col2 = st.columns(2)
                     with _kp_date_col1:
                         _kp_start_label = st.selectbox(
-                            "Start date", _kp_date_labels, index=0,
-                            key="kpi_pattern_date_start_sidebar", on_change=reset_results
+                            "Start date",
+                            _kp_date_labels,
+                            index=0,
+                            key="kpi_pattern_date_start_sidebar",
+                            on_change=reset_results,
                         )
                     with _kp_date_col2:
                         _kp_end_label = st.selectbox(
-                            "End date", _kp_date_labels, index=len(_kp_date_labels) - 1,
-                            key="kpi_pattern_date_end_sidebar", on_change=reset_results
+                            "End date",
+                            _kp_date_labels,
+                            index=len(_kp_date_labels) - 1,
+                            key="kpi_pattern_date_end_sidebar",
+                            on_change=reset_results,
                         )
                     _kp_start_date = _kp_label_to_date[_kp_start_label]
                     _kp_end_date = _kp_label_to_date[_kp_end_label]
@@ -2713,14 +3107,20 @@ if not kpi_pattern_mode:
         market_df = prepare_market_dataframe(market_df_raw)
         grouping_options = get_grouping_columns(market_df)
     except Exception as e:
-        st.error(f"We couldn't prepare the data for market '{market}'. Please check that this market's sheet is formatted correctly.")
+        st.error(
+            f"We couldn't prepare the data for market '{market}'. Please check that this market's sheet is formatted correctly."
+        )
         with st.expander("Technical details"):
             st.code(f"{type(e).__name__}: {e}")
         st.stop()
 
     with st.sidebar:
-        geography_level = st.selectbox("Geography Level", grouping_options, on_change=reset_results,
-                                       help="The geographic unit to match on — e.g. region, state, or city.")
+        geography_level = st.selectbox(
+            "Geography Level",
+            grouping_options,
+            on_change=reset_results,
+            help="The geographic unit to match on — e.g. region, state, or city.",
+        )
         st.write("---")
         st.header("2. Matching Strategy")
         strategy_labels = {
@@ -2728,11 +3128,16 @@ if not kpi_pattern_mode:
             "Intermediate (Balanced)": "Refined Greedy (Hill Climbing)",
             "Advanced (Thorough)": "Stochastic (Genetic Search)",
         }
-        strategy_choice = st.radio("Strategy", list(strategy_labels.keys()), index=0, on_change=reset_results,
-                                   help="Controls how thoroughly GeoMatch searches for the best control group.\n\n"
-                                        "**Basic** uses nearest-neighbour matching — fast but may miss better combinations.\n\n"
-                                        "**Intermediate** refines the nearest-neighbour result by trying local swaps.\n\n"
-                                        "**Advanced** uses stochastic swap search across many candidate combinations. It is slower than Intermediate, but explores more possible control groups without exhaustively testing every combination.")
+        strategy_choice = st.radio(
+            "Strategy",
+            list(strategy_labels.keys()),
+            index=0,
+            on_change=reset_results,
+            help="Controls how thoroughly GeoMatch searches for the best control group.\n\n"
+            "**Basic** uses nearest-neighbour matching — fast but may miss better combinations.\n\n"
+            "**Intermediate** refines the nearest-neighbour result by trying local swaps.\n\n"
+            "**Advanced** uses stochastic swap search across many candidate combinations. It is slower than Intermediate, but explores more possible control groups without exhaustively testing every combination.",
+        )
         match_mode = strategy_labels[strategy_choice]
 
     # ------------------------------------------------------------
@@ -2741,7 +3146,9 @@ if not kpi_pattern_mode:
     geo_col = geography_level
     active_features = get_numeric_metric_columns(market_df, grouping_options)
 
-    agg_df = aggregate_market_data(market_df=market_df, grouping_col=geo_col, numeric_metric_cols=active_features)
+    agg_df = aggregate_market_data(
+        market_df=market_df, grouping_col=geo_col, numeric_metric_cols=active_features
+    )
     agg_df = impute_missing_features(agg_df, active_features)
     agg_df = agg_df.dropna(subset=[geo_col, POPULATION_COL])
     agg_df = agg_df[agg_df[POPULATION_COL] > 0]
@@ -2756,21 +3163,37 @@ else:
             "Intermediate (Balanced)": "Refined Greedy (Hill Climbing)",
             "Advanced (Thorough)": "Stochastic (Genetic Search)",
         }
-        strategy_choice = st.radio("Strategy", list(strategy_labels.keys()), index=0, on_change=reset_results,
-                                   help="Controls how thoroughly GeoMatch searches for the best control group.\n\n"
-                                        "**Basic** uses nearest-neighbour matching — fast but may miss better combinations.\n\n"
-                                        "**Intermediate** refines the nearest-neighbour result by trying local swaps.\n\n"
-                                        "**Advanced** uses stochastic swap search across many candidate combinations. It is slower than Intermediate, but explores more possible control groups without exhaustively testing every combination.")
+        strategy_choice = st.radio(
+            "Strategy",
+            list(strategy_labels.keys()),
+            index=0,
+            on_change=reset_results,
+            help="Controls how thoroughly GeoMatch searches for the best control group.\n\n"
+            "**Basic** uses nearest-neighbour matching — fast but may miss better combinations.\n\n"
+            "**Intermediate** refines the nearest-neighbour result by trying local swaps.\n\n"
+            "**Advanced** uses stochastic swap search across many candidate combinations. It is slower than Intermediate, but explores more possible control groups without exhaustively testing every combination.",
+        )
         match_mode = strategy_labels[strategy_choice]
 
-    if kpi_pattern_file is None or kpi_pattern_agg_col is None or kpi_pattern_metric_value is None or kpi_pattern_date_range is None:
-        st.info("📂 Upload an aggregated KPI file and complete the selections in the sidebar to continue.")
+    if (
+        kpi_pattern_file is None
+        or kpi_pattern_agg_col is None
+        or kpi_pattern_metric_value is None
+        or kpi_pattern_date_range is None
+    ):
+        st.info(
+            "📂 Upload an aggregated KPI file and complete the selections in the sidebar to continue."
+        )
         st.stop()
 
     _kp_full = read_kpi_pattern_excel(kpi_pattern_file.getvalue())
     _kp_metric_col_full = st.session_state["kpi_pattern_metric_col"]
     _kp_date_cols_full = detect_date_columns(_kp_full)
-    _kp_dates_in_range = [d for d in sorted(_kp_date_cols_full) if kpi_pattern_date_range[0] <= d <= kpi_pattern_date_range[1]]
+    _kp_dates_in_range = [
+        d
+        for d in sorted(_kp_date_cols_full)
+        if kpi_pattern_date_range[0] <= d <= kpi_pattern_date_range[1]
+    ]
     if len(_kp_dates_in_range) < 2:
         st.error("Select a wider date range in the sidebar — at least 2 dates are needed.")
         st.stop()
@@ -2784,7 +3207,9 @@ else:
     _kp_n_dropped = _kp_n_before_drop - len(_kp_filtered)
 
     if _kp_filtered.empty:
-        st.error("No rows remain after filtering. Check your metric/aggregation-level/date-range selection.")
+        st.error(
+            "No rows remain after filtering. Check your metric/aggregation-level/date-range selection."
+        )
         st.stop()
 
     _kp_wide_raw = _kp_filtered.groupby(kpi_pattern_agg_col)[_kp_dates_in_range].sum()
@@ -2818,6 +3243,7 @@ else:
     if _kp_n_dropped > 0:
         st.caption(f"ℹ️ {_kp_n_dropped} row(s) dropped: blank '{kpi_pattern_agg_col}' value.")
 
+
 def kpi_share_label(base_label):
     """Relabels a "...Population..." string to "...Share of {metric}..." when in KPI Pattern
     mode, since POPULATION_COL is aliased to total KPI volume (not population) in that mode.
@@ -2826,6 +3252,7 @@ def kpi_share_label(base_label):
         return base_label
     metric_label = st.session_state.get("kpi_pattern_metric_value", "KPI")
     return base_label.replace("population", metric_label).replace("Population", metric_label)
+
 
 def kpi_feature_date_label(feature_name):
     """Converts a KPI Pattern weekly feature column name ('wk_YYYYMMDD') into a
@@ -2837,6 +3264,7 @@ def kpi_feature_date_label(feature_name):
         except (ValueError, TypeError):
             return feature_name
     return feature_name
+
 
 def kpi_pattern_display_rename_map(columns, geo_col):
     """Builds a {original_col: display_col} rename map for KPI Pattern mode tables:
@@ -2856,19 +3284,26 @@ def kpi_pattern_display_rename_map(columns, geo_col):
                 rename_map[c] = new_label
     return rename_map
 
+
 # Data quality check – also warn about high missingness in features
-validation_issues, recommendations = validate_data(agg_df, active_features, geo_col=geo_col, market=market, level=geography_level)
-issue_severity = "🔴 High" if len(validation_issues) > 3 else "🟡 Medium" if len(validation_issues) > 0 else "🟢 None"
+validation_issues, recommendations = validate_data(
+    agg_df, active_features, geo_col=geo_col, market=market, level=geography_level
+)
+issue_severity = (
+    "🔴 High"
+    if len(validation_issues) > 3
+    else "🟡 Medium"
+    if len(validation_issues) > 0
+    else "🟢 None"
+)
 
 # =============================================================================
 # Main app – Tabs
 # =============================================================================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "⚙️ Region Matching",
-    "🔍 Validate Test Design",
-    "📊 Measure Test Impact",
-    "🧠 Bayesian TBR"
-])
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["⚙️ Region Matching", "🔍 Validate Test Design", "📊 Measure Test Impact", "🧠 Bayesian TBR"]
+)
+
 
 # =============================================================================
 # TAB 1: MATCHING SETUP
@@ -2878,13 +3313,15 @@ def render_structural_matching_tab():
     # Preview data
     # ------------------------------------------------------------
     with st.expander(f"Preview data: {market} ({geography_level})", expanded=False):
-        proportion_cols = {c for c in active_features if c in agg_df.columns and is_proportion_series(agg_df[c])}
+        proportion_cols = {
+            c for c in active_features if c in agg_df.columns and is_proportion_series(agg_df[c])
+        }
         preview_df = standardize_column_order(agg_df, geo_col, active_features)
         preview_display = format_display_df(preview_df, proportion_cols)
         _rename_map = kpi_pattern_display_rename_map(preview_display.columns, geo_col)
         if _rename_map:
             preview_display = preview_display.rename(columns=_rename_map)
-        st.dataframe(preview_display, width='stretch', height=240)
+        st.dataframe(preview_display, width="stretch", height=240)
 
     # ------------------------------------------------------------
     # Matching setup
@@ -2896,13 +3333,13 @@ def render_structural_matching_tab():
         [
             "Manual Selection (Pick Both)",
             "Pick Test, Auto‑Match Controls",
-            "Set Rules & Auto‑Build Groups"
+            "Set Rules & Auto‑Build Groups",
         ],
         horizontal=True,
         help="Choose how to define your test and control groups.\n\n"
-             "**Manual Selection** — you pick both groups directly, no automated matching.\n\n"
-             "**Pick Test, Auto‑Match Controls** — you choose the test regions and the app finds the best-matched controls.\n\n"
-             "**Set Rules & Auto‑Build Groups** — define inclusion/exclusion rules and the app builds both groups."
+        "**Manual Selection** — you pick both groups directly, no automated matching.\n\n"
+        "**Pick Test, Auto‑Match Controls** — you choose the test regions and the app finds the best-matched controls.\n\n"
+        "**Set Rules & Auto‑Build Groups** — define inclusion/exclusion rules and the app builds both groups.",
     )
     st.markdown("<div style='margin: 0.6rem 0;'></div>", unsafe_allow_html=True)
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
@@ -2929,21 +3366,28 @@ def render_structural_matching_tab():
         label_to_geo = {label: geo for label, geo in zip(geo_options_with_pop, all_geo_values)}
 
         if setup_mode == "Manual Selection (Pick Both)":
-            st.markdown("Select geographies to <span style='color:#15803d;font-weight:600'>include</span> in test group:", unsafe_allow_html=True)
+            st.markdown(
+                "Select geographies to <span style='color:#15803d;font-weight:600'>include</span> in test group:",
+                unsafe_allow_html=True,
+            )
             selected_test_labels = st.multiselect(
                 "test_geos_manual",
                 geo_options_with_pop,
                 on_change=reset_manual_results,
                 help="Population percentage of total market shown in brackets. These will be the test regions.",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
             )
             test_geos = [label_to_geo[label] for label in selected_test_labels]
             if test_geos:
-                test_pop_pct = calculate_experiment_population_coverage(test_geos, agg_df, geo_col, total_market_pop)
+                test_pop_pct = calculate_experiment_population_coverage(
+                    test_geos, agg_df, geo_col, total_market_pop
+                )
                 st.metric(
                     kpi_share_label("Test group market population included"),
                     f"{test_pop_pct:.1f}%",
-                    help=kpi_share_label("Percentage of the total market population covered by the selected test regions.")
+                    help=kpi_share_label(
+                        "Percentage of the total market population covered by the selected test regions."
+                    ),
                 )
             force_exp_include = []
             force_exp_exclude = []
@@ -2954,21 +3398,28 @@ def render_structural_matching_tab():
             guided_iterations = 2000
 
         elif setup_mode == "Pick Test, Auto‑Match Controls":
-            st.markdown("Select geographies to <span style='color:#15803d;font-weight:600'>include</span> in test group:", unsafe_allow_html=True)
+            st.markdown(
+                "Select geographies to <span style='color:#15803d;font-weight:600'>include</span> in test group:",
+                unsafe_allow_html=True,
+            )
             selected_labels = st.multiselect(
                 "select_geographies",
                 geo_options_with_pop,
                 on_change=reset_results,
                 help="Population percentage of total market shown in brackets",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
             )
             test_geos = [label_to_geo[label] for label in selected_labels]
             if test_geos:
-                test_pop_pct = calculate_experiment_population_coverage(test_geos, agg_df, geo_col, total_market_pop)
+                test_pop_pct = calculate_experiment_population_coverage(
+                    test_geos, agg_df, geo_col, total_market_pop
+                )
                 st.metric(
                     kpi_share_label("Test group market population included"),
                     f"{test_pop_pct:.1f}%",
-                    help=kpi_share_label("Percentage of the total market population covered by the selected test geographies. Larger test groups are typically more representative of the overall market, but leave fewer regions available for control selection.")
+                    help=kpi_share_label(
+                        "Percentage of the total market population covered by the selected test geographies. Larger test groups are typically more representative of the overall market, but leave fewer regions available for control selection."
+                    ),
                 )
             force_exp_include = []
             force_exp_exclude = []
@@ -2979,16 +3430,26 @@ def render_structural_matching_tab():
             guided_iterations = 2000
 
         else:  # "Set Rules & Auto‑Build Groups"
-            st.markdown("Test geographies to force <span style='color:#15803d;font-weight:600'>include:</span>", unsafe_allow_html=True)
+            st.markdown(
+                "Test geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
+                unsafe_allow_html=True,
+            )
             selected_include_labels = st.multiselect(
                 "exp_include",
                 geo_options_with_pop,
                 label_visibility="collapsed",
-                key="exp_include_select"
+                key="exp_include_select",
             )
             force_exp_include = [label_to_geo[label] for label in selected_include_labels]
-            exclude_options = [label for label in geo_options_with_pop if label_to_geo[label] not in force_exp_include]
-            st.markdown("Test geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>", unsafe_allow_html=True)
+            exclude_options = [
+                label
+                for label in geo_options_with_pop
+                if label_to_geo[label] not in force_exp_include
+            ]
+            st.markdown(
+                "Test geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
+                unsafe_allow_html=True,
+            )
             selected_exclude_labels = st.multiselect(
                 "exp_exclude",
                 exclude_options,
@@ -2998,28 +3459,37 @@ def render_structural_matching_tab():
                     "for the control pool. To remove a region from the analysis entirely, "
                     "also exclude it from the control list."
                 ),
-                key="exp_exclude_select"
+                key="exp_exclude_select",
             )
             force_exp_exclude = [label_to_geo[label] for label in selected_exclude_labels]
             force_ctrl_include = []
             force_ctrl_exclude = []
             target_test_share = st.slider(
                 "Target test population share",
-                5, 80, 25, 1,
+                5,
+                80,
+                25,
+                1,
                 help="Desired percentage of the total market population to include in the test group. A larger test group is more representative but leaves fewer regions available as controls.",
-                key="target_share_slider"
+                key="target_share_slider",
             )
             target_tolerance_pp = st.slider(
                 "Population share tolerance (± pp)",
-                1, 30, 5, 1,
+                1,
+                30,
+                5,
+                1,
                 help="Acceptable deviation from the target population share, in percentage points.",
-                key="tolerance_slider"
+                key="tolerance_slider",
             )
             guided_iterations = st.slider(
                 "Search intensity",
-                500, 10000, 2000, 500,
+                500,
+                10000,
+                2000,
+                500,
                 help="Number of candidate test groups evaluated. Higher values increase the chance of finding a better group but take longer to run.",
-                key="guided_iterations_slider"
+                key="guided_iterations_slider",
             )
             test_geos = []  # filled later
 
@@ -3038,13 +3508,16 @@ def render_structural_matching_tab():
                 pop_pct = (geo_pop / total_pop) * 100
                 pot_pool_with_pop.append(f"{geo} ({pop_pct:.1f}%)")
                 label_to_geo_pool[f"{geo} ({pop_pct:.1f}%)"] = geo
-            st.markdown("Select geographies to <span style='color:#15803d;font-weight:600'>include</span> in control group:", unsafe_allow_html=True)
+            st.markdown(
+                "Select geographies to <span style='color:#15803d;font-weight:600'>include</span> in control group:",
+                unsafe_allow_html=True,
+            )
             selected_control_labels = st.multiselect(
                 "control_geos_manual",
                 pot_pool_with_pop,
                 on_change=reset_manual_results,
                 help="Population percentage of total market shown in brackets. Only geographies not already in the test group are shown.",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
             )
             control_geos = [label_to_geo_pool[label] for label in selected_control_labels]
             st.session_state.user_control_geos = control_geos
@@ -3063,13 +3536,16 @@ def render_structural_matching_tab():
                 pop_pct = (geo_pop / total_pop) * 100
                 pot_pool_with_pop.append(f"{geo} ({pop_pct:.1f}%)")
                 label_to_geo_pool[f"{geo} ({pop_pct:.1f}%)"] = geo
-            st.markdown("Select geographies to <span style='color:#dc2626;font-weight:600'>exclude</span> from control pool:", unsafe_allow_html=True)
+            st.markdown(
+                "Select geographies to <span style='color:#dc2626;font-weight:600'>exclude</span> from control pool:",
+                unsafe_allow_html=True,
+            )
             excluded_labels = st.multiselect(
                 "exclude_geographies",
                 pot_pool_with_pop,
                 on_change=reset_results,
                 key="exclude_geos_select",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
             )
             excluded_geos = [label_to_geo_pool[label] for label in excluded_labels]
             st.session_state.force_ctrl_exclude = excluded_geos
@@ -3080,7 +3556,11 @@ def render_structural_matching_tab():
         else:  # "Set Rules & Auto‑Build Groups"
             total_pop = agg_df[POPULATION_COL].sum()
             force_ctrl_exclude = st.session_state.get("force_ctrl_exclude", [])
-            eligible_for_control = [g for g in all_geo_values if g not in force_exp_include and g not in force_ctrl_exclude]
+            eligible_for_control = [
+                g
+                for g in all_geo_values
+                if g not in force_exp_include and g not in force_ctrl_exclude
+            ]
             ctrl_options_with_pop = []
             label_to_ctrl = {}
             for geo in eligible_for_control:
@@ -3088,7 +3568,10 @@ def render_structural_matching_tab():
                 pop_pct = (geo_pop / total_pop) * 100
                 ctrl_options_with_pop.append(f"{geo} ({pop_pct:.1f}%)")
                 label_to_ctrl[f"{geo} ({pop_pct:.1f}%)"] = geo
-            st.markdown("Control geographies to force <span style='color:#15803d;font-weight:600'>include:</span>", unsafe_allow_html=True)
+            st.markdown(
+                "Control geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
+                unsafe_allow_html=True,
+            )
             selected_ctrl_include_labels = st.multiselect(
                 "ctrl_include",
                 ctrl_options_with_pop,
@@ -3097,11 +3580,18 @@ def render_structural_matching_tab():
                     "A region can only be force-included in one group, so regions "
                     "force-included in the test group are not shown here."
                 ),
-                key="ctrl_include_select"
+                key="ctrl_include_select",
             )
             force_ctrl_include = [label_to_ctrl[label] for label in selected_ctrl_include_labels]
-            exclude_ctrl_options = [label for label in ctrl_options_with_pop if label_to_ctrl[label] not in force_ctrl_include]
-            st.markdown("Control geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>", unsafe_allow_html=True)
+            exclude_ctrl_options = [
+                label
+                for label in ctrl_options_with_pop
+                if label_to_ctrl[label] not in force_ctrl_include
+            ]
+            st.markdown(
+                "Control geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
+                unsafe_allow_html=True,
+            )
             selected_ctrl_exclude_labels = st.multiselect(
                 "ctrl_exclude",
                 exclude_ctrl_options,
@@ -3111,11 +3601,15 @@ def render_structural_matching_tab():
                     "available for test selection. To remove a region from the analysis "
                     "entirely, also exclude it from the test list."
                 ),
-                key="ctrl_exclude_select"
+                key="ctrl_exclude_select",
             )
             force_ctrl_exclude = [label_to_ctrl[label] for label in selected_ctrl_exclude_labels]
             st.session_state.force_ctrl_exclude = force_ctrl_exclude
-            eligible_for_control = [g for g in all_geo_values if g not in force_exp_include and g not in force_ctrl_exclude]
+            eligible_for_control = [
+                g
+                for g in all_geo_values
+                if g not in force_exp_include and g not in force_ctrl_exclude
+            ]
             control_pool_geos = eligible_for_control
 
     if "force_ctrl_exclude" not in st.session_state:
@@ -3132,7 +3626,9 @@ def render_structural_matching_tab():
         if setup_mode == "Manual Selection (Pick Both)":
             max_possible_controls = 0
             min_p, max_p = 0, 0
-            st.info("In Manual Selection mode, you select both test and control groups directly. The matching algorithm is bypassed.")
+            st.info(
+                "In Manual Selection mode, you select both test and control groups directly. The matching algorithm is bypassed."
+            )
         else:
             max_possible_controls = min(len(control_pool_geos), CONFIG["max_control_pool_size"])
             min_p, max_p = 0, 0
@@ -3150,7 +3646,7 @@ def render_structural_matching_tab():
                         max_value=max_possible_controls,
                         value=(default_lower, default_upper),
                         key=f"pool_slider_{max_possible_controls}",
-                        help="The algorithm tests every control group size in this range and selects the one with the best pre-period balance. A wider range is more thorough but slower."
+                        help="The algorithm tests every control group size in this range and selects the one with the best pre-period balance. A wider range is more thorough but slower.",
                     )
                     min_p, max_p = pool_range
 
@@ -3161,7 +3657,7 @@ def render_structural_matching_tab():
                 max_value=CONFIG["genetic_iterations"]["max"],
                 value=CONFIG["genetic_iterations"]["default"],
                 step=100,
-                help="Number of random single-swap trials the stochastic search runs per control-group size. Higher values search more combinations but take longer."
+                help="Number of random single-swap trials the stochastic search runs per control-group size. Higher values search more combinations but take longer.",
             )
         else:
             genetic_iterations = CONFIG["genetic_iterations"]["default"]
@@ -3174,22 +3670,30 @@ def render_structural_matching_tab():
                 st.session_state.current_weights = {f: 1 for f in active_features}
             preset_col1, preset_col2 = st.columns(2)
             with preset_col1:
-                if st.button("🗑️ Reset All Weights to 1", width='stretch', key="reset_all_weights"):
+                if st.button("🗑️ Reset All Weights to 1", width="stretch", key="reset_all_weights"):
                     for f in active_features:
                         st.session_state.current_weights[f] = 1
                     st.session_state.w_reset += 1
                     st.rerun()
             with preset_col2:
-                if st.button("Reset Slider Positions", width='stretch', key="reset_sliders"):
+                if st.button("Reset Slider Positions", width="stretch", key="reset_sliders"):
                     st.session_state.w_reset += 1
                     st.rerun()
             weights = {}
             with st.expander("Demographic Importance Weights", expanded=False):
-                search_term = st.text_input("🔍 Filter features", placeholder="Type to search...", key=f"weight_search_{st.session_state.w_reset}")
+                search_term = st.text_input(
+                    "🔍 Filter features",
+                    placeholder="Type to search...",
+                    key=f"weight_search_{st.session_state.w_reset}",
+                )
                 ordered_features = active_features.copy()
                 if search_term:
-                    ordered_features = [f for f in ordered_features if search_term.lower() in f.lower()]
-                    st.caption(f"Showing {len(ordered_features)} of {len(active_features)} features")
+                    ordered_features = [
+                        f for f in ordered_features if search_term.lower() in f.lower()
+                    ]
+                    st.caption(
+                        f"Showing {len(ordered_features)} of {len(active_features)} features"
+                    )
                 container_height = min(500, max(200, len(ordered_features) * 35))
                 with st.container(height=container_height):
                     num_columns = 2 if len(ordered_features) > 15 else 1
@@ -3198,12 +3702,18 @@ def render_structural_matching_tab():
                         col_idx = idx % num_columns
                         with cols[col_idx]:
                             current_val = st.session_state.current_weights.get(f, 1)
-                            display_name = f.replace('_', ' ').title() if '_' in f else f
+                            display_name = f.replace("_", " ").title() if "_" in f else f
                             if current_val != 1:
                                 display_name = f"⭐ {display_name}"
-                            weight_val = st.slider(display_name, 1, 10, current_val, 1,
-                                                   key=f"w_{market}_{geography_level}_{f}_{st.session_state.w_reset}",
-                                                   help=f"Weight for {f} (higher = more important for matching)")
+                            weight_val = st.slider(
+                                display_name,
+                                1,
+                                10,
+                                current_val,
+                                1,
+                                key=f"w_{market}_{geography_level}_{f}_{st.session_state.w_reset}",
+                                help=f"Weight for {f} (higher = more important for matching)",
+                            )
                             st.session_state.current_weights[f] = weight_val
                             weights[f] = weight_val
             for f in active_features:
@@ -3211,7 +3721,9 @@ def render_structural_matching_tab():
                     weights[f] = st.session_state.current_weights.get(f, 1)
             non_default_weights = {k: v for k, v in weights.items() if v != 1}
             if non_default_weights:
-                with st.expander(f"⚡ Active Overrides ({len(non_default_weights)} features)", expanded=False):
+                with st.expander(
+                    f"⚡ Active Overrides ({len(non_default_weights)} features)", expanded=False
+                ):
                     for feature, weight in list(non_default_weights.items())[:10]:
                         st.caption(f"**{feature}**: weight = {weight}")
                     if len(non_default_weights) > 10:
@@ -3225,8 +3737,11 @@ def render_structural_matching_tab():
     # ------------------------------------------------------------
     # Run matching
     # ------------------------------------------------------------
-    st.markdown("<p class='small-muted'>Tip: start with equal weights, then increase business-critical features if needed.</p>", unsafe_allow_html=True)
-    run_clicked = st.button("▶ Run Match Analysis", width='stretch', type="primary")
+    st.markdown(
+        "<p class='small-muted'>Tip: start with equal weights, then increase business-critical features if needed.</p>",
+        unsafe_allow_html=True,
+    )
+    run_clicked = st.button("▶ Run Match Analysis", width="stretch", type="primary")
 
     if run_clicked:
         if not active_features:
@@ -3243,7 +3758,9 @@ def render_structural_matching_tab():
                 st.stop()
             overlap = set(test_geos) & set(control_geos)
             if overlap:
-                st.error(f"Overlapping geographies: {overlap}. Test and control groups must be disjoint.")
+                st.error(
+                    f"Overlapping geographies: {overlap}. Test and control groups must be disjoint."
+                )
                 st.stop()
 
             st.session_state.selected_experiment_regions = list(test_geos)
@@ -3253,7 +3770,9 @@ def render_structural_matching_tab():
             st.session_state.best_n = len(control_geos)
             st.session_state.opt_results = {}
             st.session_state.user_selected_mode = True
-            _eligible_df = pd.concat([st.session_state.test_df, st.session_state.final_controls], axis=0)
+            _eligible_df = pd.concat(
+                [st.session_state.test_df, st.session_state.final_controls], axis=0
+            )
             _eligible_df = impute_missing_features(_eligible_df, active_features)
             _elig_means, _elig_stds = fit_structural_stats(_eligible_df, active_features)
             st.session_state.eligible_means = {f: float(_elig_means[f]) for f in active_features}
@@ -3262,14 +3781,22 @@ def render_structural_matching_tab():
             # ---- Freeze a snapshot of the inputs/outputs used for this run ----
             # so slider changes afterwards don't silently change the displayed results.
             _final_metrics = calculate_metrics(
-                st.session_state.test_df, st.session_state.final_controls,
-                active_features, weights, st.session_state.eligible_means, st.session_state.eligible_stds
+                st.session_state.test_df,
+                st.session_state.final_controls,
+                active_features,
+                weights,
+                st.session_state.eligible_means,
+                st.session_state.eligible_stds,
             )
             _eligible_market_pop = agg_df[POPULATION_COL].sum()
             _experiment_pop = agg_df[agg_df[geo_col].isin(test_geos)][POPULATION_COL].sum()
             _control_pop = agg_df[agg_df[geo_col].isin(control_geos)][POPULATION_COL].sum()
-            _test_pop_pct = (_experiment_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
-            _control_pop_pct = (_control_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
+            _test_pop_pct = (
+                (_experiment_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
+            )
+            _control_pop_pct = (
+                (_control_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
+            )
             st.session_state.match_run_snapshot = {
                 "market": market,
                 "geography_level": geography_level,
@@ -3281,8 +3808,12 @@ def render_structural_matching_tab():
                 "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
                 "active_features": list(active_features),
                 "weights": dict(weights),
-                "eligible_means": tuple(st.session_state.eligible_means.get(f, np.nan) for f in active_features),
-                "eligible_stds": tuple(st.session_state.eligible_stds.get(f, np.nan) for f in active_features),
+                "eligible_means": tuple(
+                    st.session_state.eligible_means.get(f, np.nan) for f in active_features
+                ),
+                "eligible_stds": tuple(
+                    st.session_state.eligible_stds.get(f, np.nan) for f in active_features
+                ),
                 "best_n": len(control_geos),
             }
             st.session_state.match_run_metrics = {
@@ -3300,37 +3831,71 @@ def render_structural_matching_tab():
             st.session_state.match_results_stale = False
 
             cleanup_session_state()
-            st.success(f"Groups set. Test: {len(test_geos)} regions, Control: {len(control_geos)} regions.")
+            st.success(
+                f"Groups set. Test: {len(test_geos)} regions, Control: {len(control_geos)} regions."
+            )
 
         else:
             if setup_mode == "Set Rules & Auto‑Build Groups":
-                conflicts = (set(force_exp_include) & set(force_exp_exclude)) | (set(force_ctrl_include) & set(force_ctrl_exclude)) | (set(force_exp_include) & set(force_ctrl_include))
+                conflicts = (
+                    (set(force_exp_include) & set(force_exp_exclude))
+                    | (set(force_ctrl_include) & set(force_ctrl_exclude))
+                    | (set(force_exp_include) & set(force_ctrl_include))
+                )
                 if conflicts:
-                    st.error(f"Invalid constraints. These geographies have conflicting assignments: {sorted(conflicts)}")
+                    st.error(
+                        f"Invalid constraints. These geographies have conflicting assignments: {sorted(conflicts)}"
+                    )
                     st.stop()
-                test_geos, achieved_share, target_met = find_guided_test_group(agg_df, geo_col, total_market_pop,
-                                                                                force_exp_include, force_exp_exclude,
-                                                                                force_ctrl_include, force_ctrl_exclude,
-                                                                                target_test_share, target_tolerance_pp, guided_iterations)
+                test_geos, achieved_share, target_met = find_guided_test_group(
+                    agg_df,
+                    geo_col,
+                    total_market_pop,
+                    force_exp_include,
+                    force_exp_exclude,
+                    force_ctrl_include,
+                    force_ctrl_exclude,
+                    target_test_share,
+                    target_tolerance_pp,
+                    guided_iterations,
+                )
                 if len(test_geos) == 0:
-                    st.error("Could not construct a valid test group with the provided constraints.")
+                    st.error(
+                        "Could not construct a valid test group with the provided constraints."
+                    )
                     st.stop()
                 if not target_met:
-                    st.warning(f"Target population share range was not met. Closest achieved: {achieved_share * 100:.1f}% (target {target_test_share}%, ±{target_tolerance_pp}pp).")
-                st.session_state.guided_share_info = {"achieved": achieved_share * 100, "target": target_test_share, "tolerance": target_tolerance_pp, "met": target_met}
+                    st.warning(
+                        f"Target population share range was not met. Closest achieved: {achieved_share * 100:.1f}% (target {target_test_share}%, ±{target_tolerance_pp}pp)."
+                    )
+                st.session_state.guided_share_info = {
+                    "achieved": achieved_share * 100,
+                    "target": target_test_share,
+                    "tolerance": target_tolerance_pp,
+                    "met": target_met,
+                }
                 all_geos = set(agg_df[geo_col].unique())
                 # Note: force_exp_exclude is deliberately NOT subtracted here — a region
                 # excluded from the test group remains available as a control. Exclusions
                 # are one-sided; only excluding a region from BOTH lists removes it from
                 # the analysis entirely.
-                control_pool_geos = list((all_geos - set(test_geos) - set(force_ctrl_exclude)) | set(force_ctrl_include))
+                control_pool_geos = list(
+                    (all_geos - set(test_geos) - set(force_ctrl_exclude)) | set(force_ctrl_include)
+                )
             else:
                 st.session_state.guided_share_info = None
-                if 'control_pool_geos' not in locals():
-                    control_pool_geos = [g for g in all_geo_values if g not in test_geos and g not in st.session_state.get("force_ctrl_exclude", [])]
+                if "control_pool_geos" not in locals():
+                    control_pool_geos = [
+                        g
+                        for g in all_geo_values
+                        if g not in test_geos
+                        and g not in st.session_state.get("force_ctrl_exclude", [])
+                    ]
 
             if len(test_geos) == 0:
-                st.error("No test regions selected. Please select at least one test region before running.")
+                st.error(
+                    "No test regions selected. Please select at least one test region before running."
+                )
                 st.stop()
             st.session_state.selected_experiment_regions = list(test_geos)
             test_df_run = agg_df[agg_df[geo_col].isin(test_geos)].copy()
@@ -3343,7 +3908,9 @@ def render_structural_matching_tab():
             else:
                 s_min, s_max = min_p, max_p
                 if s_min <= 0 or s_max <= 0:
-                    st.error("Invalid control pool size range. Please ensure min size >= 2 and max size > 0.")
+                    st.error(
+                        "Invalid control pool size range. Please ensure min size >= 2 and max size > 0."
+                    )
                     st.stop()
             if len(pool_df) < s_max:
                 st.error(f"Insufficient controls available. Need {s_max}, have {len(pool_df)}.")
@@ -3357,10 +3924,19 @@ def render_structural_matching_tab():
             st.session_state.eligible_means = dict(zip(active_features, eligible_means_tuple))
             st.session_state.eligible_stds = dict(zip(active_features, eligible_stds_tuple))
 
-            w_vec, p_scaled, t_cent = preprocess_data(pool_df, test_df_run, active_features, weights, eligible_means_tuple, eligible_stds_tuple)
+            w_vec, p_scaled, t_cent = preprocess_data(
+                pool_df,
+                test_df_run,
+                active_features,
+                weights,
+                eligible_means_tuple,
+                eligible_stds_tuple,
+            )
             # One vectorised scorer for the whole run — the strategy loops below score
             # hundreds to thousands of candidate groups against the same fixed pool.
-            fast_metrics = make_fast_metrics_fn(pool_df, test_df_run, active_features, weights, eligible_means, eligible_stds)
+            fast_metrics = make_fast_metrics_fn(
+                pool_df, test_df_run, active_features, weights, eligible_means, eligible_stds
+            )
             opt_data = []
             best_score = float("inf")
             best_idx = None
@@ -3371,7 +3947,9 @@ def render_structural_matching_tab():
             total_iterations = len(size_range)
 
             for i, n in enumerate(size_range):
-                status_text.text(f"Testing {n} controls..." if not force_1to1 else "Finding best 1-to-1 match...")
+                status_text.text(
+                    f"Testing {n} controls..." if not force_1to1 else "Finding best 1-to-1 match..."
+                )
                 if match_mode == "Greedy (Nearest Neighbor)":
                     nn = NearestNeighbors(n_neighbors=min(n, len(pool_df))).fit(p_scaled)
                     _, ind = nn.kneighbors(t_cent)
@@ -3381,13 +3959,15 @@ def render_structural_matching_tab():
                     # Use weighted structural distance as the optimisation objective so slider weights affect control selection.
                     # Mean Abs SMD is retained as an unweighted diagnostic balance metric.
                     optimisation_score = metrics["weighted_structural_distance"]
-                    opt_data.append({
-                        "Num_Controls": n,
-                        "Weighted_Structural_Distance": metrics["weighted_structural_distance"],
-                        "Mean_Abs_SMD": mean_abs_smd,
-                        "Optimisation_Score": optimisation_score,
-                        "Indices": c_idx
-                    })
+                    opt_data.append(
+                        {
+                            "Num_Controls": n,
+                            "Weighted_Structural_Distance": metrics["weighted_structural_distance"],
+                            "Mean_Abs_SMD": mean_abs_smd,
+                            "Optimisation_Score": optimisation_score,
+                            "Indices": c_idx,
+                        }
+                    )
                     if optimisation_score < best_score:
                         best_score, best_idx = optimisation_score, c_idx
                 elif match_mode == "Refined Greedy (Hill Climbing)":
@@ -3396,10 +3976,14 @@ def render_structural_matching_tab():
                     # CONFIG["max_hill_climbing_swaps"] swap candidates. (Previously n + 5
                     # left only ever 5 candidates, regardless of the config value, which
                     # starved the search and made this strategy finish almost instantly.)
-                    nn_w = NearestNeighbors(n_neighbors=min(len(pool_df), n + CONFIG["max_hill_climbing_swaps"])).fit(p_scaled)
+                    nn_w = NearestNeighbors(
+                        n_neighbors=min(len(pool_df), n + CONFIG["max_hill_climbing_swaps"])
+                    ).fit(p_scaled)
                     _, ind_w = nn_w.kneighbors(t_cent)
                     curr_idx = [pool_df.index[j] for j in ind_w[0][:n]]
-                    pot_swaps = [pool_df.index[j] for j in ind_w[0] if pool_df.index[j] not in curr_idx][:CONFIG["max_hill_climbing_swaps"]]
+                    pot_swaps = [
+                        pool_df.index[j] for j in ind_w[0] if pool_df.index[j] not in curr_idx
+                    ][: CONFIG["max_hill_climbing_swaps"]]
                     curr_metrics = fast_metrics(curr_idx)
                     curr_score = curr_metrics["weighted_structural_distance"]
                     curr_mean_abs_smd = curr_metrics["mean_abs_smd"]
@@ -3423,7 +4007,12 @@ def render_structural_matching_tab():
                                 improvement = curr_score - new_score
                                 if improvement > best_improvement:
                                     best_improvement = improvement
-                                    best_swap_tuple = (temp, swap_in, new_score, new_metrics["mean_abs_smd"])
+                                    best_swap_tuple = (
+                                        temp,
+                                        swap_in,
+                                        new_score,
+                                        new_metrics["mean_abs_smd"],
+                                    )
                         if best_improvement > 0 and best_swap_tuple:
                             curr_idx, swap_in, curr_score, curr_mean_abs_smd = best_swap_tuple
                             if swap_in in pot_swaps:
@@ -3431,13 +4020,15 @@ def render_structural_matching_tab():
                             conv.append(curr_score)
                             improved = True
                     optimisation_score = curr_score
-                    opt_data.append({
-                        "Num_Controls": n,
-                        "Weighted_Structural_Distance": curr_score,
-                        "Mean_Abs_SMD": curr_mean_abs_smd,
-                        "Optimisation_Score": optimisation_score,
-                        "Indices": curr_idx
-                    })
+                    opt_data.append(
+                        {
+                            "Num_Controls": n,
+                            "Weighted_Structural_Distance": curr_score,
+                            "Mean_Abs_SMD": curr_mean_abs_smd,
+                            "Optimisation_Score": optimisation_score,
+                            "Indices": curr_idx,
+                        }
+                    )
                     if optimisation_score < best_score:
                         best_score, best_idx, global_conv = optimisation_score, curr_idx, conv
                 elif match_mode == "Stochastic (Genetic Search)":
@@ -3447,23 +4038,35 @@ def render_structural_matching_tab():
                     nn_start = NearestNeighbors(n_neighbors=min(n, len(pool_df))).fit(p_scaled)
                     _, ind_start = nn_start.kneighbors(t_cent)
                     nn_start_idx = [pool_df.index[j] for j in ind_start[0][:n]]
-                    best_idx_for_n, best_metrics_for_n, evaluated_count, conv = stochastic_genetic_search(
-                        pool_df, test_df_run, active_features, weights, n,
-                        calculate_metrics, eligible_means, eligible_stds,
-                        nn_start_idx=nn_start_idx,
-                        n_iterations=genetic_iterations,
-                        random_state=42,
-                        fast_metrics_fn=fast_metrics,
+                    best_idx_for_n, best_metrics_for_n, evaluated_count, conv = (
+                        stochastic_genetic_search(
+                            pool_df,
+                            test_df_run,
+                            active_features,
+                            weights,
+                            n,
+                            calculate_metrics,
+                            eligible_means,
+                            eligible_stds,
+                            nn_start_idx=nn_start_idx,
+                            n_iterations=genetic_iterations,
+                            random_state=42,
+                            fast_metrics_fn=fast_metrics,
+                        )
                     )
                     optimisation_score = best_metrics_for_n["weighted_structural_distance"]
-                    opt_data.append({
-                        "Num_Controls": n,
-                        "Weighted_Structural_Distance": best_metrics_for_n["weighted_structural_distance"],
-                        "Mean_Abs_SMD": best_metrics_for_n["mean_abs_smd"],
-                        "Optimisation_Score": optimisation_score,
-                        "Indices": best_idx_for_n,
-                        "Candidates_Evaluated": evaluated_count,
-                    })
+                    opt_data.append(
+                        {
+                            "Num_Controls": n,
+                            "Weighted_Structural_Distance": best_metrics_for_n[
+                                "weighted_structural_distance"
+                            ],
+                            "Mean_Abs_SMD": best_metrics_for_n["mean_abs_smd"],
+                            "Optimisation_Score": optimisation_score,
+                            "Indices": best_idx_for_n,
+                            "Candidates_Evaluated": evaluated_count,
+                        }
+                    )
                     if optimisation_score < best_score:
                         best_score = optimisation_score
                         best_idx = best_idx_for_n
@@ -3473,7 +4076,10 @@ def render_structural_matching_tab():
             progress_bar.empty()
             status_text.empty()
             st.session_state.final_controls = agg_df.loc[best_idx].copy()
-            st.session_state.opt_results = {"size_df": pd.DataFrame(opt_data), "convergence": global_conv}
+            st.session_state.opt_results = {
+                "size_df": pd.DataFrame(opt_data),
+                "convergence": global_conv,
+            }
             st.session_state.best_n = len(best_idx)
             st.session_state.test_df = test_df_run.copy()
             st.session_state.match_mode_res = match_mode
@@ -3481,13 +4087,24 @@ def render_structural_matching_tab():
             # ---- Freeze a snapshot of the inputs/outputs used for this run ----
             # so slider changes afterwards don't silently change the displayed results.
             final_metrics = calculate_metrics(
-                test_df_run, agg_df.loc[best_idx], active_features, weights, eligible_means, eligible_stds
+                test_df_run,
+                agg_df.loc[best_idx],
+                active_features,
+                weights,
+                eligible_means,
+                eligible_stds,
             )
             _eligible_market_pop = agg_df[POPULATION_COL].sum()
             _experiment_pop = agg_df[agg_df[geo_col].isin(test_geos)][POPULATION_COL].sum()
-            _control_pop = agg_df[agg_df[geo_col].isin(st.session_state.final_controls[geo_col].tolist())][POPULATION_COL].sum()
-            _test_pop_pct = (_experiment_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
-            _control_pop_pct = (_control_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
+            _control_pop = agg_df[
+                agg_df[geo_col].isin(st.session_state.final_controls[geo_col].tolist())
+            ][POPULATION_COL].sum()
+            _test_pop_pct = (
+                (_experiment_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
+            )
+            _control_pop_pct = (
+                (_control_pop / _eligible_market_pop) * 100 if _eligible_market_pop > 0 else 0
+            )
             st.session_state.match_run_snapshot = {
                 "market": market,
                 "geography_level": geography_level,
@@ -3495,12 +4112,18 @@ def render_structural_matching_tab():
                 "setup_mode": setup_mode,
                 "match_mode": match_mode,
                 "test_geos": list(test_geos),
-                "control_pool_geos": list(control_pool_geos) if "control_pool_geos" in locals() else [],
+                "control_pool_geos": list(control_pool_geos)
+                if "control_pool_geos" in locals()
+                else [],
                 "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
                 "active_features": list(active_features),
                 "weights": dict(weights),
-                "eligible_means": tuple(eligible_means_tuple) if "eligible_means_tuple" in locals() else None,
-                "eligible_stds": tuple(eligible_stds_tuple) if "eligible_stds_tuple" in locals() else None,
+                "eligible_means": tuple(eligible_means_tuple)
+                if "eligible_means_tuple" in locals()
+                else None,
+                "eligible_stds": tuple(eligible_stds_tuple)
+                if "eligible_stds_tuple" in locals()
+                else None,
                 "best_n": len(best_idx) if best_idx is not None else None,
             }
             st.session_state.match_run_metrics = {
@@ -3540,18 +4163,29 @@ def render_structural_matching_tab():
 
         if not run_metrics or not run_snapshot:
             # Safety net for any legacy session state saved before this snapshot pattern existed.
-            if not st.session_state.get("eligible_means") or not st.session_state.get("eligible_stds"):
-                _fallback_df = pd.concat([st.session_state.test_df, st.session_state.final_controls], axis=0)
+            if not st.session_state.get("eligible_means") or not st.session_state.get(
+                "eligible_stds"
+            ):
+                _fallback_df = pd.concat(
+                    [st.session_state.test_df, st.session_state.final_controls], axis=0
+                )
                 _fallback_df = impute_missing_features(_fallback_df, active_features)
                 _fb_means, _fb_stds = fit_structural_stats(_fallback_df, active_features)
                 st.session_state.eligible_means = {f: float(_fb_means[f]) for f in active_features}
                 st.session_state.eligible_stds = {f: float(_fb_stds[f]) for f in active_features}
-            _em_tuple = tuple(st.session_state.eligible_means.get(f, np.nan) for f in active_features)
-            _es_tuple = tuple(st.session_state.eligible_stds.get(f, np.nan) for f in active_features)
+            _em_tuple = tuple(
+                st.session_state.eligible_means.get(f, np.nan) for f in active_features
+            )
+            _es_tuple = tuple(
+                st.session_state.eligible_stds.get(f, np.nan) for f in active_features
+            )
             _fallback_metrics = calculate_metrics_cached(
-                st.session_state.test_df, st.session_state.final_controls,
-                tuple(active_features), tuple(weights.get(f, 1.0) for f in active_features),
-                _em_tuple, _es_tuple
+                st.session_state.test_df,
+                st.session_state.final_controls,
+                tuple(active_features),
+                tuple(weights.get(f, 1.0) for f in active_features),
+                _em_tuple,
+                _es_tuple,
             )
             run_metrics = {
                 "weighted_structural_distance": _fallback_metrics["weighted_structural_distance"],
@@ -3574,7 +4208,9 @@ def render_structural_matching_tab():
         weighted_contributions = run_metrics["weighted_contributions"]
         st.subheader("🔍 MATCHING RESULTS")
 
-        setup_changed = matching_setup_changed_since_last_run(run_snapshot, market, geography_level, match_mode, test_geos, weights)
+        setup_changed = matching_setup_changed_since_last_run(
+            run_snapshot, market, geography_level, match_mode, test_geos, weights
+        )
         if setup_changed:
             st.info(
                 "You have changed the matching setup since the last run. "
@@ -3584,17 +4220,27 @@ def render_structural_matching_tab():
         raw_diffs = run_metrics.get("raw_diffs")
         if raw_diffs is None:
             raw_diffs = [round(e - c, 4) for e, c in zip(e_m, c_m)]
-        comp_df = pd.DataFrame({
-            "Feature": run_features[:len(smd_list)],
-            "Weight": [run_weights.get(f, 1.0) for f in run_features[:len(smd_list)]],
-            "Test Mean": [round(x, 4) for x in e_m[:len(smd_list)]],
-            "Ctrl Mean": [round(x, 4) for x in c_m[:len(smd_list)]],
-            "Raw Diff": [round(x, 4) for x in raw_diffs[:len(smd_list)]],
-            "Abs SMD": [round(x, 4) if np.isfinite(x) else np.nan for x in smd_list],
-            "Weighted Contribution": [round(x, 4) for x in weighted_contributions[:len(smd_list)]]
-        }).sort_values("Abs SMD", ascending=False)
+        comp_df = pd.DataFrame(
+            {
+                "Feature": run_features[: len(smd_list)],
+                "Weight": [run_weights.get(f, 1.0) for f in run_features[: len(smd_list)]],
+                "Test Mean": [round(x, 4) for x in e_m[: len(smd_list)]],
+                "Ctrl Mean": [round(x, 4) for x in c_m[: len(smd_list)]],
+                "Raw Diff": [round(x, 4) for x in raw_diffs[: len(smd_list)]],
+                "Abs SMD": [round(x, 4) if np.isfinite(x) else np.nan for x in smd_list],
+                "Weighted Contribution": [
+                    round(x, 4) for x in weighted_contributions[: len(smd_list)]
+                ],
+            }
+        ).sort_values("Abs SMD", ascending=False)
 
-        tab_choice = st.radio("Select View", ["📊 Summary", "📈 Diagnostics", "💾 Export"], horizontal=True, key="tab_selector_main", label_visibility="collapsed")
+        tab_choice = st.radio(
+            "Select View",
+            ["📊 Summary", "📈 Diagnostics", "💾 Export"],
+            horizontal=True,
+            key="tab_selector_main",
+            label_visibility="collapsed",
+        )
 
         if tab_choice == "📊 Summary":
             experiment_pop_pct = run_metrics.get("test_population_share")
@@ -3602,43 +4248,95 @@ def render_structural_matching_tab():
             if experiment_pop_pct is None or control_pop_pct is None:
                 # Safety net: derive from the frozen test_df/final_controls (not live weights)
                 eligible_market_pop = agg_df[POPULATION_COL].sum()
-                selected_experiment_regions = st.session_state.selected_experiment_regions or st.session_state.test_df[geo_col].tolist()
+                selected_experiment_regions = (
+                    st.session_state.selected_experiment_regions
+                    or st.session_state.test_df[geo_col].tolist()
+                )
                 selected_control_regions = st.session_state.final_controls[geo_col].tolist()
-                experiment_pop = agg_df[agg_df[geo_col].isin(selected_experiment_regions)][POPULATION_COL].sum()
-                control_pop = agg_df[agg_df[geo_col].isin(selected_control_regions)][POPULATION_COL].sum()
-                experiment_pop_pct = (experiment_pop / eligible_market_pop) * 100 if eligible_market_pop > 0 else 0
-                control_pop_pct = (control_pop / eligible_market_pop) * 100 if eligible_market_pop > 0 else 0
-            control_group_size = run_metrics.get("control_group_size", len(st.session_state.final_controls))
+                experiment_pop = agg_df[agg_df[geo_col].isin(selected_experiment_regions)][
+                    POPULATION_COL
+                ].sum()
+                control_pop = agg_df[agg_df[geo_col].isin(selected_control_regions)][
+                    POPULATION_COL
+                ].sum()
+                experiment_pop_pct = (
+                    (experiment_pop / eligible_market_pop) * 100 if eligible_market_pop > 0 else 0
+                )
+                control_pop_pct = (
+                    (control_pop / eligible_market_pop) * 100 if eligible_market_pop > 0 else 0
+                )
+            control_group_size = run_metrics.get(
+                "control_group_size", len(st.session_state.final_controls)
+            )
 
             ck1, ck2, ck3, ck4, ck5 = st.columns(5)
             with ck1:
-                st.metric("Weighted Structural Distance", round(weighted_structural_distance, 4), help="Weighted Euclidean distance between standardised test and control feature means, using the slider weights at the time of the last run. This is the optimisation objective. Lower is better — 0 means identical means across all features.")
+                st.metric(
+                    "Weighted Structural Distance",
+                    round(weighted_structural_distance, 4),
+                    help="Weighted Euclidean distance between standardised test and control feature means, using the slider weights at the time of the last run. This is the optimisation objective. Lower is better — 0 means identical means across all features.",
+                )
             with ck2:
-                smd_color = "🟢" if mean_abs_smd < SMD_GOOD_THRESHOLD else "🟡" if mean_abs_smd < SMD_HIGH_THRESHOLD else "🔴"
-                st.metric("Mean Abs SMD", f"{smd_color} {round(mean_abs_smd, 4)}", help=f"Average absolute Standardised Mean Difference across all features (unweighted, diagnostic only). 🟢 < {SMD_GOOD_THRESHOLD:.2f} = good balance, 🟡 {SMD_GOOD_THRESHOLD:.2f}–{SMD_HIGH_THRESHOLD:.2f} = moderate imbalance, 🔴 ≥ {SMD_HIGH_THRESHOLD:.2f} = high imbalance.")
+                smd_color = (
+                    "🟢"
+                    if mean_abs_smd < SMD_GOOD_THRESHOLD
+                    else "🟡"
+                    if mean_abs_smd < SMD_HIGH_THRESHOLD
+                    else "🔴"
+                )
+                st.metric(
+                    "Mean Abs SMD",
+                    f"{smd_color} {round(mean_abs_smd, 4)}",
+                    help=f"Average absolute Standardised Mean Difference across all features (unweighted, diagnostic only). 🟢 < {SMD_GOOD_THRESHOLD:.2f} = good balance, 🟡 {SMD_GOOD_THRESHOLD:.2f}–{SMD_HIGH_THRESHOLD:.2f} = moderate imbalance, 🔴 ≥ {SMD_HIGH_THRESHOLD:.2f} = high imbalance.",
+                )
             with ck3:
-                st.metric("Control Group Size", control_group_size, help="Number of control regions selected in the last completed run.")
+                st.metric(
+                    "Control Group Size",
+                    control_group_size,
+                    help="Number of control regions selected in the last completed run.",
+                )
             with ck4:
-                st.metric(kpi_share_label("Test Population Share"), f"{experiment_pop_pct:.1f}%", help=kpi_share_label("Percentage of total market population covered by the test regions used in the last completed run."))
+                st.metric(
+                    kpi_share_label("Test Population Share"),
+                    f"{experiment_pop_pct:.1f}%",
+                    help=kpi_share_label(
+                        "Percentage of total market population covered by the test regions used in the last completed run."
+                    ),
+                )
                 if st.session_state.guided_share_info:
                     st.caption(f"Target: {st.session_state.guided_share_info['target']}%")
             with ck5:
-                st.metric(kpi_share_label("Control Population Share"), f"{control_pop_pct:.1f}%", help=kpi_share_label("Percentage of total market population covered by the control regions selected in the last completed run."))
-            st.caption("Weighted Structural Distance is the optimisation objective and uses the slider weights from the last completed run. Mean Abs SMD is an unweighted diagnostic balance check. These results are frozen until you click Run Match Analysis again.")
+                st.metric(
+                    kpi_share_label("Control Population Share"),
+                    f"{control_pop_pct:.1f}%",
+                    help=kpi_share_label(
+                        "Percentage of total market population covered by the control regions selected in the last completed run."
+                    ),
+                )
+            st.caption(
+                "Weighted Structural Distance is the optimisation objective and uses the slider weights from the last completed run. Mean Abs SMD is an unweighted diagnostic balance check. These results are frozen until you click Run Match Analysis again."
+            )
 
             with st.expander("View Selected Groups", expanded=True):
                 c1, c2 = st.columns(2)
                 with c1:
                     st.write("**Test Geographies**")
-                    st.table(pd.DataFrame({"Test Geography": st.session_state.test_df[geo_col].values}))
+                    st.table(
+                        pd.DataFrame({"Test Geography": st.session_state.test_df[geo_col].values})
+                    )
                 with c2:
                     st.write("**Control Geographies**")
-                    st.table(pd.DataFrame({"Control Geography": st.session_state.final_controls[geo_col].values}))
+                    st.table(
+                        pd.DataFrame(
+                            {"Control Geography": st.session_state.final_controls[geo_col].values}
+                        )
+                    )
 
             st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
             cl, cr = st.columns([1.5, 1])
             with cl:
                 st.write("**Feature Comparison Table**")
+
                 def color_smd(val):
                     if pd.isna(val):
                         return "background-color: #e5e7eb"
@@ -3648,6 +4346,7 @@ def render_structural_matching_tab():
                         return "background-color: #ffeb9c"
                     else:
                         return "background-color: #ffc7ce"
+
                 display_comp = comp_df.copy()
                 if st.session_state.get("kpi_pattern_mode"):
                     display_comp["Feature"] = display_comp["Feature"].apply(kpi_feature_date_label)
@@ -3668,60 +4367,167 @@ def render_structural_matching_tab():
                         display_comp.at[idx, "Test Mean"] = f"{row['Test Mean']:.4f}"
                         display_comp.at[idx, "Ctrl Mean"] = f"{row['Ctrl Mean']:.4f}"
                         display_comp.at[idx, "Raw Diff"] = f"{row['Raw Diff']:.4f}"
-                styled_comp = display_comp.style.map(color_smd, subset=["Abs SMD"]).format({"Weight": "{:.0f}", "Abs SMD": "{:.4f}"}, na_rep="")
-                st.dataframe(styled_comp, width='stretch', hide_index=False, height=400)
-                st.caption("Abs SMD is unweighted and shows the actual balance for each feature. The slider weight changes how much that feature influences control selection (via Weighted Contribution), but it does not change the SMD formula itself.")
+                styled_comp = display_comp.style.map(color_smd, subset=["Abs SMD"]).format(
+                    {"Weight": "{:.0f}", "Abs SMD": "{:.4f}"}, na_rep=""
+                )
+                st.dataframe(styled_comp, width="stretch", hide_index=False, height=400)
+                st.caption(
+                    "Abs SMD is unweighted and shows the actual balance for each feature. The slider weight changes how much that feature influences control selection (via Weighted Contribution), but it does not change the SMD formula itself."
+                )
             with cr:
                 st.write("**Balance (Love Plot)**")
                 pdf = comp_df.sort_values("Abs SMD")
                 if st.session_state.get("kpi_pattern_mode"):
                     pdf = pdf.copy()
                     pdf["Feature"] = pdf["Feature"].apply(kpi_feature_date_label)
-                fig = px.scatter(pdf, x="Abs SMD", y="Feature", color="Abs SMD", color_continuous_scale=["#CCFBF1", "#0F766E"], title="Feature Balance Plot", labels={"Abs SMD": "Absolute SMD"})
+                fig = px.scatter(
+                    pdf,
+                    x="Abs SMD",
+                    y="Feature",
+                    color="Abs SMD",
+                    color_continuous_scale=["#CCFBF1", "#0F766E"],
+                    title="Feature Balance Plot",
+                    labels={"Abs SMD": "Absolute SMD"},
+                )
                 fig.add_vline(x=SMD_GOOD_THRESHOLD, line_dash="dash", line_color="#0F766E")
                 fig.add_vline(x=SMD_HIGH_THRESHOLD, line_dash="dash", line_color="#F59E0B")
-                fig.update_layout(height=500, margin=dict(l=10, r=10, t=50, b=10), paper_bgcolor="white", plot_bgcolor="white")
-                st.plotly_chart(fig, width='stretch')
+                fig.update_layout(
+                    height=500,
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    paper_bgcolor="white",
+                    plot_bgcolor="white",
+                )
+                st.plotly_chart(fig, width="stretch")
 
         elif tab_choice == "📈 Diagnostics":
             st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-            if not force_1to1 and len(st.session_state.opt_results.get("size_df", pd.DataFrame())) > 0:
-                st.subheader("Pool Size Optimization", help="This chart tests different control group sizes to find the best balance. The dashed line marks the size that resulted in the lowest SMD.")
+            if (
+                not force_1to1
+                and len(st.session_state.opt_results.get("size_df", pd.DataFrame())) > 0
+            ):
+                st.subheader(
+                    "Pool Size Optimization",
+                    help="This chart tests different control group sizes to find the best balance. The dashed line marks the size that resulted in the lowest SMD.",
+                )
                 size_df = st.session_state.opt_results["size_df"]
                 required_cols = ["Num_Controls", "Weighted_Structural_Distance", "Mean_Abs_SMD"]
                 missing_cols = [c for c in required_cols if c not in size_df.columns]
                 if missing_cols:
-                    st.error(f"Pool size results are missing expected columns: {missing_cols}. Check that all match-mode branches write the same opt_data keys.")
+                    st.error(
+                        f"Pool size results are missing expected columns: {missing_cols}. Check that all match-mode branches write the same opt_data keys."
+                    )
                 else:
                     chart_df = size_df[required_cols]
                     rule_df = pd.DataFrame({"best_n": [st.session_state.best_n]})
-                    base = alt.Chart(chart_df).mark_line(point=True, color="#7C3AED").encode(x=alt.X("Num_Controls:Q", title="Number of Controls"), y=alt.Y("Weighted_Structural_Distance:Q", title="Weighted Structural Distance"), tooltip=["Num_Controls", "Weighted_Structural_Distance", "Mean_Abs_SMD"])
-                    marker = alt.Chart(rule_df).mark_rule(color="#0F766E", strokeDash=[6, 4]).encode(x="best_n:Q")
-                    st.altair_chart((base + marker).properties(height=280), width='stretch')
-                    st.caption("Lower is better. This is the slider-weighted objective used to select the control group. Mean Abs SMD is retained as an unweighted balance diagnostic.")
-            if st.session_state.match_mode_res != "Greedy (Nearest Neighbor)" and st.session_state.opt_results.get("convergence"):
-                st.subheader("Search Convergence", help="This shows whether the search improved as it tried alternative control combinations.")
-                conv_df = pd.DataFrame({"step": list(range(len(st.session_state.opt_results["convergence"]))), "Weighted_Structural_Distance": st.session_state.opt_results["convergence"]})
-                conv_chart = alt.Chart(conv_df).mark_line(color="#0F766E").encode(x=alt.X("step:Q", title="Improvement Steps"), y=alt.Y("Weighted_Structural_Distance:Q", title="Weighted Structural Distance"), tooltip=["step", "Weighted_Structural_Distance"]).properties(height=280, title=f"Optimization Path for N={st.session_state.best_n}")
-                st.altair_chart(conv_chart, width='stretch')
+                    base = (
+                        alt.Chart(chart_df)
+                        .mark_line(point=True, color="#7C3AED")
+                        .encode(
+                            x=alt.X("Num_Controls:Q", title="Number of Controls"),
+                            y=alt.Y(
+                                "Weighted_Structural_Distance:Q",
+                                title="Weighted Structural Distance",
+                            ),
+                            tooltip=[
+                                "Num_Controls",
+                                "Weighted_Structural_Distance",
+                                "Mean_Abs_SMD",
+                            ],
+                        )
+                    )
+                    marker = (
+                        alt.Chart(rule_df)
+                        .mark_rule(color="#0F766E", strokeDash=[6, 4])
+                        .encode(x="best_n:Q")
+                    )
+                    st.altair_chart((base + marker).properties(height=280), width="stretch")
+                    st.caption(
+                        "Lower is better. This is the slider-weighted objective used to select the control group. Mean Abs SMD is retained as an unweighted balance diagnostic."
+                    )
+            if (
+                st.session_state.match_mode_res != "Greedy (Nearest Neighbor)"
+                and st.session_state.opt_results.get("convergence")
+            ):
+                st.subheader(
+                    "Search Convergence",
+                    help="This shows whether the search improved as it tried alternative control combinations.",
+                )
+                conv_df = pd.DataFrame(
+                    {
+                        "step": list(range(len(st.session_state.opt_results["convergence"]))),
+                        "Weighted_Structural_Distance": st.session_state.opt_results["convergence"],
+                    }
+                )
+                conv_chart = (
+                    alt.Chart(conv_df)
+                    .mark_line(color="#0F766E")
+                    .encode(
+                        x=alt.X("step:Q", title="Improvement Steps"),
+                        y=alt.Y(
+                            "Weighted_Structural_Distance:Q", title="Weighted Structural Distance"
+                        ),
+                        tooltip=["step", "Weighted_Structural_Distance"],
+                    )
+                    .properties(
+                        height=280, title=f"Optimization Path for N={st.session_state.best_n}"
+                    )
+                )
+                st.altair_chart(conv_chart, width="stretch")
             st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-            st.subheader("Feature Distribution Detail", help="Compare spread, median, and outliers of selected feature values for Test vs Control.")
+            st.subheader(
+                "Feature Distribution Detail",
+                help="Compare spread, median, and outliers of selected feature values for Test vs Control.",
+            )
             display_features_for_viz = active_features[: min(len(active_features), 20)]
             if display_features_for_viz:
                 if "selected_viz_feature" not in st.session_state:
                     st.session_state.selected_viz_feature = display_features_for_viz[0]
-                viz_f = st.selectbox("Select feature to view density distribution:", display_features_for_viz, index=display_features_for_viz.index(st.session_state.selected_viz_feature) if st.session_state.selected_viz_feature in display_features_for_viz else 0, key="feature_distribution_select")
+                viz_f = st.selectbox(
+                    "Select feature to view density distribution:",
+                    display_features_for_viz,
+                    index=display_features_for_viz.index(st.session_state.selected_viz_feature)
+                    if st.session_state.selected_viz_feature in display_features_for_viz
+                    else 0,
+                    key="feature_distribution_select",
+                )
                 st.session_state.selected_viz_feature = viz_f
-                if viz_f in st.session_state.test_df.columns and viz_f in st.session_state.final_controls.columns:
+                if (
+                    viz_f in st.session_state.test_df.columns
+                    and viz_f in st.session_state.final_controls.columns
+                ):
                     test_data = st.session_state.test_df[viz_f].dropna()
                     control_data = st.session_state.final_controls[viz_f].dropna()
                     if len(test_data) > 1 and len(control_data) > 1:
-                        density_df = pd.concat([pd.DataFrame({"value": test_data, "Group": "Test"}), pd.DataFrame({"value": control_data, "Group": "Control"})], ignore_index=True)
-                        fig_dist = px.violin(density_df, x="Group", y="value", color="Group", box=True, points="all", color_discrete_map={"Test": "#7C3AED", "Control": "#0F766E"}, labels={"value": viz_f})
-                        fig_dist.update_layout(title=f"Distribution Comparison: {viz_f}", yaxis_title=viz_f, xaxis_title="Group", showlegend=False, height=420, margin=dict(l=10, r=10, t=50, b=10))
-                        st.plotly_chart(fig_dist, width='stretch')
+                        density_df = pd.concat(
+                            [
+                                pd.DataFrame({"value": test_data, "Group": "Test"}),
+                                pd.DataFrame({"value": control_data, "Group": "Control"}),
+                            ],
+                            ignore_index=True,
+                        )
+                        fig_dist = px.violin(
+                            density_df,
+                            x="Group",
+                            y="value",
+                            color="Group",
+                            box=True,
+                            points="all",
+                            color_discrete_map={"Test": "#7C3AED", "Control": "#0F766E"},
+                            labels={"value": viz_f},
+                        )
+                        fig_dist.update_layout(
+                            title=f"Distribution Comparison: {viz_f}",
+                            yaxis_title=viz_f,
+                            xaxis_title="Group",
+                            showlegend=False,
+                            height=420,
+                            margin=dict(l=10, r=10, t=50, b=10),
+                        )
+                        st.plotly_chart(fig_dist, width="stretch")
                     else:
-                        st.warning("Insufficient data points for distribution plot. Need at least 2 points per group.")
+                        st.warning(
+                            "Insufficient data points for distribution plot. Need at least 2 points per group."
+                        )
             else:
                 st.info("No numeric features available for diagnostics.")
 
@@ -3750,15 +4556,24 @@ def render_structural_matching_tab():
                     """)
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("📥 Export to Excel", width='stretch', type="primary"):
+                if st.button("📥 Export to Excel", width="stretch", type="primary"):
                     try:
-                        _test_geos = set(st.session_state.test_df[geo_col].astype(str).str.strip().tolist())
-                        _ctrl_geos = set(st.session_state.final_controls[geo_col].astype(str).str.strip().tolist())
+                        _test_geos = set(
+                            st.session_state.test_df[geo_col].astype(str).str.strip().tolist()
+                        )
+                        _ctrl_geos = set(
+                            st.session_state.final_controls[geo_col]
+                            .astype(str)
+                            .str.strip()
+                            .tolist()
+                        )
 
                         if _kpi_export_mode:
                             # No Adobe reference sheet exists in KPI Pattern mode — build the
                             # lookup directly from the aggregation-level values used for matching.
-                            _lookup = pd.DataFrame({geo_col: sorted(agg_df[geo_col].astype(str).str.strip().unique())})
+                            _lookup = pd.DataFrame(
+                                {geo_col: sorted(agg_df[geo_col].astype(str).str.strip().unique())}
+                            )
                             _lookup["Test Geography"] = _lookup[geo_col].apply(
                                 lambda g: "Yes" if g in _test_geos else ""
                             )
@@ -3791,8 +4606,12 @@ def render_structural_matching_tab():
                             _lookup.to_excel(writer, sheet_name="Geo_Assignments", index=False)
                             ws = writer.sheets["Geo_Assignments"]
                             for col_cells in ws.columns:
-                                max_len = max((len(str(c.value)) for c in col_cells if c.value), default=10)
-                                ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 60)
+                                max_len = max(
+                                    (len(str(c.value)) for c in col_cells if c.value), default=10
+                                )
+                                ws.column_dimensions[col_cells[0].column_letter].width = min(
+                                    max_len + 4, 60
+                                )
 
                         _n_test = _lookup["Test Geography"].eq("Yes").sum()
                         _n_ctrl = _lookup["Control Geography"].eq("Yes").sum()
@@ -3800,19 +4619,23 @@ def render_structural_matching_tab():
                             label="Download Excel",
                             data=output.getvalue(),
                             file_name=f"geo_assignments_{market}_{geography_level}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
-                        st.success(f"✅ Export ready — {len(_lookup)} geographies, {_n_test} test, {_n_ctrl} control.")
+                        st.success(
+                            f"✅ Export ready — {len(_lookup)} geographies, {_n_test} test, {_n_ctrl} control."
+                        )
                     except Exception as e:
-                        st.error("We couldn't create the Excel export. Please try again, and check that a valid control group has been selected.")
+                        st.error(
+                            "We couldn't create the Excel export. Please try again, and check that a valid control group has been selected."
+                        )
                         with st.expander("Technical details"):
                             st.code(f"{type(e).__name__}: {e}")
             with col2:
-                if st.button("📋 Copy Summary to Clipboard", width='stretch'):
-
+                if st.button("📋 Copy Summary to Clipboard", width="stretch"):
                     summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {(experiment_pop / eligible_market_pop * 100):.1f}%\n{kpi_share_label("Control Population Share")}: {(control_pop / eligible_market_pop * 100):.1f}%"""
                     st.code(summary_text, language="text")
                     st.caption("Copy the text above manually")
+
 
 # =============================================================================
 # TAB 1: MATCHING SETUP
@@ -3824,6 +4647,7 @@ with tab1:
 # TAB 2: DESIGN FUTURE GEO TEST
 # TAB 3: EVALUATE COMPLETED GEO TEST
 # =============================================================================
+
 
 def render_method_comparison_table(results, mode, test_start, control_regions_val):
     """
@@ -3854,52 +4678,46 @@ def render_method_comparison_table(results, mode, test_start, control_regions_va
         {"Metric": "Control Pool Size", "key": "control_pool_size"},
         {"Metric": "Controls Selected", "key": "controls_selected"},
         {"Metric": "Predictors Selected", "key": "n_selected_features"},
-
         {"Metric": "B. PRE-PERIOD FIT", "is_section": True},
         {"Metric": "Pre-Period Correlation", "key": "pre_corr"},
         {"Metric": "Pre-Period R²", "key": "pre_r2"},
         {"Metric": "Pre-Period sMAPE (%)", "key": "pre_smape"},
-
         {"Metric": "C1. ROLLING-ORIGIN VALIDATION - ERROR", "is_section": True},
         {"Metric": "Validation sMAPE (%)", "key": "holdout_smape"},
         {"Metric": "Validation Error Risk", "key": "rolling_validation_error_risk"},
-        
         {"Metric": "C2. ROLLING-ORIGIN VALIDATION - BIAS", "is_section": True},
         {"Metric": "Average Bias (%)", "key": "rolling_bias_pct_mean"},
         {"Metric": "Bias Risk", "key": "rolling_bias_risk"},
-
         {"Metric": "D. OVERFITTING CHECK", "is_section": True},
         {"Metric": "Pre-Period vs Validation sMAPE Difference (pp)", "key": "overfit_gap_smape"},
         {"Metric": "Overfitting Risk", "key": "overfitting_risk"},
-
         {"Metric": "E. RESIDUAL DIAGNOSTICS", "is_section": True},
         {"Metric": "Durbin-Watson", "key": "dw_stat"},
         {"Metric": "Autocorrelation Risk", "key": "autocorrelation_risk"},
-
         {"Metric": "F. PLACEBO TESTING", "is_section": True},
         {"Metric": "Placebo Windows", "key": "placebo_windows"},
         {"Metric": "Average Placebo sMAPE (%)", "key": "median_placebo_smape"},
         {"Metric": "Median Placebo Uplift", "key": "median_placebo_uplift_pct"},
         {"Metric": "95% Placebo Uplift Range", "key": "placebo_range_pct"},
-
         {"Metric": "G. COUNTERFACTUAL CONFIDENCE", "is_section": True},
         {"Metric": "Overall Counterfactual Confidence", "key": "counterfactual_reliability"},
         {"Metric": "Key Issues", "key": "reliability_drivers"},
-
     ]
-    show_test_impact = (mode == "Evaluate" and test_start is not None)
+    show_test_impact = mode == "Evaluate" and test_start is not None
     if show_test_impact:
         comparison_rows += [
             {"Metric": "H. OBSERVED UPLIFT VS PLACEBOS", "is_section": True},
             {"Metric": "Uplift Percentile vs Placebos", "key": "placebo_percentile_rank"},
             {"Metric": "Uplift p-value", "key": "placebo_p_two_sided"},
             {"Metric": "Uplift z-score", "key": "placebo_z_score"},
-            
             {"Metric": "I. TEST IMPACT", "is_section": True},
             {"Metric": "Observed Uplift", "key": "observed_uplift"},
             {"Metric": "Observed Uplift (%)", "key": "observed_uplift_pct"},
             {"Metric": "Test Group Actual Total", "key": "test_period_actual"},
-            {"Metric": "Expected Total Without Test (Counterfactual)", "key": "test_period_counterfactual"},
+            {
+                "Metric": "Expected Total Without Test (Counterfactual)",
+                "key": "test_period_counterfactual",
+            },
         ]
 
     def _fmt_pct(v, decimals=1):
@@ -3917,25 +4735,25 @@ def render_method_comparison_table(results, mode, test_start, control_regions_va
             if method_name in [METHOD_STRUCTURAL, METHOD_USER_SELECTED]:
                 return str(len(control_regions_val))
             else:
-                return str(res['n_candidates'])
+                return str(res["n_candidates"])
         elif key == "controls_selected":
             if method_name in [METHOD_STRUCTURAL, METHOD_USER_SELECTED]:
                 return str(len(control_regions_val))
             else:
-                return str(res['n_selected'])
+                return str(res["n_selected"])
         elif key == "n_selected_features":
             v = res.get("n_selected_features", None)
             return str(v) if v is not None else "N/A"
         elif key == "validation_method_label":
             return res.get("validation_method_label", "⚪ Insufficient validation history")
         elif key == "pre_corr":
-            return _fmt_num(res.get('corr', np.nan), decimals=3)
+            return _fmt_num(res.get("corr", np.nan), decimals=3)
         elif key == "pre_r2":
-            return _fmt_num(res.get('r2', np.nan), decimals=3)
+            return _fmt_num(res.get("r2", np.nan), decimals=3)
         elif key == "pre_smape":
-            return _fmt_pct(res.get('smape', np.nan))
+            return _fmt_pct(res.get("smape", np.nan))
         elif key == "pre_rmse":
-            return _fmt_num(res.get('rmse', np.nan))
+            return _fmt_num(res.get("rmse", np.nan))
         elif key == "dw_stat":
             dw = res.get("dw_stat", np.nan)
             if dw is None or (isinstance(dw, float) and np.isnan(dw)):
@@ -3944,11 +4762,11 @@ def render_method_comparison_table(results, mode, test_start, control_regions_va
         elif key == "autocorrelation_risk":
             return res.get("autocorrelation_risk", "⚪ Insufficient data")
         elif key == "holdout_smape":
-            return _fmt_pct(res.get('holdout_smape_mean', np.nan))
+            return _fmt_pct(res.get("holdout_smape_mean", np.nan))
         elif key == "rolling_validation_error_risk":
             return res.get("rolling_validation_error_risk", "⚪ Insufficient data")
         elif key == "holdout_rmse":
-            return _fmt_num(res.get('holdout_rmse_mean', np.nan))
+            return _fmt_num(res.get("holdout_rmse_mean", np.nan))
         elif key == "rolling_smape_p90":
             return _fmt_pct(res.get("rolling_smape_p90", np.nan))
         elif key == "rolling_bias_pct_mean":
@@ -3957,43 +4775,54 @@ def render_method_comparison_table(results, mode, test_start, control_regions_va
             return res.get("rolling_bias_risk", "⚪ Insufficient data")
         elif key == "overfit_gap_smape":
             v = res.get("overfit_gap_smape", np.nan)
-            return f"{v:.1f} pp" if not (v is None or (isinstance(v, float) and np.isnan(v))) else "N/A"
+            return (
+                f"{v:.1f} pp"
+                if not (v is None or (isinstance(v, float) and np.isnan(v)))
+                else "N/A"
+            )
         elif key == "overfit_gap_rmse":
             return _fmt_num(res.get("overfit_gap_rmse", np.nan))
         elif key == "overfitting_risk":
             return res.get("overfitting_risk", "⚪ Insufficient data")
         elif key == "reliability_drivers":
-            return res.get("reliability_drivers", "Insufficient validation data to assess confidence")
+            return res.get(
+                "reliability_drivers", "Insufficient validation data to assess confidence"
+            )
         elif key == "counterfactual_reliability":
             reliability = res.get("counterfactual_reliability", None)
             return RELIABILITY_LABELS.get(reliability, "⚪ Insufficient data")
         elif key == "placebo_windows":
-            return str(len(res['placebos']))
+            return str(len(res["placebos"]))
         elif key == "median_placebo_uplift_pct":
-            return _fmt_pct(res.get('median_placebo_uplift_pct', np.nan))
+            return _fmt_pct(res.get("median_placebo_uplift_pct", np.nan))
         elif key == "placebo_range_pct":
-            return format_range(res.get('placebo_range_lower_pct', np.nan), res.get('placebo_range_upper_pct', np.nan), suffix="%", decimals=1)
+            return format_range(
+                res.get("placebo_range_lower_pct", np.nan),
+                res.get("placebo_range_upper_pct", np.nan),
+                suffix="%",
+                decimals=1,
+            )
         elif key == "median_placebo_smape":
-            return _fmt_pct(res.get('median_placebo_smape', np.nan))
+            return _fmt_pct(res.get("median_placebo_smape", np.nan))
         elif key == "p95_placebo_smape":
-            return _fmt_pct(res.get('p95_placebo_smape', np.nan))
+            return _fmt_pct(res.get("p95_placebo_smape", np.nan))
         elif key == "placebo_percentile_rank":
-            return _fmt_pct(res.get('placebo_percentile_rank', np.nan))
+            return _fmt_pct(res.get("placebo_percentile_rank", np.nan))
         elif key == "placebo_p_two_sided":
-            return _fmt_num(res.get('placebo_p_value_two_sided', np.nan), decimals=3)
+            return _fmt_num(res.get("placebo_p_value_two_sided", np.nan), decimals=3)
         elif key == "placebo_z_score":
-            return _fmt_num(res.get('placebo_z_score', np.nan), decimals=2)
+            return _fmt_num(res.get("placebo_z_score", np.nan), decimals=2)
         elif key == "observed_uplift":
-            return _fmt_num(res.get('uplift', np.nan))
+            return _fmt_num(res.get("uplift", np.nan))
         elif key == "observed_uplift_pct":
-            return _fmt_pct(res.get('uplift_pct', np.nan))
+            return _fmt_pct(res.get("uplift_pct", np.nan))
         elif key == "test_period_actual":
-            y_test_actual = res.get('y_test_actual', None)
+            y_test_actual = res.get("y_test_actual", None)
             if y_test_actual is None or len(y_test_actual) == 0:
                 return "N/A"
             return _fmt_num(float(np.sum(y_test_actual)))
         elif key == "test_period_counterfactual":
-            y_pred_test = res.get('y_pred_test', None)
+            y_pred_test = res.get("y_pred_test", None)
             if y_pred_test is None or len(y_pred_test) == 0:
                 return "N/A"
             return _fmt_num(float(np.sum(y_pred_test)))
@@ -4015,13 +4844,14 @@ def render_method_comparison_table(results, mode, test_start, control_regions_va
             table_data.append(new_row)
 
     comp_df_val = pd.DataFrame(table_data)
+
     def style_section_rows(row):
         if row["Metric"] in [r["Metric"] for r in comparison_rows if r.get("is_section", False)]:
             return ["font-weight: bold; background-color: #f0f2f6"] * len(row)
         return [""] * len(row)
-    styled_comp = comp_df_val.style.apply(style_section_rows, axis=1)
-    st.dataframe(styled_comp, width='stretch', hide_index=False)
 
+    styled_comp = comp_df_val.style.apply(style_section_rows, axis=1)
+    st.dataframe(styled_comp, width="stretch", hide_index=False)
 
     st.caption(
         "**Rolling-Origin Validation Error** shows whether the model can predict held-out historical periods. "
@@ -4069,7 +4899,7 @@ def render_method_comparison_table(results, mode, test_start, control_regions_va
     # ---- Interpretation help ----
     with st.expander("How to interpret these results", expanded=False):
         if mode == "Design":
-            st.markdown(f"""
+            st.markdown("""
 **Validate Test Design — How to read this**
 
 The goal here is to assess whether your control group can reliably predict what would have happened to your test regions without any intervention. If it can, you can have more confidence in a future uplift estimate.
@@ -4273,9 +5103,9 @@ def render_time_series_validation(mode: str):
         type=["xlsx"],
         key=f"kpi_uploader_{mode_prefix}_{st.session_state.file_upload_key}",
         help="Simple format: column 1 = region name, column 2 = metric name, then date columns. "
-             "Aggregated format: column 1 = raw key (ignored), several aggregation-level columns, "
-             "a metric column, then date columns — pick which columns to use after uploading.",
-        on_change=clear_uploaded_kpi_state
+        "Aggregated format: column 1 = raw key (ignored), several aggregation-level columns, "
+        "a metric column, then date columns — pick which columns to use after uploading.",
+        on_change=clear_uploaded_kpi_state,
     )
 
     if uploaded_file is None:
@@ -4330,24 +5160,32 @@ def render_time_series_validation(mode: str):
             col_a, col_b = st.columns(2)
             with col_a:
                 _kpi_metric_col = st.selectbox(
-                    "Metric column", _kpi_agg_candidates,
-                    index=(_kpi_agg_candidates.index(_kpi_default_metric) if _kpi_default_metric in _kpi_agg_candidates else len(_kpi_agg_candidates) - 1),
+                    "Metric column",
+                    _kpi_agg_candidates,
+                    index=(
+                        _kpi_agg_candidates.index(_kpi_default_metric)
+                        if _kpi_default_metric in _kpi_agg_candidates
+                        else len(_kpi_agg_candidates) - 1
+                    ),
                     key=f"kpi_upload_metric_col_{mode_prefix}",
-                    on_change=clear_uploaded_kpi_state
+                    on_change=clear_uploaded_kpi_state,
                 )
             with col_b:
                 _kpi_agg_options = [c for c in _kpi_agg_candidates if c != _kpi_metric_col]
                 _kpi_agg_col = st.selectbox(
-                    "Aggregation level", _kpi_agg_options,
+                    "Aggregation level",
+                    _kpi_agg_options,
                     key=f"kpi_upload_agg_col_{mode_prefix}",
                     help="Which column to group and sum by. For consistency, use the same aggregation "
-                         "level you matched on in the Region Matching tab.",
-                    on_change=clear_uploaded_kpi_state
+                    "level you matched on in the Region Matching tab.",
+                    on_change=clear_uploaded_kpi_state,
                 )
 
     if st.session_state.kpi_long_df is None:
         with st.spinner("Reading KPI file..."):
-            df_long = load_and_reshape_kpi(uploaded_file, agg_col=_kpi_agg_col, metric_col=_kpi_metric_col)
+            df_long = load_and_reshape_kpi(
+                uploaded_file, agg_col=_kpi_agg_col, metric_col=_kpi_metric_col
+            )
             st.session_state.kpi_long_df = df_long
             st.session_state.kpi_available_dates = sorted(df_long["date"].dt.date.unique())
             st.session_state.kpi_metric_options = sorted(df_long["metric_name"].unique())
@@ -4368,22 +5206,32 @@ def render_time_series_validation(mode: str):
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Regions detected", df_long["region_raw"].nunique())
         col2.metric("KPIs found", len(metric_options))
-        col3.metric("Date range", f"{available_dates[0].strftime('%d %b %y')} – {available_dates[-1].strftime('%d %b %y')}")
-        col4.metric("Observed date points", len(available_dates), help="Number of distinct dates found in the uploaded file, independent of the selected time series frequency.")
+        col3.metric(
+            "Date range",
+            f"{available_dates[0].strftime('%d %b %y')} – {available_dates[-1].strftime('%d %b %y')}",
+        )
+        col4.metric(
+            "Observed date points",
+            len(available_dates),
+            help="Number of distinct dates found in the uploaded file, independent of the selected time series frequency.",
+        )
 
-    st.markdown("""
+    st.markdown(
+        """
 <div style="background:#E6F7F5; border-left:4px solid #0F766E; border-radius:6px; padding:0.75rem 1rem 0.25rem 1rem; margin-bottom:0.75rem;">
 <span style="font-weight:600; color:#0F766E; font-size:1rem;">📊 Select KPI</span><br>
 <span style="color:#4B5563; font-size:0.875rem;">Choose the metric you want to model. This drives all validation, placebo, and uplift results.</span>
 </div>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
     selected_metric = st.selectbox(
         "KPI to analyse",
         metric_options,
         key=f"{mode_prefix}_selected_metric",
         help="The metric used to assess how well the control regions track the test regions over time. Choose the KPI you plan to measure in your geo test.",
         on_change=clear_validation_state,
-        label_visibility="collapsed"
+        label_visibility="collapsed",
     )
 
     # -------------------------------------------------------------------------
@@ -4421,7 +5269,7 @@ def render_time_series_validation(mode: str):
         horizontal=True,
         help="Weekly data uses a 1-week lag and week-based windows. Daily data uses a 7-day lag (same day-of-week comparison) and day-based windows.",
         on_change=clear_validation_state,
-        label_visibility="collapsed"
+        label_visibility="collapsed",
     )
     st.session_state.time_series_frequency = time_series_frequency
     freq_config = get_frequency_config(time_series_frequency)
@@ -4473,8 +5321,12 @@ def render_time_series_validation(mode: str):
             key=f"{mode_prefix}_frequency_mismatch_ack",
         )
         if not frequency_mismatch_acknowledged:
-            st.info("Validation and Bayesian TBR are disabled until the frequency mismatch above is acknowledged or resolved.")
-    st.session_state.frequency_mismatch_blocked = frequency_mismatch_detected and not frequency_mismatch_acknowledged
+            st.info(
+                "Validation and Bayesian TBR are disabled until the frequency mismatch above is acknowledged or resolved."
+            )
+    st.session_state.frequency_mismatch_blocked = (
+        frequency_mismatch_detected and not frequency_mismatch_acknowledged
+    )
 
     # -------------------------------------------------------------------------
     # 2. Analysis Type header (static — driven by the tab the user is in)
@@ -4494,7 +5346,9 @@ def render_time_series_validation(mode: str):
     if mode == "Design":
         st.markdown("---")
         st.markdown("### Historical Period")
-        st.caption("Define the historical date range used to assess whether test and control regions move together.")
+        st.caption(
+            "Define the historical date range used to assess whether test and control regions move together."
+        )
 
         col_start, col_end = st.columns(2)
         with col_start:
@@ -4503,16 +5357,16 @@ def render_time_series_validation(mode: str):
                 date_list,
                 index=0,
                 key=f"{mode_prefix}_design_start",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
             design_start = date_options[design_start_label]
         with col_end:
             design_end_label = st.selectbox(
                 "Historical period end",
                 date_list,
-                index=len(date_list)-1,
+                index=len(date_list) - 1,
                 key=f"{mode_prefix}_design_end",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
             design_end = date_options[design_end_label]
 
@@ -4536,7 +5390,9 @@ def render_time_series_validation(mode: str):
         pre_periods_design = _observed_period_count(design_start, design_end)
         if not pre_periods_design:
             # Fallback to a calendar-span estimate if observed dates couldn't be computed
-            pre_periods_design = (pd.Timestamp(design_end) - pd.Timestamp(design_start)).days // _period_divisor + 1
+            pre_periods_design = (
+                pd.Timestamp(design_end) - pd.Timestamp(design_start)
+            ).days // _period_divisor + 1
         default_placebo_len = freq_config["default_validation_horizon_periods"]
         _min_training_floor = 6 if freq_config["frequency"] == "weekly" else 14
         _placebo_slider_min = 2 if freq_config["frequency"] == "weekly" else 7
@@ -4545,7 +5401,9 @@ def render_time_series_validation(mode: str):
         _slider_col1, _slider_col2 = st.columns(2)
         with _slider_col1:
             _max_min_training = max(_min_training_floor, pre_periods_design - default_placebo_len)
-            _default_min_training = min(freq_config["default_min_training_periods"], _max_min_training)
+            _default_min_training = min(
+                freq_config["default_min_training_periods"], _max_min_training
+            )
             min_training_periods = st.slider(
                 f"Minimum training period ({freq_config['period_label_plural']})",
                 min_value=_min_training_floor,
@@ -4554,10 +5412,12 @@ def render_time_series_validation(mode: str):
                 step=1,
                 key=f"{mode_prefix}_min_training_slider",
                 help=f"Minimum {freq_config['period_label_plural']} of history required before each validation or placebo window. Higher = stricter and more realistic, but fewer windows are generated.",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
         with _slider_col2:
-            _placebo_default_value = min(max(default_placebo_len, _placebo_slider_min), _placebo_slider_max)
+            _placebo_default_value = min(
+                max(default_placebo_len, _placebo_slider_min), _placebo_slider_max
+            )
             placebo_length_periods = st.slider(
                 f"Test & placebo window length ({freq_config['period_label_plural']})",
                 min_value=_placebo_slider_min,
@@ -4566,13 +5426,15 @@ def render_time_series_validation(mode: str):
                 step=1,
                 key=f"{mode_prefix}_placebo_slider",
                 help="Length of each simulated test window used for placebo testing and rolling-origin validation. Set this to match your planned test duration.",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
 
         # ---- Definitive pre-period sufficiency check, using the ACTUAL selected slider
         # values (not just their floors) — this is what run_validation_method will use to
         # build at least one rolling-origin / placebo window. ----
-        insufficient_pre_period = pre_periods_design < (min_training_periods + placebo_length_periods)
+        insufficient_pre_period = pre_periods_design < (
+            min_training_periods + placebo_length_periods
+        )
         if insufficient_pre_period:
             st.warning(
                 "⚠️ Not enough pre-period observations for the selected minimum training period and "
@@ -4593,40 +5455,40 @@ def render_time_series_validation(mode: str):
                 date_list,
                 index=0,
                 key=f"{mode_prefix}_pre_start",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
             pre_start = date_options[pre_start_label]
         with col_pre2:
-            pre_end_idx = min(len(date_list)-1, int(len(date_list)*0.75))
+            pre_end_idx = min(len(date_list) - 1, int(len(date_list) * 0.75))
             pre_end_label = st.selectbox(
                 "End",
                 date_list,
                 index=pre_end_idx,
                 key=f"{mode_prefix}_pre_end",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
             pre_end = date_options[pre_end_label]
 
         st.markdown("**Test period**")
         col_test1, col_test2 = st.columns(2)
         with col_test1:
-            test_start_idx = min(len(date_list)-1, pre_end_idx + 5)
+            test_start_idx = min(len(date_list) - 1, pre_end_idx + 5)
             test_start_label = st.selectbox(
                 "Start",
                 date_list,
                 index=test_start_idx,
                 key=f"{mode_prefix}_test_start",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
             test_start = date_options[test_start_label]
         with col_test2:
-            test_end_idx = min(len(date_list)-1, test_start_idx + 5)
+            test_end_idx = min(len(date_list) - 1, test_start_idx + 5)
             test_end_label = st.selectbox(
                 "End",
                 date_list,
                 index=test_end_idx,
                 key=f"{mode_prefix}_test_end",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
             test_end = date_options[test_end_label]
 
@@ -4634,28 +5496,28 @@ def render_time_series_validation(mode: str):
             "Include post‑test period",
             value=False,
             key=f"{mode_prefix}_use_post",
-            on_change=clear_validation_state
+            on_change=clear_validation_state,
         )
         if use_post:
             st.markdown("**Post‑test period**")
             col_post1, col_post2 = st.columns(2)
             with col_post1:
-                post_start_idx = min(len(date_list)-1, test_end_idx + 2)
+                post_start_idx = min(len(date_list) - 1, test_end_idx + 2)
                 post_start_label = st.selectbox(
                     "Start",
                     date_list,
                     index=post_start_idx,
                     key=f"{mode_prefix}_post_start",
-                    on_change=clear_validation_state
+                    on_change=clear_validation_state,
                 )
                 post_start = date_options[post_start_label]
             with col_post2:
                 post_end_label = st.selectbox(
                     "End",
                     date_list,
-                    index=len(date_list)-1,
+                    index=len(date_list) - 1,
                     key=f"{mode_prefix}_post_end",
-                    on_change=clear_validation_state
+                    on_change=clear_validation_state,
                 )
                 post_end = date_options[post_end_label]
         else:
@@ -4678,7 +5540,9 @@ def render_time_series_validation(mode: str):
             default_placebo_len = freq_config["default_validation_horizon_periods"]
         pre_periods_eval = _observed_period_count(pre_start, pre_end)
         if not pre_periods_eval:
-            pre_periods_eval = (pd.Timestamp(pre_end) - pd.Timestamp(pre_start)).days // _period_divisor + 1
+            pre_periods_eval = (
+                pd.Timestamp(pre_end) - pd.Timestamp(pre_start)
+            ).days // _period_divisor + 1
         _min_training_floor = 6 if freq_config["frequency"] == "weekly" else 14
         # Note: unlike Design mode, there's no _placebo_slider_min/_placebo_slider_max here —
         # placebo_length_periods is locked to default_placebo_len below, not user-adjustable.
@@ -4686,7 +5550,9 @@ def render_time_series_validation(mode: str):
         _slider_col1, _slider_col2 = st.columns(2)
         with _slider_col1:
             _max_min_training = max(_min_training_floor, pre_periods_eval - default_placebo_len)
-            _default_min_training = min(freq_config["default_min_training_periods"], _max_min_training)
+            _default_min_training = min(
+                freq_config["default_min_training_periods"], _max_min_training
+            )
             min_training_periods = st.slider(
                 f"Minimum training period ({freq_config['period_label_plural']})",
                 min_value=_min_training_floor,
@@ -4695,7 +5561,7 @@ def render_time_series_validation(mode: str):
                 step=1,
                 key=f"{mode_prefix}_min_training_slider",
                 help=f"Minimum {freq_config['period_label_plural']} of history required before each validation or placebo window. Higher = stricter and more realistic, but fewer windows are generated.",
-                on_change=clear_validation_state
+                on_change=clear_validation_state,
             )
         with _slider_col2:
             # ---- LOCKED, not a slider, in Evaluate mode. ----
@@ -4767,10 +5633,14 @@ def render_time_series_validation(mode: str):
             "earlier as an additional predictor. This can help when the test region follows control-region "
             "movements with a short delay, but it increases the number of predictors and should be judged "
             "using rolling-origin validation."
-            + (" For daily data, the 7-day lag compares the same day of week to avoid confusing day-of-week "
-               "seasonality with a true lagged relationship." if freq_config["frequency"] == "daily" else "")
+            + (
+                " For daily data, the 7-day lag compares the same day of week to avoid confusing day-of-week "
+                "seasonality with a true lagged relationship."
+                if freq_config["frequency"] == "daily"
+                else ""
+            )
         ),
-        on_change=clear_validation_state
+        on_change=clear_validation_state,
     )
     st.session_state.include_lagged_controls = include_lagged_controls
 
@@ -4812,9 +5682,13 @@ def render_time_series_validation(mode: str):
         col4.metric("Analysis type", selected_label)
 
         col5, col6, col7 = st.columns(3)
-        col5.metric(f"Historical period (observed {freq_config['period_label_plural']})", hist_periods)
+        col5.metric(
+            f"Historical period (observed {freq_config['period_label_plural']})", hist_periods
+        )
         if mode == "Design":
-            col6.metric(f"Simulated test length ({freq_config['period_label_plural']})", placebo_len)
+            col6.metric(
+                f"Simulated test length ({freq_config['period_label_plural']})", placebo_len
+            )
             col7.empty()
         else:
             col6.metric(f"Test period (observed {freq_config['period_label_plural']})", test_length)
@@ -4822,7 +5696,11 @@ def render_time_series_validation(mode: str):
 
     # ---- Daily short-history caution (does not block the user) ----
     if freq_config["frequency"] == "daily" and hist_periods is not None:
-        _horizon_for_check = placebo_length_periods if placebo_length_periods is not None else freq_config["default_validation_horizon_periods"]
+        _horizon_for_check = (
+            placebo_length_periods
+            if placebo_length_periods is not None
+            else freq_config["default_validation_horizon_periods"]
+        )
         _est_folds = hist_periods - min_training_periods - _horizon_for_check + 1
         if hist_periods < 84:
             st.warning(
@@ -4851,11 +5729,11 @@ def render_time_series_validation(mode: str):
         _run_help = None
     validate_clicked = st.button(
         run_label,
-        width='stretch',
+        width="stretch",
         type="primary",
         key=f"{mode_prefix}_run_button",
         disabled=_run_disabled,
-        help=_run_help
+        help=_run_help,
     )
 
     if validate_clicked:
@@ -4870,7 +5748,9 @@ def render_time_series_validation(mode: str):
             st.session_state.validation_triggered = False
             st.stop()
         if st.session_state.get("frequency_mismatch_blocked", False):
-            st.error("Validation cannot run while there is an unacknowledged frequency mismatch. Please resolve or acknowledge it above.")
+            st.error(
+                "Validation cannot run while there is an unacknowledged frequency mismatch. Please resolve or acknowledge it above."
+            )
             st.session_state.validation_triggered = False
             st.stop()
 
@@ -4895,10 +5775,12 @@ def render_time_series_validation(mode: str):
             else:
                 try:
                     master_df = load_market_sheet(DATA_PATH, market)
-                    adobe_to_geo = dict(zip(
-                        master_df[ADOBE_COL].astype(str).str.strip(),
-                        master_df[geo_col].astype(str).str.strip()
-                    ))
+                    adobe_to_geo = dict(
+                        zip(
+                            master_df[ADOBE_COL].astype(str).str.strip(),
+                            master_df[geo_col].astype(str).str.strip(),
+                        )
+                    )
                 except Exception as e:
                     st.error(f"Failed to load region mapping: {e}")
                     st.stop()
@@ -4919,8 +5801,14 @@ def render_time_series_validation(mode: str):
             # test+selected-control — see build_region_mapping()'s docstring for why this
             # matters: passing a smaller set here silently caps what "Data-Optimised
             # Controls" can search over. ----
-            valid_regions_for_mapping = sorted(set(agg_df[geo_col].dropna().astype(str).str.strip().unique().tolist()) | set(test_regions_val) | set(control_regions_val))
-            df_long_mapped = build_region_mapping(df_long_raw, valid_regions_for_mapping, adobe_to_geo)
+            valid_regions_for_mapping = sorted(
+                set(agg_df[geo_col].dropna().astype(str).str.strip().unique().tolist())
+                | set(test_regions_val)
+                | set(control_regions_val)
+            )
+            df_long_mapped = build_region_mapping(
+                df_long_raw, valid_regions_for_mapping, adobe_to_geo
+            )
             matched = df_long_mapped[df_long_mapped["region"].notna()]
             if matched.empty:
                 st.error("No regions matched. Check mapping table.")
@@ -4935,26 +5823,40 @@ def render_time_series_validation(mode: str):
             with st.expander("Region Mapping Diagnostics"):
                 raw_count = len(df_long_raw["region_raw"].unique())
                 matched_count = len(matched["region"].unique())
-                unmatched_count = len(df_long_raw[~df_long_raw["region_raw"].isin(matched["region_raw"].unique())]["region_raw"].unique())
+                unmatched_count = len(
+                    df_long_raw[~df_long_raw["region_raw"].isin(matched["region_raw"].unique())][
+                        "region_raw"
+                    ].unique()
+                )
                 agg_count = len(agg_df_val["region"].unique())
-                unmatched_names = ", ".join(df_long_raw[~df_long_raw["region_raw"].isin(matched["region_raw"].unique())]["region_raw"].unique().tolist()) if unmatched_count > 0 else "None"
+                unmatched_names = (
+                    ", ".join(
+                        df_long_raw[
+                            ~df_long_raw["region_raw"].isin(matched["region_raw"].unique())
+                        ]["region_raw"]
+                        .unique()
+                        .tolist()
+                    )
+                    if unmatched_count > 0
+                    else "None"
+                )
                 diag_data = {
                     "Metric": [
                         "Raw geographies in KPI file",
                         "Matched to aggregation level",
                         "Unmatched",
                         "Aggregated geographies",
-                        "Unmatched names"
+                        "Unmatched names",
                     ],
                     "Value": [
                         str(raw_count),
                         str(matched_count),
                         str(unmatched_count),
                         str(agg_count),
-                        unmatched_names
-                    ]
+                        unmatched_names,
+                    ],
                 }
-                st.dataframe(pd.DataFrame(diag_data), width='stretch', hide_index=True)
+                st.dataframe(pd.DataFrame(diag_data), width="stretch", hide_index=True)
 
                 all_regions = sorted(agg_df_val["region"].unique())
                 role_rows = []
@@ -4993,6 +5895,7 @@ def render_time_series_validation(mode: str):
                     role_rows.append(row)
 
                 role_df = pd.DataFrame(role_rows)
+
                 def color_roles(val):
                     if val == "Test Region":
                         return "background-color: #90EE90"
@@ -5006,17 +5909,17 @@ def render_time_series_validation(mode: str):
                         return "background-color: #D3D3D3"
                     else:
                         return ""
+
                 role_cols = [c for c in role_df.columns if c != "Region"]
                 styled_role = role_df.style.map(color_roles, subset=role_cols)
-                st.dataframe(styled_role, width='stretch', hide_index=True)
+                st.dataframe(styled_role, width="stretch", hide_index=True)
 
             # Regional KPI Summary (unchanged)
             st.subheader("KPI Performance by Geography")
             summary_start = pd.Timestamp(pre_start)
             summary_end = pd.Timestamp(pre_end)
             summary_df = agg_df_val[
-                (agg_df_val["date"] >= summary_start) &
-                (agg_df_val["date"] <= summary_end)
+                (agg_df_val["date"] >= summary_start) & (agg_df_val["date"] <= summary_end)
             ].copy()
             n_periods = summary_df["date"].nunique()
             st.caption(
@@ -5042,18 +5945,33 @@ def render_time_series_validation(mode: str):
                         vol_flag = "Medium"
                     else:
                         vol_flag = "High"
-                    status = "Test Region" if region in test_regions_val else ("Matched Control Region" if region in control_regions_val else ("Force-Excluded Region" if region in force_excluded_regions else "Unused Candidate Region"))
-                    region_stats.append({
-                        "Region": region,
-                        "Status": status,
-                        f"Total {kpi_name}": total,
-                        "Share (%)": (total / total_kpi) * 100 if total_kpi > 0 else 0,
-                        f"Avg. {kpi_name} per {freq_config['period_label_singular']}": avg,
-                        "Std dev": std,
-                        "Coefficient of Variation": cv,
-                        "Volatility": vol_flag
-                    })
+                    status = (
+                        "Test Region"
+                        if region in test_regions_val
+                        else (
+                            "Matched Control Region"
+                            if region in control_regions_val
+                            else (
+                                "Force-Excluded Region"
+                                if region in force_excluded_regions
+                                else "Unused Candidate Region"
+                            )
+                        )
+                    )
+                    region_stats.append(
+                        {
+                            "Region": region,
+                            "Status": status,
+                            f"Total {kpi_name}": total,
+                            "Share (%)": (total / total_kpi) * 100 if total_kpi > 0 else 0,
+                            f"Avg. {kpi_name} per {freq_config['period_label_singular']}": avg,
+                            "Std dev": std,
+                            "Coefficient of Variation": cv,
+                            "Volatility": vol_flag,
+                        }
+                    )
                 desc_df = pd.DataFrame(region_stats)
+
                 def color_status(val):
                     if val == "Test Region":
                         return "background-color: #90EE90"
@@ -5063,14 +5981,17 @@ def render_time_series_validation(mode: str):
                         return "background-color: #FFCCCB"
                     else:
                         return "background-color: #D3D3D3"
-                styled_desc = desc_df.style.format({
-                    f"Total {kpi_name}": "{:,.0f}",
-                    "Share (%)": "{:.1f}%",
-                    f"Avg. {kpi_name} per {freq_config['period_label_singular']}": "{:.1f}",
-                    "Std dev": lambda x: f"±{x:.1f}",
-                    "Coefficient of Variation": "{:.3f}"
-                }).map(color_status, subset=["Status"])
-                st.dataframe(styled_desc, width='stretch')
+
+                styled_desc = desc_df.style.format(
+                    {
+                        f"Total {kpi_name}": "{:,.0f}",
+                        "Share (%)": "{:.1f}%",
+                        f"Avg. {kpi_name} per {freq_config['period_label_singular']}": "{:.1f}",
+                        "Std dev": lambda x: f"±{x:.1f}",
+                        "Coefficient of Variation": "{:.3f}",
+                    }
+                ).map(color_status, subset=["Status"])
+                st.dataframe(styled_desc, width="stretch")
 
             # -------------------------------------------------------------
             # 7. Run validation methods — IDENTICAL to working file
@@ -5078,65 +5999,111 @@ def render_time_series_validation(mode: str):
             st.subheader("Validation Results")
             results = {}
 
-            method1_key = METHOD_USER_SELECTED if st.session_state.get("user_selected_mode", False) else METHOD_STRUCTURAL
+            method1_key = (
+                METHOD_USER_SELECTED
+                if st.session_state.get("user_selected_mode", False)
+                else METHOD_STRUCTURAL
+            )
 
             with st.spinner(f"Running {method1_key}..."):
                 res1 = run_validation_method(
-                    agg_df_val, control_regions_val, test_regions_val, "enet",
-                    pre_start, pre_end, test_start, test_end,
-                    use_post, post_start, post_end,
+                    agg_df_val,
+                    control_regions_val,
+                    test_regions_val,
+                    "enet",
+                    pre_start,
+                    pre_end,
+                    test_start,
+                    test_end,
+                    use_post,
+                    post_start,
+                    post_end,
                     compute_uplift=compute_uplift,
                     placebo_length_periods=placebo_length_periods,
                     min_training_periods=min_training_periods,
                     include_lagged_controls=st.session_state.get("include_lagged_controls", False),
-                    frequency_config=freq_config
+                    frequency_config=freq_config,
                 )
                 if res1 is None:
                     st.error(f"{method1_key} failed: insufficient pre‑period data.")
                 else:
                     results[method1_key] = res1
 
-            all_non_test = sorted([r for r in agg_df_val["region"].unique() if r not in test_regions_val])
+            all_non_test = sorted(
+                [r for r in agg_df_val["region"].unique() if r not in test_regions_val]
+            )
             if len(all_non_test) < 2:
-                st.warning("Not enough non‑test regions for Data-Optimised Controls. Method 2 skipped.")
+                st.warning(
+                    "Not enough non‑test regions for Data-Optimised Controls. Method 2 skipped."
+                )
             else:
                 with st.spinner("Running Data-Optimised Controls..."):
                     res2 = run_validation_method(
-                        agg_df_val, all_non_test, test_regions_val, "lasso",
-                        pre_start, pre_end, test_start, test_end,
-                        use_post, post_start, post_end,
+                        agg_df_val,
+                        all_non_test,
+                        test_regions_val,
+                        "lasso",
+                        pre_start,
+                        pre_end,
+                        test_start,
+                        test_end,
+                        use_post,
+                        post_start,
+                        post_end,
                         compute_uplift=compute_uplift,
                         placebo_length_periods=placebo_length_periods,
                         min_training_periods=min_training_periods,
-                        include_lagged_controls=st.session_state.get("include_lagged_controls", False),
-                        frequency_config=freq_config
+                        include_lagged_controls=st.session_state.get(
+                            "include_lagged_controls", False
+                        ),
+                        frequency_config=freq_config,
                     )
                     if res2 is not None:
                         results[METHOD_DATA_OPTIMISED] = res2
 
-            force_excluded_in_agg = [r for r in force_excluded_regions if r in agg_df_val["region"].unique()]
+            force_excluded_in_agg = [
+                r for r in force_excluded_regions if r in agg_df_val["region"].unique()
+            ]
             if force_excluded_regions and force_excluded_in_agg:
                 candidate_controls = [r for r in all_non_test if r not in force_excluded_in_agg]
                 if len(candidate_controls) < 2:
-                    st.warning("Not enough non‑test regions after Excluding Force-Exclude Regions. Method 3 skipped.")
+                    st.warning(
+                        "Not enough non‑test regions after Excluding Force-Exclude Regions. Method 3 skipped."
+                    )
                 else:
-                    with st.spinner("Running Data-Optimised Controls (Excluding Force-Exclude Regions)..."):
+                    with st.spinner(
+                        "Running Data-Optimised Controls (Excluding Force-Exclude Regions)..."
+                    ):
                         res3 = run_validation_method(
-                            agg_df_val, candidate_controls, test_regions_val, "lasso",
-                            pre_start, pre_end, test_start, test_end,
-                            use_post, post_start, post_end,
+                            agg_df_val,
+                            candidate_controls,
+                            test_regions_val,
+                            "lasso",
+                            pre_start,
+                            pre_end,
+                            test_start,
+                            test_end,
+                            use_post,
+                            post_start,
+                            post_end,
                             compute_uplift=compute_uplift,
                             placebo_length_periods=placebo_length_periods,
                             min_training_periods=min_training_periods,
-                            include_lagged_controls=st.session_state.get("include_lagged_controls", False),
-                            frequency_config=freq_config
+                            include_lagged_controls=st.session_state.get(
+                                "include_lagged_controls", False
+                            ),
+                            frequency_config=freq_config,
                         )
                         if res3 is not None:
                             results[METHOD_DATA_OPTIMISED_EXCL] = res3
             elif force_excluded_regions and not force_excluded_in_agg:
-                st.warning("Force‑excluded regions were defined but none appear in the aggregated dataset. Check region names. Skipping Method 3.")
+                st.warning(
+                    "Force‑excluded regions were defined but none appear in the aggregated dataset. Check region names. Skipping Method 3."
+                )
             else:
-                st.info("No force‑excluded regions were defined, so Method 3 (excluding them) was not run.")
+                st.info(
+                    "No force‑excluded regions were defined, so Method 3 (excluding them) was not run."
+                )
 
             st.session_state.validation_results = {
                 "results": results,
@@ -5186,12 +6153,18 @@ def render_time_series_validation(mode: str):
         post_start = vres["post_start"]
         post_end = vres["post_end"]
         selected_metric = vres["selected_metric"]
-        placebo_length_periods = vres.get("placebo_length_periods", vres.get("placebo_length_weeks"))
+        placebo_length_periods = vres.get(
+            "placebo_length_periods", vres.get("placebo_length_weeks")
+        )
         min_training_periods = vres.get("min_training_periods", vres.get("min_training_weeks", 13))
         include_lagged_controls_val = vres.get("include_lagged_controls", False)
         vres_time_series_frequency = vres.get("time_series_frequency", "weekly")
-        vres_freq_config = vres.get("frequency_config") or get_frequency_config(vres_time_series_frequency)
-        all_non_test = sorted([r for r in agg_df_val["region"].unique() if r not in test_regions_val])
+        vres_freq_config = vres.get("frequency_config") or get_frequency_config(
+            vres_time_series_frequency
+        )
+        all_non_test = sorted(
+            [r for r in agg_df_val["region"].unique() if r not in test_regions_val]
+        )
 
         if include_lagged_controls_val:
             _same_period_word = "day" if vres_freq_config["frequency"] == "daily" else "week"
@@ -5215,26 +6188,34 @@ def render_time_series_validation(mode: str):
                     st.write(f"**Candidate controls:** {res['n_candidates']}")
                     st.write(f"**Selected controls:** {res['n_selected']}")
                     st.write(f"**Removed controls:** {res['n_removed']}")
-                    if res.get('include_lagged_controls'):
-                        st.caption(f"Model features used ({len(res.get('model_feature_cols', []))}): includes same-period and lagged control terms.")
-                    if not res['selected_df'].empty:
-                        st.dataframe(res['selected_df'], width='stretch')
+                    if res.get("include_lagged_controls"):
+                        st.caption(
+                            f"Model features used ({len(res.get('model_feature_cols', []))}): includes same-period and lagged control terms."
+                        )
+                    if not res["selected_df"].empty:
+                        st.dataframe(res["selected_df"], width="stretch")
                     else:
                         st.write("**Control regions:**", ", ".join(control_regions_val))
                 else:
                     st.write(f"**Candidate controls:** {res['n_candidates']}")
                     st.write(f"**Selected controls:** {res['n_selected']}")
                     st.write(f"**Removed controls:** {res['n_removed']}")
-                    if res.get('include_lagged_controls'):
-                        st.caption(f"Model features used ({len(res.get('model_feature_cols', []))}): includes same-period and lagged control terms.")
-                    if res['n_selected'] > 0:
-                        st.dataframe(res['selected_df'])
+                    if res.get("include_lagged_controls"):
+                        st.caption(
+                            f"Model features used ({len(res.get('model_feature_cols', []))}): includes same-period and lagged control terms."
+                        )
+                    if res["n_selected"] > 0:
+                        st.dataframe(res["selected_df"])
                     else:
                         st.warning("LASSO selected zero controls.")
                     st.caption(f"Model regularisation strength (alpha): {res['alpha']:.6f}")
 
             _lag_drop_meta = res.get("lag_drop_metadata")
-            if res.get("include_lagged_controls") and res.get("time_series_frequency") == "daily" and _lag_drop_meta:
+            if (
+                res.get("include_lagged_controls")
+                and res.get("time_series_frequency") == "daily"
+                and _lag_drop_meta
+            ):
                 if _lag_drop_meta.get("lag_drop_pct", 0) > 20:
                     st.warning(
                         f"⚠️ Daily 7-day lagged controls require matching dates exactly 7 calendar days earlier. "
@@ -5244,8 +6225,12 @@ def render_time_series_validation(mode: str):
                     )
 
             # ---- High validation error, even when the overfitting gap is small (item 13) ----
-            _rolling_smape_mean = res.get("rolling_smape_mean", res.get("holdout_smape_mean", np.nan))
-            if _rolling_smape_mean is not None and not (isinstance(_rolling_smape_mean, float) and np.isnan(_rolling_smape_mean)):
+            _rolling_smape_mean = res.get(
+                "rolling_smape_mean", res.get("holdout_smape_mean", np.nan)
+            )
+            if _rolling_smape_mean is not None and not (
+                isinstance(_rolling_smape_mean, float) and np.isnan(_rolling_smape_mean)
+            ):
                 if _rolling_smape_mean > 30:
                     st.error(
                         f"High validation error: rolling-origin sMAPE is {_rolling_smape_mean:.1f}%. "
@@ -5261,32 +6246,42 @@ def render_time_series_validation(mode: str):
             col1.metric(
                 "Pre-Period Correlation",
                 f"{res['corr']:.3f}",
-                help="How closely the counterfactual fits the actual test KPI during the pre‑period. This is an in‑sample measure."
+                help="How closely the counterfactual fits the actual test KPI during the pre‑period. This is an in‑sample measure.",
             )
             col2.metric(
                 "Pre-Period R²",
                 f"{res['r2']:.3f}",
-                help="Proportion of variation in the test KPI explained by the controls. This is an in‑sample measure."
+                help="Proportion of variation in the test KPI explained by the controls. This is an in‑sample measure.",
             )
             col3.metric(
                 "Pre-Period sMAPE",
                 f"{res['smape']:.1f}%",
-                help="Average percentage error in pre‑period predictions (in‑sample). Lower is better."
+                help="Average percentage error in pre‑period predictions (in‑sample). Lower is better.",
             )
 
-            if compute_uplift and test_start is not None and test_end is not None and res['uplift'] is not None:
+            if (
+                compute_uplift
+                and test_start is not None
+                and test_end is not None
+                and res["uplift"] is not None
+            ):
                 st.metric(
                     "Observed Uplift",
                     f"{res['uplift']:.0f} ({res['uplift_pct']:.1f}%)",
-                    help="Absolute uplift = Actual sum − Predicted baseline sum. Percentage = uplift / baseline."
+                    help="Absolute uplift = Actual sum − Predicted baseline sum. Percentage = uplift / baseline.",
                 )
 
             with st.expander("Rolling Cross-Validation", expanded=False):
                 _res_freq_config = res.get("frequency_config") or vres_freq_config
                 _period_word = _res_freq_config["period_label_singular"]
                 _period_word_plural = _res_freq_config["period_label_plural"]
-                _vw = res.get("validation_window_periods", res.get("validation_window_weeks", placebo_length_periods))
-                _mt = res.get("min_training_periods", res.get("min_training_weeks", min_training_periods))
+                _vw = res.get(
+                    "validation_window_periods",
+                    res.get("validation_window_weeks", placebo_length_periods),
+                )
+                _mt = res.get(
+                    "min_training_periods", res.get("min_training_weeks", min_training_periods)
+                )
                 st.caption(
                     f"Rolling-origin validation used a **{_vw}-{_period_word}** forecast horizon "
                     f"and required at least **{_mt} {_period_word_plural}** of training history before each validation window."
@@ -5294,15 +6289,23 @@ def render_time_series_validation(mode: str):
                 _rcv_col1 = st.columns(1)[0]
                 _rcv_col1.metric(
                     "Average Out-of-Sample sMAPE",
-                    f"{res['holdout_smape_mean']:.1f}%" if not np.isnan(res['holdout_smape_mean']) else "-",
-                    help="Average sMAPE across all rolling-origin validation windows. Out-of-sample — more reliable than pre-period fit."
+                    f"{res['holdout_smape_mean']:.1f}%"
+                    if not np.isnan(res["holdout_smape_mean"])
+                    else "-",
+                    help="Average sMAPE across all rolling-origin validation windows. Out-of-sample — more reliable than pre-period fit.",
                 )
                 _fold_df = res.get("rolling_origin_folds", pd.DataFrame())
                 if not _fold_df.empty:
                     _display_cols = [
-                        "fold_number", "training_periods", "forecast_horizon_periods",
-                        "test_start_date", "test_end_date",
-                        "smape", "rmse", "bias_pct", "uplift_error_pct"
+                        "fold_number",
+                        "training_periods",
+                        "forecast_horizon_periods",
+                        "test_start_date",
+                        "test_end_date",
+                        "smape",
+                        "rmse",
+                        "bias_pct",
+                        "uplift_error_pct",
                     ]
                     _display_cols = [c for c in _display_cols if c in _fold_df.columns]
                     _fold_display = _fold_df[_display_cols].copy()
@@ -5324,33 +6327,53 @@ def render_time_series_validation(mode: str):
                         )
                     # Rename to human-readable labels
                     _training_periods_label = f"Training {_period_word_plural.capitalize()}"
-                    _horizon_label = "Horizon (Days)" if _res_freq_config["frequency"] == "daily" else "Horizon (Wks)"
-                    _fold_display.rename(columns={
-                        "fold_number": "Fold",
-                        "training_periods": _training_periods_label,
-                        "forecast_horizon_periods": _horizon_label,
-                        "test_start_date": "Forecast Start",
-                        "test_end_date": "Forecast End",
-                        "smape": "sMAPE",
-                        "rmse": "RMSE",
-                        "bias_pct": "Bias %",
-                        "uplift_error_pct": "Uplift Error %",
-                    }, inplace=True)
-                    st.dataframe(_fold_display, width='stretch', hide_index=True)
+                    _horizon_label = (
+                        "Horizon (Days)"
+                        if _res_freq_config["frequency"] == "daily"
+                        else "Horizon (Wks)"
+                    )
+                    _fold_display.rename(
+                        columns={
+                            "fold_number": "Fold",
+                            "training_periods": _training_periods_label,
+                            "forecast_horizon_periods": _horizon_label,
+                            "test_start_date": "Forecast Start",
+                            "test_end_date": "Forecast End",
+                            "smape": "sMAPE",
+                            "rmse": "RMSE",
+                            "bias_pct": "Bias %",
+                            "uplift_error_pct": "Uplift Error %",
+                        },
+                        inplace=True,
+                    )
+                    st.dataframe(_fold_display, width="stretch", hide_index=True)
                 else:
-                    st.info("No rolling-origin folds were generated — the historical period may be too short for the selected training and window settings.")
-
+                    st.info(
+                        "No rolling-origin folds were generated — the historical period may be too short for the selected training and window settings."
+                    )
 
             plot_type = st.radio(
                 "Display plot:",
                 ["Actual", "Indexed (pre‑period avg = 100)"],
                 horizontal=True,
-                key=f"plot_toggle_{mode_prefix}_{method_name}"
+                key=f"plot_toggle_{mode_prefix}_{method_name}",
             )
 
-            all_dates = res['dates_pre'] + (res['dates_test'] if res['dates_test'] else []) + (res['dates_post'] if res['dates_post'] else [])
-            all_actual = list(res['y_pre']) + (list(res['y_test_actual']) if res['y_test_actual'] is not None else []) + (list(res['y_post_actual']) if res['y_post_actual'] is not None else [])
-            all_pred = list(res['y_pred_pre']) + (list(res['y_pred_test']) if res['y_pred_test'] is not None else []) + (list(res['y_post_pred']) if res['y_post_pred'] is not None else [])
+            all_dates = (
+                res["dates_pre"]
+                + (res["dates_test"] if res["dates_test"] else [])
+                + (res["dates_post"] if res["dates_post"] else [])
+            )
+            all_actual = (
+                list(res["y_pre"])
+                + (list(res["y_test_actual"]) if res["y_test_actual"] is not None else [])
+                + (list(res["y_post_actual"]) if res["y_post_actual"] is not None else [])
+            )
+            all_pred = (
+                list(res["y_pred_pre"])
+                + (list(res["y_pred_test"]) if res["y_pred_test"] is not None else [])
+                + (list(res["y_post_pred"]) if res["y_post_pred"] is not None else [])
+            )
 
             if plot_type == "Actual":
                 y_actual = all_actual
@@ -5358,7 +6381,7 @@ def render_time_series_validation(mode: str):
                 y_label = selected_metric
                 title_suffix = "Actual"
             else:
-                pre_mean = np.mean(res['y_pre'])
+                pre_mean = np.mean(res["y_pre"])
                 if pre_mean > 0:
                     y_actual = np.array(all_actual) / pre_mean * 100
                     y_pred = np.array(all_pred) / pre_mean * 100
@@ -5371,11 +6394,9 @@ def render_time_series_validation(mode: str):
                     y_label = selected_metric
                     title_suffix = "Actual"
 
-            plot_df = pd.DataFrame({
-                "Date": all_dates,
-                "Actual": y_actual,
-                "Predicted / Counterfactual": y_pred
-            }).melt(id_vars="Date", var_name="Series", value_name="Value")
+            plot_df = pd.DataFrame(
+                {"Date": all_dates, "Actual": y_actual, "Predicted / Counterfactual": y_pred}
+            ).melt(id_vars="Date", var_name="Series", value_name="Value")
 
             fig = px.line(
                 plot_df,
@@ -5383,7 +6404,7 @@ def render_time_series_validation(mode: str):
                 y="Value",
                 color="Series",
                 title=f"{title_suffix} – {method_name}",
-                labels={"Value": y_label, "Date": "Date"}
+                labels={"Value": y_label, "Date": "Date"},
             )
 
             def add_vline_with_annotation(fig, x_val, color, label, position="top left"):
@@ -5394,7 +6415,7 @@ def render_time_series_validation(mode: str):
                     line_dash="dash",
                     line_color=color,
                     annotation_text=label,
-                    annotation_position=position
+                    annotation_position=position,
                 )
 
             if compute_uplift and test_start is not None:
@@ -5402,7 +6423,7 @@ def render_time_series_validation(mode: str):
                 add_vline_with_annotation(fig, test_end, "orange", "Test end", position="top right")
 
             fig.update_layout(yaxis_title=y_label)
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, width="stretch")
 
             # ---- Data export (xlsx): Plotly's own modebar only exports a PNG snapshot
             # of the chart, not the underlying data, so this is a separate download
@@ -5410,29 +6431,37 @@ def render_time_series_validation(mode: str):
             # always includes both an "Actual" sheet and an "Indexed" sheet computed
             # fresh here, so the export doesn't depend on the user's current toggle
             # selection. ----
-            _actual_export_df = pd.DataFrame({
-                "Date": all_dates,
-                "Actual": all_actual,
-                "Predicted / Counterfactual": all_pred,
-            })
-            _pre_mean_export = np.mean(res['y_pre'])
-            if _pre_mean_export > 0:
-                _indexed_export_df = pd.DataFrame({
+            _actual_export_df = pd.DataFrame(
+                {
                     "Date": all_dates,
-                    "Actual": np.array(all_actual) / _pre_mean_export * 100,
-                    "Predicted / Counterfactual": np.array(all_pred) / _pre_mean_export * 100,
-                })
+                    "Actual": all_actual,
+                    "Predicted / Counterfactual": all_pred,
+                }
+            )
+            _pre_mean_export = np.mean(res["y_pre"])
+            if _pre_mean_export > 0:
+                _indexed_export_df = pd.DataFrame(
+                    {
+                        "Date": all_dates,
+                        "Actual": np.array(all_actual) / _pre_mean_export * 100,
+                        "Predicted / Counterfactual": np.array(all_pred) / _pre_mean_export * 100,
+                    }
+                )
             else:
                 _indexed_export_df = None
             st.download_button(
                 "⬇️ Download chart data (.xlsx)",
-                data=build_chart_data_xlsx({
-                    "Actual": _actual_export_df,
-                    "Indexed (pre-period avg=100)": _indexed_export_df,
-                }),
-                file_name=f"{method_name}_{title_suffix.split(' ')[0].lower()}_chart_data.xlsx".replace(" ", "_"),
+                data=build_chart_data_xlsx(
+                    {
+                        "Actual": _actual_export_df,
+                        "Indexed (pre-period avg=100)": _indexed_export_df,
+                    }
+                ),
+                file_name=f"{method_name}_{title_suffix.split(' ')[0].lower()}_chart_data.xlsx".replace(
+                    " ", "_"
+                ),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key=f"download_chart_data_{mode_prefix}_{method_name}"
+                key=f"download_chart_data_{mode_prefix}_{method_name}",
             )
 
         # ---- Method Comparison table (traffic-light diagnostics), captions, and
@@ -5456,7 +6485,7 @@ def render_time_series_validation(mode: str):
                 f"{_test_len_phrase} to reliably spot it?** "
                 "We take the fake-test windows from above (where nothing actually happened), add a pretend uplift of a "
                 "given size to each, and count how often the design would have flagged it as a real effect. The "
-                "\"minimum detectable effect\" (MDE) is the smallest effect the design catches at least 80% of the "
+                '"minimum detectable effect" (MDE) is the smallest effect the design catches at least 80% of the '
                 "time. Rule of thumb: only run the test if the effect you're realistically hoping for is at least "
                 "this big — otherwise a real effect will likely be lost in the noise. "
                 "*(For technical readers: an empirical power analysis at one-sided \u03b1 = 5%; methodology in the "
@@ -5471,15 +6500,31 @@ def render_time_series_validation(mode: str):
                 if _curve.empty:
                     continue
                 _power_curves[_m_name] = _curve
-                _n_windows = len([p for p in (_m_res.get("placebo_uplift_pcts") if _m_res.get("placebo_uplift_pcts") is not None else []) if _is_valid_number(p)])
+                _n_windows = len(
+                    [
+                        p
+                        for p in (
+                            _m_res.get("placebo_uplift_pcts")
+                            if _m_res.get("placebo_uplift_pcts") is not None
+                            else []
+                        )
+                        if _is_valid_number(p)
+                    ]
+                )
                 _mde_up = find_mde(_curve, "power_lift", _power_target)
                 _mde_dn = find_mde(_curve, "power_drop", _power_target)
-                _mde_rows.append({
-                    "Method": _m_name,
-                    "Placebo Windows": _n_windows,
-                    "Smallest detectable uplift": (f"+{_mde_up:.1f}%" if _mde_up is not None else "> +30%"),
-                    "Smallest detectable decline": (f"-{_mde_dn:.1f}%" if _mde_dn is not None else "< -30%"),
-                })
+                _mde_rows.append(
+                    {
+                        "Method": _m_name,
+                        "Placebo Windows": _n_windows,
+                        "Smallest detectable uplift": (
+                            f"+{_mde_up:.1f}%" if _mde_up is not None else "> +30%"
+                        ),
+                        "Smallest detectable decline": (
+                            f"-{_mde_dn:.1f}%" if _mde_dn is not None else "< -30%"
+                        ),
+                    }
+                )
             if not _mde_rows:
                 st.info(
                     "Not enough fake-test (placebo) windows to estimate this — at least 5 per method are needed. "
@@ -5488,7 +6533,7 @@ def render_time_series_validation(mode: str):
             else:
                 st.dataframe(
                     pd.DataFrame(_mde_rows),
-                    width='stretch',
+                    width="stretch",
                     hide_index=True,
                     column_config={
                         "Placebo Windows": st.column_config.NumberColumn(
@@ -5529,11 +6574,15 @@ def render_time_series_validation(mode: str):
                 _dir_col = "power_lift" if _power_dir.startswith("Uplift") else "power_drop"
                 _chart_frames = []
                 for _m_name, _curve in _power_curves.items():
-                    _chart_frames.append(pd.DataFrame({
-                        "True effect size (%)": _curve["effect_pct"],
-                        "Chance of detecting it (power)": _curve[_dir_col],
-                        "Method": _m_name,
-                    }))
+                    _chart_frames.append(
+                        pd.DataFrame(
+                            {
+                                "True effect size (%)": _curve["effect_pct"],
+                                "Chance of detecting it (power)": _curve[_dir_col],
+                                "Method": _m_name,
+                            }
+                        )
+                    )
                 _power_chart_df = pd.concat(_chart_frames, ignore_index=True)
                 _fig_power = px.line(
                     _power_chart_df,
@@ -5544,11 +6593,13 @@ def render_time_series_validation(mode: str):
                 )
                 _fig_power.layout.yaxis.tickformat = ".0%"
                 _fig_power.add_hline(
-                    y=_power_target, line_dash="dash", line_color="grey",
+                    y=_power_target,
+                    line_dash="dash",
+                    line_color="grey",
                     annotation_text=f"{int(_power_target * 100)}% power — reliable detection",
                     annotation_position="top left",
                 )
-                st.plotly_chart(_fig_power, width='stretch')
+                st.plotly_chart(_fig_power, width="stretch")
                 st.download_button(
                     "⬇️ Download power curve data (.xlsx)",
                     data=build_chart_data_xlsx({"Power Curves": _power_chart_df}),
@@ -5562,14 +6613,14 @@ def render_time_series_validation(mode: str):
                 )
                 with st.expander("How this is calculated (methodology)", expanded=False):
                     st.markdown(
-                        "- Each placebo window above is a \"fake test\" where nothing happened, measured with the "
+                        '- Each placebo window above is a "fake test" where nothing happened, measured with the '
                         "same actual-vs-counterfactual machinery as a real result in Evaluate mode: uplift = actuals "
                         "minus the model's counterfactual prediction, trained only on data *before* the window.\n"
                         "- A pretend effect of +x% is added to each window's actuals; because the training data "
                         "precedes the window, the model fit is unchanged and the measured uplift shifts in closed "
                         "form — no refitting needed: measured uplift-% = placebo-% \u00d7 (1 + x/100) + x "
                         "(mirror image for declines).\n"
-                        "- \"Detected\" means the shifted uplift-% falls outside the no-effect placebo distribution "
+                        '- "Detected" means the shifted uplift-% falls outside the no-effect placebo distribution '
                         "at a one-sided 5% level: beyond its 95th percentile for uplifts, below its 5th percentile "
                         "for declines.\n"
                         "- Power at each effect size = the share of placebo windows that would have been detected; "
@@ -5582,12 +6633,16 @@ def render_time_series_validation(mode: str):
 
 with tab2:
     st.subheader("🔍 Validate Test Design")
-    st.caption("Validate whether your selected control regions can reliably predict the test regions before running a live geo-test.")
+    st.caption(
+        "Validate whether your selected control regions can reliably predict the test regions before running a live geo-test."
+    )
     render_time_series_validation("Design")
 
 with tab3:
     st.subheader("📊 Measure Test Impact")
-    st.caption("Estimate the uplift from your completed geo test and compare results against expected historical variation.")
+    st.caption(
+        "Estimate the uplift from your completed geo test and compare results against expected historical variation."
+    )
     render_time_series_validation("Evaluate")
 
 # =============================================================================
@@ -5595,16 +6650,23 @@ with tab3:
 # =============================================================================
 with tab4:
     st.subheader("🧠 Bayesian Time-Based Regression (TBR)")
-    st.caption("Run a Bayesian time-based regression on the results from the Measure Test Impact tab.")
+    st.caption(
+        "Run a Bayesian time-based regression on the results from the Measure Test Impact tab."
+    )
 
     if st.session_state.get("bayesian_results") is None and (
         st.session_state.get("validation_results") is None
         or st.session_state.get("validation_results", {}).get("mode") != "Evaluate"
     ):
-        st.info("Run an evaluation in the **Measure Test Impact** tab first. The Bayesian model uses those validation results.")
+        st.info(
+            "Run an evaluation in the **Measure Test Impact** tab first. The Bayesian model uses those validation results."
+        )
     else:
         # Retrieve validation state needed by Bayesian
-        if st.session_state.get("validation_results") is not None and st.session_state.get("validation_results", {}).get("mode") == "Evaluate":
+        if (
+            st.session_state.get("validation_results") is not None
+            and st.session_state.get("validation_results", {}).get("mode") == "Evaluate"
+        ):
             vres = st.session_state.validation_results
             results = vres["results"]
             agg_df_bayes = vres["agg_df"]
@@ -5619,8 +6681,12 @@ with tab4:
             post_end = vres["post_end"]
             selected_metric = vres["selected_metric"]
             bayes_time_series_frequency = vres.get("time_series_frequency", "weekly")
-            bayes_freq_config = vres.get("frequency_config") or get_frequency_config(bayes_time_series_frequency)
-            all_non_test = sorted([r for r in agg_df_bayes["region"].unique() if r not in test_regions_val])
+            bayes_freq_config = vres.get("frequency_config") or get_frequency_config(
+                bayes_time_series_frequency
+            )
+            all_non_test = sorted(
+                [r for r in agg_df_bayes["region"].unique() if r not in test_regions_val]
+            )
 
             available_methods = list(results.keys())
             if available_methods:
@@ -5628,7 +6694,7 @@ with tab4:
                     "Select method for Bayesian TBR evaluation",
                     available_methods,
                     help="The selected method's control list will be used for Bayesian uplift estimation.",
-                    key="bayes_method_select"
+                    key="bayes_method_select",
                 )
                 if selected_bayes_method:
                     res = results.get(selected_bayes_method)
@@ -5668,18 +6734,30 @@ with tab4:
                     # simply the base controls plus their lagged terms when lagging is enabled —
                     # not the upstream validation method's own selected_features.
                     bayes_feature_preview = (
-                        bayes_base_control_list + [f"{c}_lag{bayes_lag_periods}" for c in bayes_base_control_list]
-                        if bayes_include_lag else list(bayes_base_control_list)
+                        bayes_base_control_list
+                        + [f"{c}_lag{bayes_lag_periods}" for c in bayes_base_control_list]
+                        if bayes_include_lag
+                        else list(bayes_base_control_list)
                     )
 
-                    st.caption(f"⏱️ {bayes_freq_config['lag_label']} lagged controls: {'**enabled**' if bayes_include_lag else '**disabled**'} (using the {bayes_time_series_frequency} frequency and lag setup from the Measure Test Impact validation run)")
+                    st.caption(
+                        f"⏱️ {bayes_freq_config['lag_label']} lagged controls: {'**enabled**' if bayes_include_lag else '**disabled**'} (using the {bayes_time_series_frequency} frequency and lag setup from the Measure Test Impact validation run)"
+                    )
                     with st.expander("Controls used by Bayesian TBR", expanded=False):
                         st.write(f"**Base control regions ({len(bayes_base_control_list)}):**")
-                        st.write(", ".join(bayes_base_control_list) if bayes_base_control_list else "_None_")
+                        st.write(
+                            ", ".join(bayes_base_control_list)
+                            if bayes_base_control_list
+                            else "_None_"
+                        )
                         if bayes_include_lag:
                             st.write(f"**Number of model features:** {len(bayes_feature_preview)}")
                             st.write("**Model feature terms (including lagged terms):**")
-                            st.write(", ".join(bayes_feature_preview) if bayes_feature_preview else "_None_")
+                            st.write(
+                                ", ".join(bayes_feature_preview)
+                                if bayes_feature_preview
+                                else "_None_"
+                            )
 
                     # ---- Structural prior settings ----
                     use_structural_priors = st.checkbox(
@@ -5725,15 +6803,33 @@ with tab4:
 
                     _bayes_freq_blocked = st.session_state.get("frequency_mismatch_blocked", False)
                     if _bayes_freq_blocked:
-                        st.info("Bayesian TBR is disabled until the frequency mismatch warning above (in the validation setup) is acknowledged or resolved.")
-                    if st.button("Run Bayesian Time-Based Regression (TBR)", width='stretch', type="primary", key="run_bayes_tab4", disabled=_bayes_freq_blocked):
+                        st.info(
+                            "Bayesian TBR is disabled until the frequency mismatch warning above (in the validation setup) is acknowledged or resolved."
+                        )
+                    if st.button(
+                        "Run Bayesian Time-Based Regression (TBR)",
+                        width="stretch",
+                        type="primary",
+                        key="run_bayes_tab4",
+                        disabled=_bayes_freq_blocked,
+                    ):
                         with st.spinner(f"Running Bayesian TBR using {selected_bayes_method}..."):
                             pre_start_ts = pd.Timestamp(pre_start)
                             pre_end_ts = pd.Timestamp(pre_end)
-                            test_start_ts = pd.Timestamp(test_start) if test_start is not None else None
+                            test_start_ts = (
+                                pd.Timestamp(test_start) if test_start is not None else None
+                            )
                             test_end_ts = pd.Timestamp(test_end) if test_end is not None else None
-                            post_start_ts = pd.Timestamp(post_start) if use_post and post_start is not None else None
-                            post_end_ts = pd.Timestamp(post_end) if use_post and post_end is not None else None
+                            post_start_ts = (
+                                pd.Timestamp(post_start)
+                                if use_post and post_start is not None
+                                else None
+                            )
+                            post_end_ts = (
+                                pd.Timestamp(post_end)
+                                if use_post and post_end is not None
+                                else None
+                            )
 
                             post_dates = None
                             y_post_actual = None
@@ -5752,12 +6848,20 @@ with tab4:
                                 _combined_end_candidates.append(post_end_ts)
                             combined_end_ts = max(_combined_end_candidates)
 
-                            full_mask = (agg_df_bayes["date"] >= pre_start_ts) & (agg_df_bayes["date"] <= combined_end_ts)
-                            model_full_bayes, bayes_matrix_diagnostics = build_model_matrix(agg_df_bayes[full_mask], bayes_control_list, test_regions_val)
+                            full_mask = (agg_df_bayes["date"] >= pre_start_ts) & (
+                                agg_df_bayes["date"] <= combined_end_ts
+                            )
+                            model_full_bayes, bayes_matrix_diagnostics = build_model_matrix(
+                                agg_df_bayes[full_mask], bayes_control_list, test_regions_val
+                            )
 
-                            _bayes_pct_dropped = bayes_matrix_diagnostics.get("pct_rows_dropped", 0.0)
+                            _bayes_pct_dropped = bayes_matrix_diagnostics.get(
+                                "pct_rows_dropped", 0.0
+                            )
                             _bayes_rows_dropped = bayes_matrix_diagnostics.get("rows_dropped", 0)
-                            _bayes_rows_before = bayes_matrix_diagnostics.get("rows_before_dropna", 0)
+                            _bayes_rows_before = bayes_matrix_diagnostics.get(
+                                "rows_before_dropna", 0
+                            )
                             if _bayes_rows_dropped > 0 and _bayes_pct_dropped > 20:
                                 st.error(
                                     f"{_bayes_rows_dropped} of {_bayes_rows_before} rows ({_bayes_pct_dropped:.1f}%) were removed because "
@@ -5774,16 +6878,30 @@ with tab4:
                                 )
 
                             if bayes_include_lag:
-                                model_full_bayes, bayes_model_feature_cols, bayes_lagged_feature_map, bayes_lag_drop_metadata = add_lagged_control_features(
-                                    model_full_bayes, bayes_control_list, lags=(bayes_lag_periods,), frequency_config=bayes_freq_config
+                                (
+                                    model_full_bayes,
+                                    bayes_model_feature_cols,
+                                    bayes_lagged_feature_map,
+                                    bayes_lag_drop_metadata,
+                                ) = add_lagged_control_features(
+                                    model_full_bayes,
+                                    bayes_control_list,
+                                    lags=(bayes_lag_periods,),
+                                    frequency_config=bayes_freq_config,
                                 )
                             else:
                                 bayes_model_feature_cols = list(bayes_control_list)
                                 bayes_lagged_feature_map = {}
                                 bayes_lag_drop_metadata = None
 
-                            pre_mask = (model_full_bayes["date"] >= pre_start_ts) & (model_full_bayes["date"] <= pre_end_ts)
-                            model_pre = model_full_bayes[pre_mask].sort_values("date").reset_index(drop=True)
+                            pre_mask = (model_full_bayes["date"] >= pre_start_ts) & (
+                                model_full_bayes["date"] <= pre_end_ts
+                            )
+                            model_pre = (
+                                model_full_bayes[pre_mask]
+                                .sort_values("date")
+                                .reset_index(drop=True)
+                            )
                             if len(model_pre) < 6:
                                 st.error("Not enough pre‑period data for Bayesian model.")
                             else:
@@ -5793,10 +6911,18 @@ with tab4:
                                 scaler_X = StandardScaler()
                                 X_pre_scaled = scaler_X.fit_transform(X_pre)
                                 scaler_y = StandardScaler()
-                                y_pre_scaled = scaler_y.fit_transform(y_pre.reshape(-1,1)).flatten()
+                                y_pre_scaled = scaler_y.fit_transform(
+                                    y_pre.reshape(-1, 1)
+                                ).flatten()
 
-                                test_mask = (model_full_bayes["date"] >= test_start_ts) & (model_full_bayes["date"] <= test_end_ts)
-                                model_test = model_full_bayes[test_mask].sort_values("date").reset_index(drop=True)
+                                test_mask = (model_full_bayes["date"] >= test_start_ts) & (
+                                    model_full_bayes["date"] <= test_end_ts
+                                )
+                                model_test = (
+                                    model_full_bayes[test_mask]
+                                    .sort_values("date")
+                                    .reset_index(drop=True)
+                                )
                                 if model_test.empty:
                                     st.error("No test period data available.")
                                 else:
@@ -5805,9 +6931,19 @@ with tab4:
                                     y_test_actual = model_test["test_kpi"].values
                                     test_dates = model_test["date"].values
 
-                                    if use_post and post_start_ts is not None and post_end_ts is not None:
-                                        post_mask = (model_full_bayes["date"] >= post_start_ts) & (model_full_bayes["date"] <= post_end_ts)
-                                        model_post = model_full_bayes[post_mask].sort_values("date").reset_index(drop=True)
+                                    if (
+                                        use_post
+                                        and post_start_ts is not None
+                                        and post_end_ts is not None
+                                    ):
+                                        post_mask = (model_full_bayes["date"] >= post_start_ts) & (
+                                            model_full_bayes["date"] <= post_end_ts
+                                        )
+                                        model_post = (
+                                            model_full_bayes[post_mask]
+                                            .sort_values("date")
+                                            .reset_index(drop=True)
+                                        )
                                         if not model_post.empty:
                                             X_post = model_post[bayes_model_feature_cols].values
                                             X_post_scaled = scaler_X.transform(X_post)
@@ -5823,17 +6959,22 @@ with tab4:
                                         post_dates = None
 
                                     # ---- Compute coefficient prior sigmas ----
-                                    _use_structural = st.session_state.get("use_structural_priors", False)
+                                    _use_structural = st.session_state.get(
+                                        "use_structural_priors", False
+                                    )
                                     _use_ar1 = st.session_state.get("use_ar1_errors", True)
                                     if _use_structural:
                                         # Data-driven sigma bounds from pre-period KPI correlations
                                         # corr[i] = how well control i tracks the test KPI historically
                                         try:
-                                            pre_corrs = np.array([
-                                                np.corrcoef(X_pre[:, i], y_pre)[0, 1]
-                                                if np.std(X_pre[:, i]) > 0 else 0.0
-                                                for i in range(X_pre.shape[1])
-                                            ])
+                                            pre_corrs = np.array(
+                                                [
+                                                    np.corrcoef(X_pre[:, i], y_pre)[0, 1]
+                                                    if np.std(X_pre[:, i]) > 0
+                                                    else 0.0
+                                                    for i in range(X_pre.shape[1])
+                                                ]
+                                            )
                                             pre_corrs = np.nan_to_num(pre_corrs, nan=0.0)
                                             abs_corrs = np.abs(pre_corrs)
                                             # Median absolute correlation anchors the midpoint
@@ -5841,80 +6982,144 @@ with tab4:
                                             median_corr = np.clip(median_corr, 0.1, 0.95)
                                             # Bounds scale with the data: better-tracking controls
                                             # → higher sigma ceiling; weaker → tighter floor
-                                            _min_sigma = round(float(np.clip(median_corr * 0.4, 0.10, 0.40)), 3)
-                                            _max_sigma = round(float(np.clip(median_corr * 1.2, 0.30, 0.90)), 3)
+                                            _min_sigma = round(
+                                                float(np.clip(median_corr * 0.4, 0.10, 0.40)), 3
+                                            )
+                                            _max_sigma = round(
+                                                float(np.clip(median_corr * 1.2, 0.30, 0.90)), 3
+                                            )
                                         except Exception:
                                             _min_sigma, _max_sigma = 0.25, 0.70
 
-                                        prior_sigmas_base, structural_prior_df_base = calculate_structural_prior_sigmas(
-                                            agg_df=agg_df,
-                                            test_regions=test_regions_val,
-                                            control_regions=bayes_control_list,
-                                            geo_col=geo_col,
-                                            feature_cols=active_features,
-                                            weight_dict=st.session_state.get("current_weights", None),
-                                            population_col=POPULATION_COL,
-                                            min_sigma=_min_sigma,
-                                            max_sigma=_max_sigma,
+                                        prior_sigmas_base, structural_prior_df_base = (
+                                            calculate_structural_prior_sigmas(
+                                                agg_df=agg_df,
+                                                test_regions=test_regions_val,
+                                                control_regions=bayes_control_list,
+                                                geo_col=geo_col,
+                                                feature_cols=active_features,
+                                                weight_dict=st.session_state.get(
+                                                    "current_weights", None
+                                                ),
+                                                population_col=POPULATION_COL,
+                                                min_sigma=_min_sigma,
+                                                max_sigma=_max_sigma,
+                                            )
                                         )
                                         if bayes_include_lag:
                                             # Duplicate/map each base region's structural prior sigma to its
                                             # lagged term as well, since we don't implement a separate lag prior.
-                                            _sigma_map = dict(zip(bayes_control_list, prior_sigmas_base))
-                                            prior_sigmas = np.array([_sigma_map[c] for c in bayes_control_list] +
-                                                                     [_sigma_map[c] for c in bayes_control_list])
-                                            _same_period_label = "Same day" if bayes_freq_config["frequency"] == "daily" else "Same week"
+                                            _sigma_map = dict(
+                                                zip(bayes_control_list, prior_sigmas_base)
+                                            )
+                                            prior_sigmas = np.array(
+                                                [_sigma_map[c] for c in bayes_control_list]
+                                                + [_sigma_map[c] for c in bayes_control_list]
+                                            )
+                                            _same_period_label = (
+                                                "Same day"
+                                                if bayes_freq_config["frequency"] == "daily"
+                                                else "Same week"
+                                            )
                                             _lag_term_label = f"Lag {bayes_lag_periods} " + (
-                                                bayes_freq_config["period_label_singular"] if bayes_lag_periods == 1
+                                                bayes_freq_config["period_label_singular"]
+                                                if bayes_lag_periods == 1
                                                 else bayes_freq_config["period_label_plural"]
                                             )
                                             _base_df = structural_prior_df_base.copy()
-                                            _base_df.insert(0, "Feature", _base_df["Control Region"])
+                                            _base_df.insert(
+                                                0, "Feature", _base_df["Control Region"]
+                                            )
                                             _base_df.insert(2, "Term Type", _same_period_label)
                                             _lag_df = structural_prior_df_base.copy()
-                                            _lag_df["Feature"] = _lag_df["Control Region"].apply(lambda c: f"{c}_lag{bayes_lag_periods}")
+                                            _lag_df["Feature"] = _lag_df["Control Region"].apply(
+                                                lambda c: f"{c}_lag{bayes_lag_periods}"
+                                            )
                                             _lag_df.insert(2, "Term Type", _lag_term_label)
-                                            _lag_df = _lag_df[["Feature", "Control Region", "Term Type", "Structural Distance", "Structural Similarity", "Prior Sigma", "Prior Type"]]
-                                            _base_df = _base_df[["Feature", "Control Region", "Term Type", "Structural Distance", "Structural Similarity", "Prior Sigma", "Prior Type"]]
-                                            structural_prior_df = pd.concat([_base_df, _lag_df], ignore_index=True)
+                                            _lag_df = _lag_df[
+                                                [
+                                                    "Feature",
+                                                    "Control Region",
+                                                    "Term Type",
+                                                    "Structural Distance",
+                                                    "Structural Similarity",
+                                                    "Prior Sigma",
+                                                    "Prior Type",
+                                                ]
+                                            ]
+                                            _base_df = _base_df[
+                                                [
+                                                    "Feature",
+                                                    "Control Region",
+                                                    "Term Type",
+                                                    "Structural Distance",
+                                                    "Structural Similarity",
+                                                    "Prior Sigma",
+                                                    "Prior Type",
+                                                ]
+                                            ]
+                                            structural_prior_df = pd.concat(
+                                                [_base_df, _lag_df], ignore_index=True
+                                            )
                                         else:
                                             prior_sigmas = prior_sigmas_base
                                             structural_prior_df = structural_prior_df_base
                                     else:
                                         prior_sigmas = np.repeat(0.5, len(bayes_model_feature_cols))
                                         if bayes_include_lag:
-                                            _same_period_label = "Same day" if bayes_freq_config["frequency"] == "daily" else "Same week"
+                                            _same_period_label = (
+                                                "Same day"
+                                                if bayes_freq_config["frequency"] == "daily"
+                                                else "Same week"
+                                            )
                                             _lag_term_label = f"Lag {bayes_lag_periods} " + (
-                                                bayes_freq_config["period_label_singular"] if bayes_lag_periods == 1
+                                                bayes_freq_config["period_label_singular"]
+                                                if bayes_lag_periods == 1
                                                 else bayes_freq_config["period_label_plural"]
                                             )
                                             _feature_rows = []
                                             for c in bayes_control_list:
-                                                _feature_rows.append({"Feature": c, "Control Region": c, "Term Type": _same_period_label,
-                                                                       "Structural Distance": np.nan, "Structural Similarity": np.nan,
-                                                                       "Prior Sigma": 0.5, "Prior Type": "Standard weak prior"})
+                                                _feature_rows.append(
+                                                    {
+                                                        "Feature": c,
+                                                        "Control Region": c,
+                                                        "Term Type": _same_period_label,
+                                                        "Structural Distance": np.nan,
+                                                        "Structural Similarity": np.nan,
+                                                        "Prior Sigma": 0.5,
+                                                        "Prior Type": "Standard weak prior",
+                                                    }
+                                                )
                                             for c in bayes_control_list:
-                                                _feature_rows.append({"Feature": f"{c}_lag{bayes_lag_periods}", "Control Region": c, "Term Type": _lag_term_label,
-                                                                       "Structural Distance": np.nan, "Structural Similarity": np.nan,
-                                                                       "Prior Sigma": 0.5, "Prior Type": "Standard weak prior"})
+                                                _feature_rows.append(
+                                                    {
+                                                        "Feature": f"{c}_lag{bayes_lag_periods}",
+                                                        "Control Region": c,
+                                                        "Term Type": _lag_term_label,
+                                                        "Structural Distance": np.nan,
+                                                        "Structural Similarity": np.nan,
+                                                        "Prior Sigma": 0.5,
+                                                        "Prior Type": "Standard weak prior",
+                                                    }
+                                                )
                                             structural_prior_df = pd.DataFrame(_feature_rows)
                                         else:
-                                            structural_prior_df = pd.DataFrame({
-                                                "Control Region": bayes_control_list,
-                                                "Structural Distance": np.nan,
-                                                "Structural Similarity": np.nan,
-                                                "Prior Sigma": prior_sigmas,
-                                                "Prior Type": "Standard weak prior",
-                                            })
+                                            structural_prior_df = pd.DataFrame(
+                                                {
+                                                    "Control Region": bayes_control_list,
+                                                    "Structural Distance": np.nan,
+                                                    "Structural Similarity": np.nan,
+                                                    "Prior Sigma": prior_sigmas,
+                                                    "Prior Type": "Standard weak prior",
+                                                }
+                                            )
 
                                     try:
-                                        import pymc as pm
                                         import arviz as az
-                                        import pytensor
+                                        import pymc as pm
+                                        import pytensor  # noqa: F401
                                     except ImportError as _e:
-                                        st.error(
-                                            f"**PyMC could not be imported:** {_e}"
-                                        )
+                                        st.error(f"**PyMC could not be imported:** {_e}")
                                         st.stop()
 
                                     with pm.Model() as bmodel:
@@ -5944,7 +7149,7 @@ with tab4:
                                             pm.Normal(
                                                 "y_obs_first",
                                                 mu=mu[0],
-                                                sigma=sigma / pm.math.sqrt(1.0 - rho ** 2),
+                                                sigma=sigma / pm.math.sqrt(1.0 - rho**2),
                                                 observed=y_pre_scaled[0],
                                             )
                                             pm.Normal(
@@ -5954,14 +7159,20 @@ with tab4:
                                                 observed=y_pre_scaled[1:],
                                             )
                                         else:
-                                            pm.Normal("y_obs", mu=mu, sigma=sigma, observed=y_pre_scaled)
+                                            pm.Normal(
+                                                "y_obs", mu=mu, sigma=sigma, observed=y_pre_scaled
+                                            )
                                         _mcmc_n_draws = 2000
                                         _mcmc_n_tune = 1000
                                         _mcmc_n_chains = 4
                                         _mcmc_target_accept = 0.95
                                         trace = pm.sample(
-                                            draws=_mcmc_n_draws, tune=_mcmc_n_tune, chains=_mcmc_n_chains,
-                                            target_accept=_mcmc_target_accept, progressbar=False, random_seed=42
+                                            draws=_mcmc_n_draws,
+                                            tune=_mcmc_n_tune,
+                                            chains=_mcmc_n_chains,
+                                            target_accept=_mcmc_target_accept,
+                                            progressbar=False,
+                                            random_seed=42,
                                         )
                                         # Divergent transitions are often the single most informative NUTS
                                         # diagnostic — unlike R-hat/ESS/MCSE (which mostly flag noise), a
@@ -5969,21 +7180,28 @@ with tab4:
                                         # explore, which can bias point estimates rather than just add noise.
                                         # target_accept=0.95 above is set high specifically to suppress these,
                                         # but that doesn't guarantee zero, so we count and surface them.
-                                        _mcmc_n_divergences = int(trace.sample_stats["diverging"].sum())
+                                        _mcmc_n_divergences = int(
+                                            trace.sample_stats["diverging"].sum()
+                                        )
 
                                     post_int = trace.posterior["intercept"].values.flatten()
-                                    post_coeff = trace.posterior["coeffs"].values.reshape(-1, X_pre_scaled.shape[1])
+                                    post_coeff = trace.posterior["coeffs"].values.reshape(
+                                        -1, X_pre_scaled.shape[1]
+                                    )
                                     post_sigma = trace.posterior["sigma"].values.flatten()
                                     # rho posterior draws (zeros when AR(1) is off, so all downstream
                                     # predictive code is a single path that degrades gracefully).
                                     post_rho = (
                                         trace.posterior["rho"].values.flatten()
-                                        if _use_ar1 else np.zeros_like(post_sigma)
+                                        if _use_ar1
+                                        else np.zeros_like(post_sigma)
                                     )
 
                                     # ---- Enrich structural prior df with posterior coefficients ----
                                     posterior_coeff_means = post_coeff.mean(axis=0)
-                                    structural_prior_df["Posterior Coefficient Mean"] = np.round(posterior_coeff_means, 3)
+                                    structural_prior_df["Posterior Coefficient Mean"] = np.round(
+                                        posterior_coeff_means, 3
+                                    )
                                     structural_prior_df["Posterior Coefficient 3%"] = np.round(
                                         np.percentile(post_coeff, 3, axis=0), 3
                                     )
@@ -5994,7 +7212,9 @@ with tab4:
                                     # ---- Posterior fitted-mean samples (no observation noise) ----
                                     # Used for the "Counterfactual (mean)" line everywhere, and for the
                                     # pre-period 94% HDI / credible interval band.
-                                    mu_pre_samples = post_int[:, None] + np.dot(post_coeff, X_pre_scaled.T)
+                                    mu_pre_samples = post_int[:, None] + np.dot(
+                                        post_coeff, X_pre_scaled.T
+                                    )
                                     mu_pre_original = scaler_y.inverse_transform(mu_pre_samples.T).T
                                     y_pred_pre_mean = mu_pre_original.mean(axis=0)
                                     # 94% HDI / credible interval around the fitted counterfactual mean —
@@ -6002,8 +7222,12 @@ with tab4:
                                     pre_lower_mean_hdi = np.percentile(mu_pre_original, 3, axis=0)
                                     pre_upper_mean_hdi = np.percentile(mu_pre_original, 97, axis=0)
 
-                                    mu_test_samples = post_int[:, None] + np.dot(post_coeff, X_test_scaled.T)
-                                    mu_test_original = scaler_y.inverse_transform(mu_test_samples.T).T
+                                    mu_test_samples = post_int[:, None] + np.dot(
+                                        post_coeff, X_test_scaled.T
+                                    )
+                                    mu_test_original = scaler_y.inverse_transform(
+                                        mu_test_samples.T
+                                    ).T
                                     y_pred_test_mean = mu_test_original.mean(axis=0)
 
                                     # ---- Posterior predictive samples (with observation noise) ----
@@ -6018,33 +7242,61 @@ with tab4:
                                     # — the honest width for the headline number.
                                     _pred_rng = np.random.default_rng(42)
                                     _e_last_pre = y_pre_scaled[-1] - mu_pre_samples[:, -1]
-                                    _gap_steps_test = ar1_gap_steps(pre_dates[-1], test_dates[0], bayes_freq_config)
+                                    _gap_steps_test = ar1_gap_steps(
+                                        pre_dates[-1], test_dates[0], bayes_freq_config
+                                    )
                                     resid_test = simulate_ar1_predictive_residuals(
-                                        post_rho, post_sigma, mu_test_samples.shape[1], _pred_rng,
-                                        e_start=_e_last_pre, n_gap_steps=_gap_steps_test,
+                                        post_rho,
+                                        post_sigma,
+                                        mu_test_samples.shape[1],
+                                        _pred_rng,
+                                        e_start=_e_last_pre,
+                                        n_gap_steps=_gap_steps_test,
                                     )
                                     y_pred_test_samples = mu_test_samples + resid_test
-                                    y_pred_test_predictive_original = scaler_y.inverse_transform(y_pred_test_samples.T).T
-                                    test_lower_pi = np.percentile(y_pred_test_predictive_original, 3, axis=0)
-                                    test_upper_pi = np.percentile(y_pred_test_predictive_original, 97, axis=0)
+                                    y_pred_test_predictive_original = scaler_y.inverse_transform(
+                                        y_pred_test_samples.T
+                                    ).T
+                                    test_lower_pi = np.percentile(
+                                        y_pred_test_predictive_original, 3, axis=0
+                                    )
+                                    test_upper_pi = np.percentile(
+                                        y_pred_test_predictive_original, 97, axis=0
+                                    )
 
                                     if X_post_scaled is not None:
-                                        mu_post_samples = post_int[:, None] + np.dot(post_coeff, X_post_scaled.T)
-                                        mu_post_original = scaler_y.inverse_transform(mu_post_samples.T).T
+                                        mu_post_samples = post_int[:, None] + np.dot(
+                                            post_coeff, X_post_scaled.T
+                                        )
+                                        mu_post_original = scaler_y.inverse_transform(
+                                            mu_post_samples.T
+                                        ).T
                                         y_pred_post_mean = mu_post_original.mean(axis=0)
 
                                         # Continue the same AR(1) residual paths through the
                                         # (counterfactual) test window into the post period, bridging
                                         # any calendar gap between the two.
-                                        _gap_steps_post = ar1_gap_steps(test_dates[-1], post_dates[0], bayes_freq_config)
+                                        _gap_steps_post = ar1_gap_steps(
+                                            test_dates[-1], post_dates[0], bayes_freq_config
+                                        )
                                         resid_post = simulate_ar1_predictive_residuals(
-                                            post_rho, post_sigma, mu_post_samples.shape[1], _pred_rng,
-                                            e_start=resid_test[:, -1], n_gap_steps=_gap_steps_post,
+                                            post_rho,
+                                            post_sigma,
+                                            mu_post_samples.shape[1],
+                                            _pred_rng,
+                                            e_start=resid_test[:, -1],
+                                            n_gap_steps=_gap_steps_post,
                                         )
                                         y_pred_post_samples = mu_post_samples + resid_post
-                                        y_pred_post_predictive_original = scaler_y.inverse_transform(y_pred_post_samples.T).T
-                                        post_lower_pi = np.percentile(y_pred_post_predictive_original, 3, axis=0)
-                                        post_upper_pi = np.percentile(y_pred_post_predictive_original, 97, axis=0)
+                                        y_pred_post_predictive_original = (
+                                            scaler_y.inverse_transform(y_pred_post_samples.T).T
+                                        )
+                                        post_lower_pi = np.percentile(
+                                            y_pred_post_predictive_original, 3, axis=0
+                                        )
+                                        post_upper_pi = np.percentile(
+                                            y_pred_post_predictive_original, 97, axis=0
+                                        )
                                     else:
                                         y_pred_post_mean = None
                                         post_lower_pi = None
@@ -6060,7 +7312,11 @@ with tab4:
                                     uplift_pi_upper = np.percentile(uplift_samples, 97)
                                     prob_pos = (uplift_samples > 0).mean()
                                     mean_uplift = uplift_samples.mean()
-                                    uplift_pct = (mean_uplift / total_pred_samples.mean()) * 100 if total_pred_samples.mean() != 0 else np.nan
+                                    uplift_pct = (
+                                        (mean_uplift / total_pred_samples.mean()) * 100
+                                        if total_pred_samples.mean() != 0
+                                        else np.nan
+                                    )
 
                                     # Secondary readout: 94% credible interval / HDI for uplift, based on the
                                     # fitted counterfactual mean only (no observation noise). Narrower than the
@@ -6070,7 +7326,9 @@ with tab4:
                                     uplift_hdi_lower = np.percentile(uplift_mean_samples, 3)
                                     uplift_hdi_upper = np.percentile(uplift_mean_samples, 97)
 
-                                    corr_b, r2_b, smape_b, rmse_b = compute_metrics(y_pre, y_pred_pre_mean)
+                                    corr_b, r2_b, smape_b, rmse_b = compute_metrics(
+                                        y_pre, y_pred_pre_mean
+                                    )
 
                                     st.session_state.bayesian_results = {
                                         "pre_dates": pre_dates,
@@ -6108,12 +7366,18 @@ with tab4:
                                         "target_accept": _mcmc_target_accept,
                                         "use_ar1_errors": _use_ar1,
                                         "rho_mean": float(np.mean(post_rho)) if _use_ar1 else None,
-                                        "rho_hdi_lower": float(np.percentile(post_rho, 3)) if _use_ar1 else None,
-                                        "rho_hdi_upper": float(np.percentile(post_rho, 97)) if _use_ar1 else None,
+                                        "rho_hdi_lower": float(np.percentile(post_rho, 3))
+                                        if _use_ar1
+                                        else None,
+                                        "rho_hdi_upper": float(np.percentile(post_rho, 97))
+                                        if _use_ar1
+                                        else None,
                                         "selected_metric": selected_metric,
                                         "test_start_ts": test_start_ts,
                                         "test_end_ts": test_end_ts,
-                                        "prior_style": "Structurally informed" if _use_structural else "Standard weak prior",
+                                        "prior_style": "Structurally informed"
+                                        if _use_structural
+                                        else "Standard weak prior",
                                         "prior_sigmas": prior_sigmas,
                                         "structural_prior_df": structural_prior_df,
                                         "min_prior_sigma": _min_sigma if _use_structural else 0.25,
@@ -6128,8 +7392,14 @@ with tab4:
                                         "lag_periods": bayes_lag_periods,
                                         "lag_label": bayes_freq_config["lag_label"],
                                         "lag_drop_metadata": bayes_lag_drop_metadata,
-                                        "lag_drop_pct": bayes_lag_drop_metadata["lag_drop_pct"] if bayes_lag_drop_metadata else None,
-                                        "rows_dropped_due_to_lag": bayes_lag_drop_metadata["rows_dropped_due_to_lag"] if bayes_lag_drop_metadata else None,
+                                        "lag_drop_pct": bayes_lag_drop_metadata["lag_drop_pct"]
+                                        if bayes_lag_drop_metadata
+                                        else None,
+                                        "rows_dropped_due_to_lag": bayes_lag_drop_metadata[
+                                            "rows_dropped_due_to_lag"
+                                        ]
+                                        if bayes_lag_drop_metadata
+                                        else None,
                                     }
                                     st.session_state.bayesian_interpretation_visible = True
 
@@ -6139,89 +7409,106 @@ with tab4:
 
             # Row 1: Pre-period fit metrics
             col1, col2, col3 = st.columns(3)
-            col1.metric("Pre-Period Correlation", f"{bayes['corr']:.3f}",
-                help="How closely the Bayesian counterfactual fits the actual pre-period KPI.")
-            col2.metric("Pre-Period R²", f"{bayes['r2']:.3f}",
-                help="Proportion of variation in the test KPI explained by the controls (pre-period).")
-            col3.metric("Pre-Period sMAPE", f"{bayes['smape']:.1f}%",
-                help="Average percentage error of the Bayesian model in the pre-period.")
+            col1.metric(
+                "Pre-Period Correlation",
+                f"{bayes['corr']:.3f}",
+                help="How closely the Bayesian counterfactual fits the actual pre-period KPI.",
+            )
+            col2.metric(
+                "Pre-Period R²",
+                f"{bayes['r2']:.3f}",
+                help="Proportion of variation in the test KPI explained by the controls (pre-period).",
+            )
+            col3.metric(
+                "Pre-Period sMAPE",
+                f"{bayes['smape']:.1f}%",
+                help="Average percentage error of the Bayesian model in the pre-period.",
+            )
 
             # Row 2: Uplift results
             uplift_label = f"{bayes['mean_uplift']:.0f}"
-            if not np.isnan(bayes['uplift_pct']):
+            if not np.isnan(bayes["uplift_pct"]):
                 uplift_label += f"  ({bayes['uplift_pct']:.1f}%)"
             col5, col6, col7 = st.columns(3)
             col5.metric(
                 "Estimated Incremental Uplift",
                 uplift_label,
-                help="Posterior mean incremental uplift during the test period, with percentage of predicted baseline."
+                help="Posterior mean incremental uplift during the test period, with percentage of predicted baseline.",
             )
             col6.metric(
                 "P(Uplift > 0)",
                 f"{bayes['prob_pos']:.1%}",
-                help="Probability that the intervention had a positive impact."
+                help="Probability that the intervention had a positive impact.",
             )
             col7.metric(
                 "94% Predictive Interval for Uplift",
-                format_range(bayes['uplift_pi_lower'], bayes['uplift_pi_upper'], decimals=0),
-                help="The interval within which the true uplift is expected to lie with 94% probability, including observation-level noise in the counterfactual. This is the primary readout for total impact."
+                format_range(bayes["uplift_pi_lower"], bayes["uplift_pi_upper"], decimals=0),
+                help="The interval within which the true uplift is expected to lie with 94% probability, including observation-level noise in the counterfactual. This is the primary readout for total impact.",
             )
 
             # ---- Line chart ----
             # Pre-period: 94% HDI / credible interval around the fitted counterfactual mean (no observation noise).
             # Test/post period: 94% posterior predictive interval (includes observation-level noise) — the
             # plausible range of actual counterfactual observations under the no-test scenario.
-            all_dates_b = list(bayes['pre_dates']) + list(bayes['test_dates'])
-            all_actual_b = list(bayes['y_pre']) + list(bayes['y_test_actual'])
-            all_pred_b = list(bayes['y_pred_pre_mean']) + list(bayes['y_pred_test_mean'])
-            n_pre_pts = len(bayes['pre_dates'])
-            n_test_pts = len(bayes['test_dates'])
+            all_dates_b = list(bayes["pre_dates"]) + list(bayes["test_dates"])
+            all_actual_b = list(bayes["y_pre"]) + list(bayes["y_test_actual"])
+            all_pred_b = list(bayes["y_pred_pre_mean"]) + list(bayes["y_pred_test_mean"])
+            n_pre_pts = len(bayes["pre_dates"])
+            n_test_pts = len(bayes["test_dates"])
 
             # Fitted-mean HDI band — populated for pre-period rows only, NaN elsewhere.
-            all_mean_hdi_lower_b = list(bayes['pre_lower_mean_hdi']) + [np.nan] * n_test_pts
-            all_mean_hdi_upper_b = list(bayes['pre_upper_mean_hdi']) + [np.nan] * n_test_pts
+            all_mean_hdi_lower_b = list(bayes["pre_lower_mean_hdi"]) + [np.nan] * n_test_pts
+            all_mean_hdi_upper_b = list(bayes["pre_upper_mean_hdi"]) + [np.nan] * n_test_pts
             # Predictive interval band — populated for test-period rows only, NaN elsewhere.
-            all_pi_lower_b = [np.nan] * n_pre_pts + list(bayes['test_lower_pi'])
-            all_pi_upper_b = [np.nan] * n_pre_pts + list(bayes['test_upper_pi'])
-            interval_type_b = ["94% fitted mean interval (pre-period)"] * n_pre_pts + \
-                               ["94% predictive interval (test/post)"] * n_test_pts
+            all_pi_lower_b = [np.nan] * n_pre_pts + list(bayes["test_lower_pi"])
+            all_pi_upper_b = [np.nan] * n_pre_pts + list(bayes["test_upper_pi"])
+            interval_type_b = ["94% fitted mean interval (pre-period)"] * n_pre_pts + [
+                "94% predictive interval (test/post)"
+            ] * n_test_pts
 
-            if bayes['post_dates'] is not None:
-                n_post_pts = len(bayes['post_dates'])
-                all_dates_b += list(bayes['post_dates'])
-                all_actual_b += list(bayes['y_post_actual'])
-                all_pred_b += list(bayes['y_pred_post_mean'])
+            if bayes["post_dates"] is not None:
+                n_post_pts = len(bayes["post_dates"])
+                all_dates_b += list(bayes["post_dates"])
+                all_actual_b += list(bayes["y_post_actual"])
+                all_pred_b += list(bayes["y_pred_post_mean"])
                 all_mean_hdi_lower_b += [np.nan] * n_post_pts
                 all_mean_hdi_upper_b += [np.nan] * n_post_pts
-                all_pi_lower_b += list(bayes['post_lower_pi'])
-                all_pi_upper_b += list(bayes['post_upper_pi'])
+                all_pi_lower_b += list(bayes["post_lower_pi"])
+                all_pi_upper_b += list(bayes["post_upper_pi"])
                 interval_type_b += ["94% predictive interval (test/post)"] * n_post_pts
 
-            plot_df = pd.DataFrame({
-                "Date": all_dates_b,
-                "Actual": all_actual_b,
-                "Counterfactual (mean)": all_pred_b,
-                "Lower 94% Fitted Mean Interval": all_mean_hdi_lower_b,
-                "Upper 94% Fitted Mean Interval": all_mean_hdi_upper_b,
-                "Lower 94% Predictive Interval": all_pi_lower_b,
-                "Upper 94% Predictive Interval": all_pi_upper_b,
-                "Interval Type": interval_type_b,
-            })
+            plot_df = pd.DataFrame(
+                {
+                    "Date": all_dates_b,
+                    "Actual": all_actual_b,
+                    "Counterfactual (mean)": all_pred_b,
+                    "Lower 94% Fitted Mean Interval": all_mean_hdi_lower_b,
+                    "Upper 94% Fitted Mean Interval": all_mean_hdi_upper_b,
+                    "Lower 94% Predictive Interval": all_pi_lower_b,
+                    "Upper 94% Predictive Interval": all_pi_upper_b,
+                    "Interval Type": interval_type_b,
+                }
+            )
 
             _interval_cols_export = [
-                "Actual", "Counterfactual (mean)",
-                "Lower 94% Fitted Mean Interval", "Upper 94% Fitted Mean Interval",
-                "Lower 94% Predictive Interval", "Upper 94% Predictive Interval",
+                "Actual",
+                "Counterfactual (mean)",
+                "Lower 94% Fitted Mean Interval",
+                "Upper 94% Fitted Mean Interval",
+                "Lower 94% Predictive Interval",
+                "Upper 94% Predictive Interval",
             ]
             # ---- Export copies, captured here (before the toggle below mutates plot_df
             # in place) so the xlsx download always includes both an "Actual" sheet and
             # an "Indexed" sheet regardless of which plot_type is currently toggled. ----
             _actual_export_df_b = plot_df.copy()
-            _pre_mean_export_b = np.mean(bayes['y_pre'])
+            _pre_mean_export_b = np.mean(bayes["y_pre"])
             if _pre_mean_export_b > 0:
                 _indexed_export_df_b = plot_df.copy()
                 for _col in _interval_cols_export:
-                    _indexed_export_df_b[_col] = _indexed_export_df_b[_col] / _pre_mean_export_b * 100
+                    _indexed_export_df_b[_col] = (
+                        _indexed_export_df_b[_col] / _pre_mean_export_b * 100
+                    )
             else:
                 _indexed_export_df_b = None
 
@@ -6229,27 +7516,30 @@ with tab4:
                 "Display plot:",
                 ["Actual", "Indexed (pre‑period avg = 100)"],
                 horizontal=True,
-                key="bayes_plot_toggle"
+                key="bayes_plot_toggle",
             )
 
             interval_cols = [
-                "Actual", "Counterfactual (mean)",
-                "Lower 94% Fitted Mean Interval", "Upper 94% Fitted Mean Interval",
-                "Lower 94% Predictive Interval", "Upper 94% Predictive Interval",
+                "Actual",
+                "Counterfactual (mean)",
+                "Lower 94% Fitted Mean Interval",
+                "Upper 94% Fitted Mean Interval",
+                "Lower 94% Predictive Interval",
+                "Upper 94% Predictive Interval",
             ]
 
             if bayes_plot_type == "Indexed (pre‑period avg = 100)":
-                pre_mean_b = np.mean(bayes['y_pre'])
+                pre_mean_b = np.mean(bayes["y_pre"])
                 if pre_mean_b > 0:
                     for col in interval_cols:
                         plot_df[col] = plot_df[col] / pre_mean_b * 100
                     y_label = f"{bayes['selected_metric']} (Indexed)"
                     title_suffix = "Indexed"
                 else:
-                    y_label = bayes['selected_metric']
+                    y_label = bayes["selected_metric"]
                     title_suffix = "Actual"
             else:
-                y_label = bayes['selected_metric']
+                y_label = bayes["selected_metric"]
                 title_suffix = "Actual"
 
             fig_line = px.line(
@@ -6257,63 +7547,77 @@ with tab4:
                 x="Date",
                 y=["Actual", "Counterfactual (mean)"],
                 labels={"value": y_label, "Date": "Date"},
-                title=f"Bayesian TBR: {title_suffix}"
+                title=f"Bayesian TBR: {title_suffix}",
             )
             # Pre-period 94% fitted mean interval band
             fig_line.add_scatter(
                 x=plot_df["Date"],
                 y=plot_df["Upper 94% Fitted Mean Interval"],
-                mode='lines',
+                mode="lines",
                 line=dict(width=0),
                 showlegend=False,
-                connectgaps=False
+                connectgaps=False,
             )
             fig_line.add_scatter(
                 x=plot_df["Date"],
                 y=plot_df["Lower 94% Fitted Mean Interval"],
-                mode='lines',
+                mode="lines",
                 line=dict(width=0),
-                fill='tonexty',
-                fillcolor='rgba(0,100,200,0.15)',
+                fill="tonexty",
+                fillcolor="rgba(0,100,200,0.15)",
                 showlegend=True,
-                name='94% fitted mean interval (pre-period)',
-                connectgaps=False
+                name="94% fitted mean interval (pre-period)",
+                connectgaps=False,
             )
             # Test/post-period 94% predictive interval band
             fig_line.add_scatter(
                 x=plot_df["Date"],
                 y=plot_df["Upper 94% Predictive Interval"],
-                mode='lines',
+                mode="lines",
                 line=dict(width=0),
                 showlegend=False,
-                connectgaps=False
+                connectgaps=False,
             )
             fig_line.add_scatter(
                 x=plot_df["Date"],
                 y=plot_df["Lower 94% Predictive Interval"],
-                mode='lines',
+                mode="lines",
                 line=dict(width=0),
-                fill='tonexty',
-                fillcolor='rgba(0,150,80,0.2)',
+                fill="tonexty",
+                fillcolor="rgba(0,150,80,0.2)",
                 showlegend=True,
-                name='94% predictive interval (test/post)',
-                connectgaps=False
+                name="94% predictive interval (test/post)",
+                connectgaps=False,
             )
-            if bayes['test_start_ts'] is not None:
-                fig_line.add_vline(x=bayes['test_start_ts'], line_dash="dash", line_color="red", annotation_text="Test start", annotation_position="top left")
-            if bayes['test_end_ts'] is not None:
-                fig_line.add_vline(x=bayes['test_end_ts'], line_dash="dash", line_color="orange", annotation_text="Test end", annotation_position="top right")
+            if bayes["test_start_ts"] is not None:
+                fig_line.add_vline(
+                    x=bayes["test_start_ts"],
+                    line_dash="dash",
+                    line_color="red",
+                    annotation_text="Test start",
+                    annotation_position="top left",
+                )
+            if bayes["test_end_ts"] is not None:
+                fig_line.add_vline(
+                    x=bayes["test_end_ts"],
+                    line_dash="dash",
+                    line_color="orange",
+                    annotation_text="Test end",
+                    annotation_position="top right",
+                )
             fig_line.update_layout(yaxis_title=y_label)
-            st.plotly_chart(fig_line, width='stretch')
+            st.plotly_chart(fig_line, width="stretch")
             st.download_button(
                 "⬇️ Download chart data (.xlsx)",
-                data=build_chart_data_xlsx({
-                    "Actual": _actual_export_df_b,
-                    "Indexed (pre-period avg=100)": _indexed_export_df_b,
-                }),
+                data=build_chart_data_xlsx(
+                    {
+                        "Actual": _actual_export_df_b,
+                        "Indexed (pre-period avg=100)": _indexed_export_df_b,
+                    }
+                ),
                 file_name="bayesian_tbr_chart_data.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_bayes_chart_data"
+                key="download_bayes_chart_data",
             )
             _ar1_caption = ""
             if bayes.get("use_ar1_errors") and bayes.get("rho_mean") is not None:
@@ -6335,31 +7639,59 @@ with tab4:
 
             # ---- Posterior uplift distribution histogram ----
             fig_b = px.histogram(
-                pd.DataFrame({"uplift": bayes['uplift_samples']}),
+                pd.DataFrame({"uplift": bayes["uplift_samples"]}),
                 x="uplift",
                 nbins=50,
-                title="Posterior Uplift Distribution"
+                title="Posterior Uplift Distribution",
             )
             fig_b.update_yaxes(title_text="Frequency")
             fig_b.update_xaxes(title_text="Incremental Uplift")
             fig_b.add_vline(x=0, line_dash="dash", line_color="red")
-            fig_b.add_vline(x=bayes['uplift_pi_lower'], line_dash="dot", line_color="green", annotation_text="94% lower (predictive)", annotation_position="top")
-            fig_b.add_vline(x=bayes['uplift_pi_upper'], line_dash="dot", line_color="green", annotation_text="94% upper (predictive)", annotation_position="top")
-            fig_b.add_vline(x=bayes['mean_uplift'], line_dash="solid", line_color="blue", annotation_text=f"Mean = {bayes['mean_uplift']:.0f}", annotation_position="top")
-            st.plotly_chart(fig_b, width='stretch')
+            fig_b.add_vline(
+                x=bayes["uplift_pi_lower"],
+                line_dash="dot",
+                line_color="green",
+                annotation_text="94% lower (predictive)",
+                annotation_position="top",
+            )
+            fig_b.add_vline(
+                x=bayes["uplift_pi_upper"],
+                line_dash="dot",
+                line_color="green",
+                annotation_text="94% upper (predictive)",
+                annotation_position="top",
+            )
+            fig_b.add_vline(
+                x=bayes["mean_uplift"],
+                line_dash="solid",
+                line_color="blue",
+                annotation_text=f"Mean = {bayes['mean_uplift']:.0f}",
+                annotation_position="top",
+            )
+            st.plotly_chart(fig_b, width="stretch")
             st.download_button(
                 "⬇️ Download chart data (.xlsx)",
-                data=build_chart_data_xlsx({
-                    "Posterior Uplift Distribution": pd.DataFrame({"Uplift": bayes['uplift_samples']}),
-                }),
+                data=build_chart_data_xlsx(
+                    {
+                        "Posterior Uplift Distribution": pd.DataFrame(
+                            {"Uplift": bayes["uplift_samples"]}
+                        ),
+                    }
+                ),
                 file_name="posterior_uplift_distribution_data.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_posterior_uplift_data"
+                key="download_posterior_uplift_data",
             )
-            st.caption("The histogram shows the distribution of possible uplift values, drawn from the posterior predictive counterfactual totals. The blue line marks the mean estimate, red is zero (no effect), and the green dashed lines show the 94% predictive interval.")
+            st.caption(
+                "The histogram shows the distribution of possible uplift values, drawn from the posterior predictive counterfactual totals. The blue line marks the mean estimate, red is zero (no effect), and the green dashed lines show the 94% predictive interval."
+            )
 
             _bayes_lag_drop_meta = bayes.get("lag_drop_metadata")
-            if bayes.get("include_lagged_controls") and bayes.get("time_series_frequency") == "daily" and _bayes_lag_drop_meta:
+            if (
+                bayes.get("include_lagged_controls")
+                and bayes.get("time_series_frequency") == "daily"
+                and _bayes_lag_drop_meta
+            ):
                 if _bayes_lag_drop_meta.get("lag_drop_pct", 0) > 20:
                     st.warning(
                         f"⚠️ Daily 7-day lagged controls require matching dates exactly 7 calendar days earlier. "
@@ -6372,12 +7704,20 @@ with tab4:
             with st.expander("Coefficient priors used in Bayesian TBR", expanded=False):
                 _bayes_lag_label = bayes.get("lag_label", "1-week")
                 st.write(f"**Prior style:** {bayes['prior_style']}")
-                st.write(f"**{_bayes_lag_label} lagged controls:** {'Enabled' if bayes.get('include_lagged_controls') else 'Disabled'}")
-                st.write(f"**Base control regions:** {', '.join(bayes.get('base_control_list', bayes.get('control_list', []))) or '_None_'}")
-                st.write(f"**Number of model features:** {len(bayes.get('model_feature_cols', bayes.get('control_list', [])))}")
-                if bayes.get('include_lagged_controls'):
-                    st.write(f"**Model features used:** {', '.join(bayes.get('model_feature_cols', []))}")
-                if bayes['prior_style'] == "Structurally informed":
+                st.write(
+                    f"**{_bayes_lag_label} lagged controls:** {'Enabled' if bayes.get('include_lagged_controls') else 'Disabled'}"
+                )
+                st.write(
+                    f"**Base control regions:** {', '.join(bayes.get('base_control_list', bayes.get('control_list', []))) or '_None_'}"
+                )
+                st.write(
+                    f"**Number of model features:** {len(bayes.get('model_feature_cols', bayes.get('control_list', [])))}"
+                )
+                if bayes.get("include_lagged_controls"):
+                    st.write(
+                        f"**Model features used:** {', '.join(bayes.get('model_feature_cols', []))}"
+                    )
+                if bayes["prior_style"] == "Structurally informed":
                     st.caption(
                         f"**Sigma bounds (data-driven):** "
                         f"min = {bayes['min_prior_sigma']:.3f}, "
@@ -6385,7 +7725,7 @@ with tab4:
                         f"Bounds are derived from the median absolute pre-period correlation between "
                         f"control and test KPIs — higher tracking quality raises the ceiling."
                     )
-                st.dataframe(bayes["structural_prior_df"], width='stretch')
+                st.dataframe(bayes["structural_prior_df"], width="stretch")
                 st.caption(
                     "The prior mean remains zero for every control. Structural similarity only changes the prior width: "
                     "better structural matches are allowed more coefficient flexibility, while weaker structural matches "
@@ -6395,8 +7735,11 @@ with tab4:
 
             # ---- MCMC Diagnostics ----
             import arviz as az
-            _summary_vars = ["intercept", "coeffs", "sigma"] + (["rho"] if bayes.get("use_ar1_errors") else [])
-            summary = az.summary(bayes['trace'], var_names=_summary_vars, hdi_prob=0.94)
+
+            _summary_vars = ["intercept", "coeffs", "sigma"] + (
+                ["rho"] if bayes.get("use_ar1_errors") else []
+            )
+            summary = az.summary(bayes["trace"], var_names=_summary_vars, hdi_prob=0.94)
             _mcmc_n_chains = bayes.get("n_chains")
             _mcmc_n_draws = bayes.get("n_draws")
             _mcmc_n_tune = bayes.get("n_tune")
@@ -6425,7 +7768,7 @@ with tab4:
                         f"R-hat measures whether the sampling chains converged on the same distribution. "
                         f"Values close to 1.0 mean convergence. Above 1.01 suggests the chains disagreed — "
                         f"results may be unreliable.\n\nYour max R-hat: {diag['max_rhat']:.3f} (pass = ≤1.01)."
-                    )
+                    ),
                 )
                 col2.metric(
                     "Effective sample size",
@@ -6435,7 +7778,7 @@ with tab4:
                         f"after accounting for autocorrelation. Higher is better. Low ESS means the "
                         f"sampler got 'stuck' and posterior estimates may be noisy.\n\n"
                         f"Your min ESS: {diag['min_ess']:.0f} (guidance = ≥{CONFIG['ess_min_threshold']})."
-                    )
+                    ),
                 )
                 col3.metric(
                     "Sampling error",
@@ -6445,7 +7788,7 @@ with tab4:
                         f"estimates relative to the posterior SD. Below 10% means the sampling error is "
                         f"small compared to genuine uncertainty in the model.\n\n"
                         f"Your max MCSE/SD: {diag['max_mcse_sd_ratio']:.1%} (pass = <10%)."
-                    )
+                    ),
                 )
                 _divergence_help = (
                     "Divergent transitions mean the sampler failed to explore a specific region of the "
@@ -6453,55 +7796,59 @@ with tab4:
                     "just add noise, so even one divergence is treated as a fail here.\n\n"
                     f"Your divergences: {diag['n_divergences'] if diag['n_divergences'] is not None else 'N/A'}"
                 )
-                if diag['divergence_rate'] is not None:
+                if diag["divergence_rate"] is not None:
                     _divergence_help += f" ({diag['divergence_rate']:.1%} of draws)."
                 col4.metric(
                     "Divergences",
                     f"{'✅ Pass' if diag['divergence_ok'] else '⚠️ Warning'}",
-                    help=_divergence_help
+                    help=_divergence_help,
                 )
                 col5.metric(
                     "Overall status",
-                    diag['status'],
+                    diag["status"],
                     help=(
                         "All four diagnostics must pass for an overall Good status. "
                         "A warning on any one of them means you should interpret results cautiously — "
                         "try increasing draws, tuning steps, or target_accept if issues persist."
-                    )
+                    ),
                 )
-                if diag['messages']:
-                    for msg in diag['messages']:
+                if diag["messages"]:
+                    for msg in diag["messages"]:
                         st.warning(msg)
 
             # Kept as a sibling expander, not nested inside "MCMC Diagnostics" above —
             # Streamlit does not allow expanders to be nested inside other expanders.
             with st.expander("View full MCMC diagnostics table", expanded=False):
                 rename_map = {
-                    'mean': 'Mean',
-                    'sd': 'SD',
-                    'hdi_3%': '94% lower',
-                    'hdi_97%': '94% upper',
-                    'mcse_mean': 'MCSE mean',
-                    'mcse_sd': 'MCSE SD',
-                    'ess_bulk': 'ESS bulk',
-                    'ess_tail': 'ESS tail',
-                    'r_hat': 'R-hat'
+                    "mean": "Mean",
+                    "sd": "SD",
+                    "hdi_3%": "94% lower",
+                    "hdi_97%": "94% upper",
+                    "mcse_mean": "MCSE mean",
+                    "mcse_sd": "MCSE SD",
+                    "ess_bulk": "ESS bulk",
+                    "ess_tail": "ESS tail",
+                    "r_hat": "R-hat",
                 }
-                existing_cols = [col for col in rename_map.keys() if col in summary.columns]
+                existing_cols = [col for col in rename_map if col in summary.columns]
                 display_summary = summary[existing_cols].rename(columns=rename_map).astype(float)
                 for col in display_summary.columns:
-                    if col in ['ESS bulk', 'ESS tail']:
+                    if col in ["ESS bulk", "ESS tail"]:
                         display_summary[col] = display_summary[col].round(0)
                     else:
                         display_summary[col] = display_summary[col].round(3)
                 # Replace coeffs[n] index labels with control region / lagged feature names
-                coeff_feature_list = bayes.get("model_feature_cols") or bayes.get("control_list", [])
+                coeff_feature_list = bayes.get("model_feature_cols") or bayes.get(
+                    "control_list", []
+                )
                 new_index = []
                 for idx in display_summary.index:
                     if idx.startswith("coeffs[") and idx.endswith("]"):
                         try:
                             n = int(idx[7:-1])
-                            new_index.append(coeff_feature_list[n] if n < len(coeff_feature_list) else idx)
+                            new_index.append(
+                                coeff_feature_list[n] if n < len(coeff_feature_list) else idx
+                            )
                         except (ValueError, IndexError):
                             new_index.append(idx)
                     else:
@@ -6511,23 +7858,31 @@ with tab4:
                 # ---- Row-level highlighting: flag which specific parameter(s) are driving
                 # a "Review needed" status, rather than making the user scan manually. ----
                 def _flag_bad_diagnostic_row(row):
-                    rhat = row.get('R-hat', np.nan)
-                    ess_bulk = row.get('ESS bulk', np.nan)
-                    ess_tail = row.get('ESS tail', np.nan)
-                    sd = row.get('SD', np.nan)
-                    mcse_mean = row.get('MCSE mean', np.nan)
-                    mcse_sd_ratio = (mcse_mean / sd) if (pd.notna(sd) and sd != 0 and pd.notna(mcse_mean)) else np.nan
+                    rhat = row.get("R-hat", np.nan)
+                    ess_bulk = row.get("ESS bulk", np.nan)
+                    ess_tail = row.get("ESS tail", np.nan)
+                    sd = row.get("SD", np.nan)
+                    mcse_mean = row.get("MCSE mean", np.nan)
+                    mcse_sd_ratio = (
+                        (mcse_mean / sd)
+                        if (pd.notna(sd) and sd != 0 and pd.notna(mcse_mean))
+                        else np.nan
+                    )
                     is_bad = (
                         (pd.notna(rhat) and rhat > 1.01)
                         or (pd.notna(ess_bulk) and ess_bulk < CONFIG["ess_min_threshold"])
                         or (pd.notna(ess_tail) and ess_tail < CONFIG["ess_min_threshold"])
                         or (pd.notna(mcse_sd_ratio) and mcse_sd_ratio >= 0.10)
                     )
-                    return ["background-color: #FEE2E2; color: #7F1D1D"] * len(row) if is_bad else [""] * len(row)
+                    return (
+                        ["background-color: #FEE2E2; color: #7F1D1D"] * len(row)
+                        if is_bad
+                        else [""] * len(row)
+                    )
 
                 styled_summary = display_summary.style.apply(_flag_bad_diagnostic_row, axis=1)
-                st.dataframe(styled_summary, width='stretch')
-                if diag['n_divergences']:
+                st.dataframe(styled_summary, width="stretch")
+                if diag["n_divergences"]:
                     st.caption(
                         f"⚠️ {diag['n_divergences']} divergent transition(s) occurred during sampling. "
                         "Divergences aren't tied to a specific parameter row the way R-hat/ESS/MCSE are, "
@@ -6582,6 +7937,8 @@ if validation_issues:
         with st.sidebar.expander("💡 Recommendations", expanded=False):
             for rec in recommendations[:5]:
                 st.caption(rec)
-    st.sidebar.metric("Data Quality", issue_severity, help=f"Found {len(validation_issues)} potential issues")
+    st.sidebar.metric(
+        "Data Quality", issue_severity, help=f"Found {len(validation_issues)} potential issues"
+    )
 else:
     st.sidebar.success(f"✅ Data quality check passed for {market} ({geography_level})")

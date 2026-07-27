@@ -1,11 +1,12 @@
 # utils/plotting.py
 
-import streamlit as st
-import pandas as pd
-import numpy as np
 import altair as alt
+import numpy as np
+import pandas as pd
 import plotly.express as px
-from utils.config import SMD_GOOD_THRESHOLD, SMD_HIGH_THRESHOLD, POPULATION_COL
+
+from utils.config import SMD_GOOD_THRESHOLD, SMD_HIGH_THRESHOLD
+
 
 def create_love_plot(comp_df):
     """Generate the love plot (feature balance plot)."""
@@ -29,36 +30,54 @@ def create_love_plot(comp_df):
     )
     return fig
 
+
 def create_optimization_plot(opt_results, best_n):
     """Create the pool size optimization plot."""
     size_df = opt_results.get("size_df")
     if size_df is None or size_df.empty:
         return None
-    base = alt.Chart(size_df).mark_line(point=True, color="#7C3AED").encode(
-        x=alt.X("Num_Controls:Q", title="Number of Controls"),
-        y=alt.Y("Mean_Abs_SMD:Q", title="Mean Abs SMD"),
-        tooltip=["Num_Controls", "Mean_Abs_SMD"],
+    base = (
+        alt.Chart(size_df)
+        .mark_line(point=True, color="#7C3AED")
+        .encode(
+            x=alt.X("Num_Controls:Q", title="Number of Controls"),
+            y=alt.Y("Mean_Abs_SMD:Q", title="Mean Abs SMD"),
+            tooltip=["Num_Controls", "Mean_Abs_SMD"],
+        )
     )
     rule_df = pd.DataFrame({"best_n": [best_n]})
-    marker = alt.Chart(rule_df).mark_rule(
-        color="#0F766E",
-        strokeDash=[6, 4],
-    ).encode(x="best_n:Q")
+    marker = (
+        alt.Chart(rule_df)
+        .mark_rule(
+            color="#0F766E",
+            strokeDash=[6, 4],
+        )
+        .encode(x="best_n:Q")
+    )
     return base + marker
+
 
 def create_convergence_plot(convergence_data):
     """Create the search convergence plot."""
     if not convergence_data:
         return None
-    conv_df = pd.DataFrame({
-        "step": list(range(len(convergence_data))),
-        "Mean_Abs_SMD": convergence_data,
-    })
-    return alt.Chart(conv_df).mark_line(color="#0F766E").encode(
-        x=alt.X("step:Q", title="Improvement Steps"),
-        y=alt.Y("Mean_Abs_SMD:Q", title="Mean Abs SMD"),
-        tooltip=["step", "Mean_Abs_SMD"],
-    ).properties(height=280)
+    conv_df = pd.DataFrame(
+        {
+            "step": list(range(len(convergence_data))),
+            "Mean_Abs_SMD": convergence_data,
+        }
+    )
+    return (
+        alt.Chart(conv_df)
+        .mark_line(color="#0F766E")
+        .encode(
+            x=alt.X("step:Q", title="Improvement Steps"),
+            y=alt.Y("Mean_Abs_SMD:Q", title="Mean Abs SMD"),
+            tooltip=["step", "Mean_Abs_SMD"],
+        )
+        .properties(height=280)
+    )
+
 
 def create_violin_plot(test_df, control_df, feature):
     """Create a violin plot comparing test and control distributions for a feature."""
@@ -68,10 +87,13 @@ def create_violin_plot(test_df, control_df, feature):
     control_data = control_df[feature].dropna()
     if len(test_data) <= 1 or len(control_data) <= 1:
         return None
-    density_df = pd.concat([
-        pd.DataFrame({"value": test_data, "Group": "Experimental"}),
-        pd.DataFrame({"value": control_data, "Group": "Control Group"}),
-    ], ignore_index=True)
+    density_df = pd.concat(
+        [
+            pd.DataFrame({"value": test_data, "Group": "Experimental"}),
+            pd.DataFrame({"value": control_data, "Group": "Control Group"}),
+        ],
+        ignore_index=True,
+    )
     fig = px.violin(
         density_df,
         x="Group",
@@ -92,28 +114,49 @@ def create_violin_plot(test_df, control_df, feature):
     )
     return fig
 
-def create_validation_plot(results, method_name, test_start, test_end, use_post, post_start, selected_metric):
+
+def create_validation_plot(
+    results, method_name, test_start, test_end, use_post, post_start, selected_metric
+):
     """Create actual vs predicted and indexed plots for validation results."""
     res = results
-    all_dates = res['dates_pre'] + (res['dates_test'] if res['dates_test'] else []) + (res['dates_post'] if res['dates_post'] else [])
-    all_actual = list(res['y_pre']) + (list(res['y_test_actual']) if res['y_test_actual'] is not None else []) + (list(res['y_post_actual']) if res['y_post_actual'] is not None else [])
-    all_pred = list(res['y_pred_pre']) + (list(res['y_pred_test']) if res['y_pred_test'] is not None else []) + (list(res['y_post_pred']) if res['y_post_pred'] is not None else [])
+    all_dates = (
+        res["dates_pre"]
+        + (res["dates_test"] if res["dates_test"] else [])
+        + (res["dates_post"] if res["dates_post"] else [])
+    )
+    all_actual = (
+        list(res["y_pre"])
+        + (list(res["y_test_actual"]) if res["y_test_actual"] is not None else [])
+        + (list(res["y_post_actual"]) if res["y_post_actual"] is not None else [])
+    )
+    all_pred = (
+        list(res["y_pred_pre"])
+        + (list(res["y_pred_test"]) if res["y_pred_test"] is not None else [])
+        + (list(res["y_post_pred"]) if res["y_post_pred"] is not None else [])
+    )
 
     fig1 = px.line(x=all_dates, y=all_actual, title=f"Actual vs Predicted – {method_name}")
     fig1.add_scatter(x=all_dates, y=all_pred, name="Predicted", line=dict(dash="dash"))
     if test_start is not None:
-        fig1.add_vline(x=test_start, line_dash="dot", line_color="red", annotation_text="Test start")
+        fig1.add_vline(
+            x=test_start, line_dash="dot", line_color="red", annotation_text="Test start"
+        )
     if test_end is not None:
         fig1.add_vline(x=test_end, line_dash="dot", line_color="orange", annotation_text="Test end")
     if use_post and post_start:
-        fig1.add_vline(x=post_start, line_dash="dot", line_color="green", annotation_text="Post start")
+        fig1.add_vline(
+            x=post_start, line_dash="dot", line_color="green", annotation_text="Post start"
+        )
 
     # Indexed plot
-    pre_mean = np.mean(res['y_pre'])
+    pre_mean = np.mean(res["y_pre"])
     if pre_mean > 0:
         idx_actual = np.array(all_actual) / pre_mean * 100
         idx_pred = np.array(all_pred) / pre_mean * 100
-        fig2 = px.line(x=all_dates, y=idx_actual, title=f"Indexed (pre‑period avg=100) – {method_name}")
+        fig2 = px.line(
+            x=all_dates, y=idx_actual, title=f"Indexed (pre‑period avg=100) – {method_name}"
+        )
         fig2.add_scatter(x=all_dates, y=idx_pred, name="Predicted", line=dict(dash="dash"))
         if test_start is not None:
             fig2.add_vline(x=test_start, line_dash="dot", line_color="red")
@@ -125,15 +168,29 @@ def create_validation_plot(results, method_name, test_start, test_end, use_post,
     else:
         return fig1, None
 
+
 def create_placebo_histogram(placebos, real_uplift, method_name):
     """Create a histogram of placebo uplift distribution."""
-    fig = px.histogram(pd.DataFrame({"placebo": placebos}), x="placebo", nbins=20, title=f"Placebo distribution – {method_name}")
+    fig = px.histogram(
+        pd.DataFrame({"placebo": placebos}),
+        x="placebo",
+        nbins=20,
+        title=f"Placebo distribution – {method_name}",
+    )
     if real_uplift is not None:
-        fig.add_vline(x=real_uplift, line_dash="dash", line_color="red", annotation_text="Real uplift")
+        fig.add_vline(
+            x=real_uplift, line_dash="dash", line_color="red", annotation_text="Real uplift"
+        )
     return fig
+
 
 def create_posterior_plot(uplift_samples):
     """Create posterior distribution plot for Bayesian uplift."""
-    fig = px.histogram(pd.DataFrame({"uplift": uplift_samples}), x="uplift", nbins=50, title="Posterior uplift distribution")
+    fig = px.histogram(
+        pd.DataFrame({"uplift": uplift_samples}),
+        x="uplift",
+        nbins=50,
+        title="Posterior uplift distribution",
+    )
     fig.add_vline(x=0, line_dash="dash", line_color="red")
     return fig

@@ -1,11 +1,22 @@
 # utils/exports.py
 
-import pandas as pd
 import io
+
+import pandas as pd
+
 from utils.config import POPULATION_COL
 
-def create_excel_export(export_summary, export_features, final_controls, test_df,
-                        geo_col, active_features, validation_issues, recommendations):
+
+def create_excel_export(
+    export_summary,
+    export_features,
+    final_controls,
+    test_df,
+    geo_col,
+    active_features,
+    validation_issues,
+    recommendations,
+):
     """Create an Excel file with multiple sheets."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -22,12 +33,15 @@ def create_excel_export(export_summary, export_features, final_controls, test_df
 
         if validation_issues:
             max_len = max(len(validation_issues), len(recommendations))
-            validation_df = pd.DataFrame({
-                "Issue": validation_issues + [""] * (max_len - len(validation_issues)),
-                "Recommendation": recommendations + [""] * (max_len - len(recommendations)),
-            })
+            validation_df = pd.DataFrame(
+                {
+                    "Issue": validation_issues + [""] * (max_len - len(validation_issues)),
+                    "Recommendation": recommendations + [""] * (max_len - len(recommendations)),
+                }
+            )
             validation_df.to_excel(writer, sheet_name="Data_Quality_Report", index=False)
     return output.getvalue()
+
 
 def create_csv_export(comp_df):
     """Create CSV from feature comparison."""
