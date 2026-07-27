@@ -172,6 +172,17 @@ def main():
     except SystemExit:
         print("WARNING: Working tree metadata unavailable; commit fields may be incorrect.")
 
+    # Require a clean working tree — golden files must be generated from
+    # a committed state so that golden_created_by_commit is truthful.
+    status = _git_cmd("status", "--porcelain", "--untracked-files=all")
+    if status.strip():
+        print("ERROR: Working tree is not clean.", file=sys.stderr)
+        print("Commit or stash your changes before updating golden files.", file=sys.stderr)
+        print("Dirty files:")
+        for line in status.strip().splitlines():
+            print(f"  {line}")
+        sys.exit(1)
+
     print("Updating golden files...")
     print(f"  App baseline commit (last change to geotestmatch.py): {_app_baseline_commit()}")
     print(f"  Current commit:      {_current_commit()}")
