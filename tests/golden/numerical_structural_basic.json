@@ -1,0 +1,76 @@
+{
+  "app_baseline_commit": "281063d2e59213dbab5781addd07cf4413550e69",
+  "expected": {
+    "best_n": 26,
+    "control_count": 26,
+    "controls": [
+      "Bath and North East Somerset",
+      "Bournemouth, Christchurch and Poole",
+      "Bracknell Forest",
+      "Brighton and Hove",
+      "Cardiff",
+      "Cheshire West and Chester",
+      "City of Edinburgh",
+      "Dundee City",
+      "Essex",
+      "Glasgow City",
+      "Havering",
+      "Kent",
+      "Leeds",
+      "Leicestershire",
+      "Midlothian",
+      "North Lanarkshire",
+      "Plymouth",
+      "Portsmouth",
+      "Renfrewshire",
+      "Sheffield",
+      "South Gloucestershire",
+      "Southend-on-Sea",
+      "Swansea",
+      "Warwickshire",
+      "West Lothian",
+      "York"
+    ],
+    "errors": [],
+    "exception": false,
+    "match_mode_res": "Greedy (Nearest Neighbor)",
+    "mean_abs_smd": 0.3752645634721441,
+    "smd_list": [
+      0.03316111213408559,
+      0.0682943556900782,
+      0.06829435569006892,
+      0.9313195905150526,
+      0.692889506232294,
+      0.5801736704974019,
+      0.47978477643621054,
+      0.4138756779344387,
+      0.3048743793706171,
+      0.019728990898244297,
+      0.9081954942424506,
+      0.08531395589395428,
+      0.2925334596029769
+    ],
+    "test_regions": [
+      "Aberdeen City"
+    ],
+    "warnings": [],
+    "weighted_structural_distance": 1.7626624502276573
+  },
+  "fixture_version": 1,
+  "golden_created_by_commit": "66268a7da2fc3b04288dd969fef139bdf1d85b2c",
+  "known_limitations": [
+    "Pinned to the bundled UK demographic workbook; changes to that workbook's data will change this golden."
+  ],
+  "scenario": "numerical_structural_basic",
+  "schema_version": 1,
+  "settings": {
+    "market": "UK",
+    "strategy": "Basic (Fast)",
+    "test_region": "Aberdeen City"
+  },
+  "tolerances": {
+    "mean_abs_smd": 1e-06,
+    "smd_list": 1e-06,
+    "weighted_structural_distance": 1e-06
+  }
+}

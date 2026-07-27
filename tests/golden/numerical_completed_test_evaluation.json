@@ -1,0 +1,73 @@
+{
+  "app_baseline_commit": "281063d2e59213dbab5781addd07cf4413550e69",
+  "expected": {
+    "actual_total": 627.8423409016469,
+    "controls": [
+      "Aberdeenshire",
+      "Angus"
+    ],
+    "counterfactual_reliability": "\ud83d\udfe2 High confidence",
+    "counterfactual_total": 628.7536834511678,
+    "dw_stat": 1.508595617024863,
+    "errors": [],
+    "exception": false,
+    "lag_drop_metadata": null,
+    "lag_periods": 1,
+    "median_placebo_uplift": 7.420362414616591,
+    "n_folds": 20,
+    "n_placebos": 28,
+    "n_pre_periods": 46,
+    "n_selected_features": 2,
+    "placebo_p_value_one_sided": 0.9642857142857143,
+    "placebo_p_value_two_sided": 0.14285714285714285,
+    "placebo_percentile_rank": 3.571428571428571,
+    "placebo_range_lower": -1.7179873541938688,
+    "placebo_range_upper": 23.631882028902826,
+    "placebo_z_score": -1.4149230215974675,
+    "rmse": 2.812068503500656,
+    "rolling_bias_pct_mean": -1.4329933740915817,
+    "rolling_rmse_mean": 2.9525209942291903,
+    "rolling_smape_mean": 2.28089291724664,
+    "smape": 2.3756571096185835,
+    "time_series_frequency": "weekly",
+    "uplift": -0.9113425495208958,
+    "uplift_pct": -0.1449442879632331,
+    "warnings": []
+  },
+  "fixture_version": 1,
+  "golden_created_by_commit": "66268a7da2fc3b04288dd969fef139bdf1d85b2c",
+  "known_limitations": [
+    "Placebo statistics are capped at 40 evenly-spaced windows (_run_placebo_windows(max_windows=40)); percentile-rank/p-value resolution is limited to roughly 1/40."
+  ],
+  "scenario": "numerical_completed_test_evaluation",
+  "schema_version": 1,
+  "settings": {
+    "control_regions": [
+      "Aberdeenshire",
+      "Angus"
+    ],
+    "fixture": "write_simple_kpi_xlsx",
+    "mode": "Evaluate",
+    "n_weeks": 60,
+    "seed": 123,
+    "test_region": "Aberdeen City"
+  },
+  "tolerances": {
+    "actual_total": 0.0001,
+    "counterfactual_total": 0.0001,
+    "dw_stat": 1e-06,
+    "median_placebo_uplift": 0.0001,
+    "placebo_p_value_one_sided": 1e-06,
+    "placebo_p_value_two_sided": 1e-06,
+    "placebo_percentile_rank": 1e-06,
+    "placebo_range_lower": 0.0001,
+    "placebo_range_upper": 0.0001,
+    "placebo_z_score": 0.0001,
+    "rmse": 0.0001,
+    "rolling_rmse_mean": 0.0001,
+    "rolling_smape_mean": 0.0001,
+    "smape": 0.0001,
+    "uplift": 0.0001,
+    "uplift_pct": 0.0001
+  }
+}
