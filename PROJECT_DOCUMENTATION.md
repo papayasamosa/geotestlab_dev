@@ -1,6 +1,6 @@
 # GeoTestLab — Project Documentation
 
-> *Last reconciled against the app code: `geomatchapp - working v11`. The app's on-screen title currently carries a temporary "TEST " prefix ("TEST GeoTestLab") — remove before any production release.*
+> *Last reconciled against commit `0e472af` of `geotestmatch.py`. The app's on-screen title currently carries a temporary "TEST " prefix ("TEST GeoTestLab") — remove before any production release.*
 
 ## 1. Project Overview
 
