@@ -4,6 +4,9 @@ These tests verify the live Streamlit application starts correctly, dependency
 files are portable, and the production app is syntactically valid.
 """
 
+from __future__ import annotations
+
+import json
 import py_compile
 import sys
 from pathlib import Path
@@ -12,6 +15,22 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# ---------------------------------------------------------------------------
+# Golden schema — all golden files must contain these fields
+# ---------------------------------------------------------------------------
+
+REQUIRED_GOLDEN_FIELDS = [
+    "schema_version",
+    "scenario",
+    "fixture_version",
+    "app_baseline_commit",
+    "golden_created_by_commit",
+    "settings",
+    "expected",
+    "tolerances",
+    "known_limitations",
+]
+
 
 # ---------------------------------------------------------------------------
 # Syntax / compilation tests
@@ -19,12 +38,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestMainAppSyntax:
-    """The main Streamlit app must be syntactically valid Python.
-
-    We do NOT import the module because ``st.set_page_config()`` at the top
-    level requires a running Streamlit context.  ``py_compile`` catches syntax
-    and indentation errors without executing the module body.
-    """
+    """The main Streamlit app must be syntactically valid Python."""
 
     @pytest.mark.smoke
     def test_main_app_compiles(self):
@@ -34,71 +48,40 @@ class TestMainAppSyntax:
 
 
 # ---------------------------------------------------------------------------
-# Live Streamlit app tests
+# Live Streamlit app tests (using conftest live_app fixture)
 # ---------------------------------------------------------------------------
 
 
 class TestLiveAppStartup:
-    """End-to-end tests against the live Streamlit application.
-
-    These tests use ``streamlit.testing.v1.AppTest`` to run the app in
-    headless mode and verify its structure.  They do NOT start a server.
-    """
+    """End-to-end tests against the live Streamlit application."""
 
     @pytest.mark.smoke
-    def test_live_app_starts(self):
-        from streamlit.testing.v1 import AppTest
-
-        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
-        app.run(timeout=120)
-        assert not app.exception, f"App raised: {app.exception}"
+    def test_live_app_starts(self, live_app):
+        assert not live_app.exception, f"App raised: {live_app.exception}"
 
     @pytest.mark.smoke
-    def test_app_has_expected_title(self):
-        from streamlit.testing.v1 import AppTest
-
-        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
-        app.run(timeout=120)
-        assert len(app.title) > 0
-        assert "GeoTestLab" in app.title[0].value
+    def test_exact_title(self, live_app):
+        assert len(live_app.title) > 0
+        assert live_app.title[0].value == "TEST GeoTestLab"
 
     @pytest.mark.smoke
-    def test_app_has_four_workflow_tabs(self):
-        from streamlit.testing.v1 import AppTest
-
-        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
-        app.run(timeout=120)
-        assert len(app.tabs) >= 4
-
-    @pytest.mark.smoke
-    def test_sidebar_renders(self):
-        from streamlit.testing.v1 import AppTest
-
-        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
-        app.run(timeout=120)
-        # The sidebar should render without throwing
-        assert app.sidebar is not None
+    def test_exact_tab_labels(self, live_app):
+        tab_labels = [t.label for t in live_app.tabs]
+        assert tab_labels == [
+            "\u2699\ufe0f Region Matching",
+            "\U0001f50d Validate Test Design",
+            "\U0001f4ca Measure Test Impact",
+            "\U0001f9e0 Bayesian TBR",
+        ]
 
     @pytest.mark.smoke
-    def test_market_selectbox_exists(self):
-        """The app should have a market/sheet selectbox in the sidebar."""
-        from streamlit.testing.v1 import AppTest
-
-        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
-        app.run(timeout=120)
-        # Look for a selectbox labelled "Market" or "Sheet"
-        selectboxes = [s for s in app.sidebar.selectbox if "market" in s.label.lower()]
-        assert len(selectboxes) > 0, "No market selectbox found in sidebar"
+    def test_market_selectbox_label(self, live_app):
+        selectboxes = [s for s in live_app.sidebar.selectbox if "Market" in s.label]
+        assert len(selectboxes) > 0, "No selectbox with 'Market' label found"
 
     @pytest.mark.smoke
-    def test_app_has_no_uncaught_exceptions(self):
-        from streamlit.testing.v1 import AppTest
-
-        app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
-        app.run(timeout=120)
-        # Check for script errors — the app may produce warnings but no
-        # unhandled exceptions should terminate execution.
-        assert not app.exception, f"App raised: {app.exception}"
+    def test_sidebar_renders(self, live_app):
+        assert live_app.sidebar is not None
 
 
 # ---------------------------------------------------------------------------
@@ -125,16 +108,51 @@ class TestBundledData:
 
 
 class TestDependencyFilesPortability:
-    """Dependency files must not contain absolute local paths."""
+    """Dependency files must be portable and generated on Python 3.11."""
 
     @pytest.mark.smoke
     def test_no_local_paths_in_requirements(self):
         for fname in ["requirements.txt", "requirements-dev.txt"]:
             path = REPO_ROOT / fname
-            if not path.exists():
-                pytest.skip(f"{fname} not found — will be generated in a later step")
+            assert path.exists(), f"{fname} is missing"
             content = path.read_text(encoding="utf-8")
-            assert "file:///" not in content, f"{fname} contains a local absolute path (file:///)"
+            for pattern in ["file:///", "C:/", "C:\\", "/Users/", "/home/"]:
+                assert pattern not in content, f"{fname} contains {pattern}"
+
+    @pytest.mark.smoke
+    def test_lock_files_generated_on_python_311(self):
+        """The lock file headers must indicate Python 3.11 generation."""
+        for fname in ["requirements.txt", "requirements-dev.txt"]:
+            path = REPO_ROOT / fname
+            assert path.exists(), f"{fname} is missing"
+            lines = path.read_text(encoding="utf-8").split("\n")
+            header_line = next((line for line in lines if "Python" in line), "")
+            assert "Python 3.11" in header_line, (
+                f"{fname} was not generated on Python 3.11: {header_line.strip()}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Golden file schema validation
+# ---------------------------------------------------------------------------
+
+
+class TestGoldenSchema:
+    """All golden files must contain the required schema fields."""
+
+    @pytest.mark.smoke
+    def test_golden_files_have_valid_schema(self):
+        golden_dir = REPO_ROOT / "tests" / "golden"
+        json_files = sorted(golden_dir.glob("*.json"))
+        assert len(json_files) > 0, "No golden files found"
+
+        for gf in json_files:
+            data = json.loads(gf.read_text(encoding="utf-8"))
+            for field in REQUIRED_GOLDEN_FIELDS:
+                assert field in data, f"{gf.name} missing field: {field}"
+            assert isinstance(data["schema_version"], int)
+            assert isinstance(data["fixture_version"], int)
+            assert isinstance(data["expected"], dict)
 
 
 # ---------------------------------------------------------------------------

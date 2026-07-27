@@ -10,7 +10,7 @@ Monolithic Streamlit application undergoing modular refactoring. The production 
 
 - **Python 3.11 only** (3.12+ is not supported yet)
 
-## Quick start
+## Quick start (runtime)
 
 ```bash
 # 1. Create a Python 3.11 virtual environment
@@ -18,12 +18,29 @@ python3.11 -m venv .venv
 source .venv/bin/activate   # Linux/macOS
 .venv\Scripts\activate      # Windows
 
-# 2. Install dependencies
-pip install -r requirements-dev.txt
-pip install -e . --no-deps
+# 2. Install runtime dependencies
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 # 3. Run the app
 streamlit run geotestmatch.py
+```
+
+## Quick start (development)
+
+```bash
+# 1. Create a Python 3.11 virtual environment
+python3.11 -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate      # Windows
+
+# 2. Install all dependencies (runtime + test + lint tools)
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
+
+# 3. Verify
+ruff check .
+pytest -q -m "not slow"
 ```
 
 The app automatically loads the bundled workbook from:
@@ -43,11 +60,11 @@ GeoTestLab supports a four-stage workflow through four tabs:
 Runtime dependencies are declared in `pyproject.toml` (loose version ranges) and pinned into lock files:
 
 ```bash
-# Regenerate runtime lock file
-pip-compile --output-file=requirements.txt pyproject.toml
+# Regenerate runtime lock file (Python 3.11 only)
+python -m piptools compile --extra=bayesian --strip-extras --annotation-style=line --no-emit-index-url --no-emit-options --no-emit-trusted-host --output-file=requirements.txt pyproject.toml
 
-# Regenerate dev lock file
-pip-compile --extra=dev --output-file=requirements-dev.txt pyproject.toml
+# Regenerate dev lock file (Python 3.11 only)
+python -m piptools compile --extra=bayesian --extra=dev --strip-extras --annotation-style=line --no-emit-index-url --no-emit-options --no-emit-trusted-host --output-file=requirements-dev.txt pyproject.toml
 ```
 
 **Important**: Always regenerate lock files in a clean Python 3.11 environment. Do not edit `requirements.txt` or `requirements-dev.txt` by hand.

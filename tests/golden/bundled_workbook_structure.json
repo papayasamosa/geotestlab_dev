@@ -1,8 +1,11 @@
 {
-  "baseline_commit": "fbd6cc6",
-  "fixture_version": "1.0",
+  "schema_version": 1,
   "scenario": "bundled_workbook_structure",
-  "data": {
+  "fixture_version": 1,
+  "app_baseline_commit": "9072af2",
+  "golden_created_by_commit": "c52565a",
+  "settings": {},
+  "expected": {
     "n_sheets": 9,
     "sheet_names": [
       "UK",
@@ -15,5 +18,9 @@
       "Italy",
       "Mexico"
     ]
-  }
+  },
+  "tolerances": {},
+  "known_limitations": [
+    "Sheet count may change when markets are added or removed."
+  ]
 }

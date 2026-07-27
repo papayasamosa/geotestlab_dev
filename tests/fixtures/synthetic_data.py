@@ -20,8 +20,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-# Shared RNG for deterministic generation — seeds are fixed per function.
-_RNG = np.random.default_rng(42)
+# Fixed reference date so tests are independent of the clock.
+DEFAULT_END_DATE = datetime.date(2026, 6, 28)
 
 
 # ---------------------------------------------------------------------------
@@ -98,23 +98,30 @@ def synthetic_demographic_data(
     pop_density = rng.uniform(10, 5_000, size=n_regions)
     median_income = rng.uniform(20_000, 80_000, size=n_regions)
 
-    # Proportion features — generate and normalise complementary pairs.
-    female = rng.uniform(0.45, 0.55, size=n_regions)
-    male = 1.0 - female
+    # Proportion features — use Dirichlet distribution so ALL categories
+    # within each group sum exactly to 1 without clipping.
+    # Gender: Female + Male = 1
+    gender = rng.dirichlet(np.ones(2), size=n_regions)  # shape (n, 2)
+    female = gender[:, 0]
+    male = gender[:, 1]
 
-    age_u16 = rng.uniform(0.12, 0.25, size=n_regions)
-    age_16_24 = rng.uniform(0.08, 0.18, size=n_regions)
-    age_25_34 = rng.uniform(0.12, 0.22, size=n_regions)
-    age_35_49 = rng.uniform(0.15, 0.25, size=n_regions)
-    age_50_64 = rng.uniform(0.10, 0.20, size=n_regions)
-    age_65plus = 1.0 - (age_u16 + age_16_24 + age_25_34 + age_35_49 + age_50_64)
-    age_65plus = np.clip(age_65plus, 0.05, 0.30)
+    # Age bands: all six sum to 1
+    age_alphas = np.array([4, 3, 4, 5, 3, 2], dtype=float)
+    age_proportions = rng.dirichlet(age_alphas, size=n_regions)  # shape (n, 6)
+    age_u16 = age_proportions[:, 0]
+    age_16_24 = age_proportions[:, 1]
+    age_25_34 = age_proportions[:, 2]
+    age_35_49 = age_proportions[:, 3]
+    age_50_64 = age_proportions[:, 4]
+    age_65plus = age_proportions[:, 5]
 
-    sg_ab = rng.uniform(0.15, 0.35, size=n_regions)
-    sg_c1 = rng.uniform(0.15, 0.30, size=n_regions)
-    sg_c2 = rng.uniform(0.10, 0.25, size=n_regions)
-    sg_de = 1.0 - (sg_ab + sg_c1 + sg_c2)
-    sg_de = np.clip(sg_de, 0.05, 0.35)
+    # Social grades: all four sum to 1
+    sg_alphas = np.array([3, 3, 2, 2], dtype=float)
+    sg_proportions = rng.dirichlet(sg_alphas, size=n_regions)  # shape (n, 4)
+    sg_ab = sg_proportions[:, 0]
+    sg_c1 = sg_proportions[:, 1]
+    sg_c2 = sg_proportions[:, 2]
+    sg_de = sg_proportions[:, 3]
 
     df = pd.DataFrame(
         {
@@ -145,6 +152,7 @@ def synthetic_kpi_data(
     seed: int = 42,
     metric_name: str = "Sales",
     missing_rate: float = 0.0,
+    end_date: datetime.date = DEFAULT_END_DATE,
 ) -> pd.DataFrame:
     """Create a synthetic weekly KPI DataFrame in long format.
 
@@ -163,6 +171,8 @@ def synthetic_kpi_data(
         Label for the metric column.
     missing_rate : float
         Fraction of KPI values to set to NaN (0.0 = no missing).
+    end_date : datetime.date
+        End date for the date range (default DEFAULT_END_DATE).
 
     Returns
     -------
@@ -171,7 +181,7 @@ def synthetic_kpi_data(
     """
     rng = np.random.default_rng(seed)
     dates = pd.date_range(
-        end=datetime.date.today(),
+        end=end_date,
         periods=n_weeks,
         freq="W",
     )
@@ -202,6 +212,7 @@ def synthetic_daily_kpi_data(
     seed: int = 42,
     metric_name: str = "Sales",
     missing_rate: float = 0.0,
+    end_date: datetime.date = DEFAULT_END_DATE,
 ) -> pd.DataFrame:
     """Create a synthetic daily KPI DataFrame in long format.
 
@@ -209,7 +220,7 @@ def synthetic_daily_kpi_data(
     """
     rng = np.random.default_rng(seed)
     dates = pd.date_range(
-        end=datetime.date.today(),
+        end=end_date,
         periods=n_days,
         freq="D",
     )
