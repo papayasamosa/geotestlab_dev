@@ -111,8 +111,9 @@ def test_structural_intermediate_matches_golden():
 
 @pytest.mark.slow
 class TestConstraints:
+    @classmethod
     @pytest.fixture(scope="class")
-    def result(self):
+    def result(cls):
         return drive_constraints()
 
     def test_forced_test_region_is_included(self, result):
