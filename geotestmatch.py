@@ -19,6 +19,17 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 
+from geotestlab.data.exceptions import (
+    MissingIdentifierColumnsError,
+    NoRetainedKPIObservationsError,
+    NoValidDateColumnsError,
+    UnreadableWorkbookError,
+    UnresolvedAggregationColumnError,
+    UnresolvedMetricColumnError,
+)
+from geotestlab.data.ingestion import detect_date_columns, detect_metric_column
+from geotestlab.data.ingestion import load_and_reshape_kpi as _load_and_reshape_kpi
+
 # ------------------------------------------------------------
 # App configuration
 # ------------------------------------------------------------
@@ -117,93 +128,43 @@ METHOD_DATA_OPTIMISED_EXCL = "Data-Optimised Controls (Excluding Force-Exclude R
 METHOD_USER_SELECTED = "User Selected Test and Control"
 
 
-def detect_date_columns(df_raw):
-    """
-    Returns the columns in a raw uploaded KPI DataFrame that are real datetime column
-    headers (as Excel produces when dates are used as column names), in their original
-    order. Used to distinguish date/value columns from the leading identifier columns
-    (region, metric, aggregation levels, etc.) in both the simple 2-column KPI file
-    format and the newer multi-aggregation-level format.
-    """
-    from datetime import datetime as _dt
-
-    return [c for c in df_raw.columns if isinstance(c, (pd.Timestamp, _dt))]
-
-
-def detect_metric_column(non_date_cols):
-    """Best-guess the metric-name column by header text ('Metric', case-insensitive).
-    Returns None if no column matches, so callers can fall back to asking the user."""
-    for c in non_date_cols:
-        if isinstance(c, str) and c.strip().lower() == "metric":
-            return c
-    return None
-
-
 def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None):
-    """
-    Load KPI Excel, melt to long format, keep missing values as NaN.
+    """Streamlit adapter over geotestlab.data.ingestion.load_and_reshape_kpi.
 
-    Supports two file layouts, auto-detected from the number of non-date leading
-    columns:
-    - Simple (legacy): exactly 2 non-date columns — column 0 = region name, column 1
-      = metric name. agg_col/metric_col are ignored in this case.
-    - Aggregated (multiple aggregation levels): more than 2 non-date columns — e.g.
-      column 0 = a raw key not used for matching (e.g. postcode), one or more middle
-      columns = aggregation levels (e.g. TV Market, TV Region), one column = metric
-      name. Requires agg_col and metric_col (selected via UI) to resolve which column
-      is the region and which is the metric — raises ValueError if not supplied, so
-      callers must detect this case first (see detect_date_columns()) and prompt for
-      the selection before calling this function.
-
-    Rows where the resolved region column is blank are dropped BEFORE melting, so
-    unmapped/unclassified keys never silently inflate another region's totals.
+    Translates the pure module's domain exceptions into this app's existing
+    user-facing st.error()/st.stop() behaviour, and unwraps ParsedKPIData to
+    the bare long-format DataFrame callers already expect.
     """
     try:
-        df_raw = pd.read_excel(uploaded_file, engine="calamine", header=0)
-    except Exception:
-        try:
-            uploaded_file.seek(0)
-            df_raw = pd.read_excel(uploaded_file, engine="openpyxl", header=0)
-        except Exception as e:
-            st.error(
-                "The KPI file could not be read with either the calamine or openpyxl engine. "
-                "Please confirm this is a valid .xlsx file and try again. "
-                f"(Details: {e})"
-            )
-            st.stop()
-
-    date_cols = detect_date_columns(df_raw)
-    non_date_cols = [c for c in df_raw.columns if c not in date_cols]
-
-    if len(non_date_cols) <= 2:
-        region_col = df_raw.columns[0]
-        metric_col_resolved = df_raw.columns[1]
-    else:
-        if agg_col is None or metric_col is None:
-            raise ValueError(
-                "This file has more than one aggregation-level column; agg_col and "
-                "metric_col must be selected and passed in."
-            )
-        region_col = agg_col
-        metric_col_resolved = metric_col
-
-    df_raw = df_raw.dropna(subset=[region_col])
-    df_raw = df_raw[df_raw[region_col].astype(str).str.strip() != ""]
-
-    df_long = df_raw.melt(
-        id_vars=[region_col, metric_col_resolved],
-        value_vars=date_cols if date_cols else None,
-        var_name="date",
-        value_name="kpi",
-    )
-    df_long = df_long.rename(columns={region_col: "region_raw", metric_col_resolved: "metric_name"})
-    df_long["date"] = pd.to_datetime(df_long["date"], errors="coerce")
-    # Drop rows with invalid date or missing KPI (do NOT fill with 0)
-    df_long = df_long.dropna(subset=["date", "kpi"])
-    # Convert KPI to numeric, coercing errors -> NaN, then drop those rows
-    df_long["kpi"] = pd.to_numeric(df_long["kpi"], errors="coerce")
-    df_long = df_long.dropna(subset=["kpi"])
-    return df_long
+        parsed = _load_and_reshape_kpi(uploaded_file, agg_col=agg_col, metric_col=metric_col)
+    except UnreadableWorkbookError as e:
+        st.error(
+            "The KPI file could not be read with either the calamine or openpyxl engine. "
+            "Please confirm this is a valid .xlsx file and try again. "
+            f"(Details: {e})"
+        )
+        st.stop()
+    except MissingIdentifierColumnsError:
+        st.error(
+            "This file doesn't have enough columns to identify a region and a metric. "
+            "Expected at least a region column and a metric column."
+        )
+        st.stop()
+    except (UnresolvedAggregationColumnError, UnresolvedMetricColumnError) as e:
+        raise ValueError(str(e)) from e
+    except NoValidDateColumnsError:
+        st.error(
+            "No date columns were found in this file. Date columns must use Excel "
+            "date-formatted headers."
+        )
+        st.stop()
+    except NoRetainedKPIObservationsError:
+        st.error(
+            "No KPI observations remain after removing invalid dates and missing/"
+            "non-numeric KPI values. Please check the uploaded file."
+        )
+        st.stop()
+    return parsed.data
 
 
 def build_region_mapping(df_long, valid_regions, adobe_to_geo):
