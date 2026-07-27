@@ -103,6 +103,36 @@ def update_bundled_workbook_structure():
     _write_safe(path, payload)
 
 
+def update_available_markets():
+    """Capture the available market options from the live app."""
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+    app.run(timeout=180)
+
+    market_select = [s for s in app.sidebar.selectbox if s.label == "Market"]
+    assert len(market_select) == 1, "Expected exactly one Market selectbox"
+    markets = list(market_select[0].options)
+
+    payload = {
+        "schema_version": 1,
+        "scenario": "available_markets",
+        "fixture_version": 1,
+        "app_baseline_commit": _app_baseline_commit(),
+        "golden_created_by_commit": _current_commit(),
+        "settings": {},
+        "expected": {
+            "markets": markets,
+            "default_market": str(market_select[0].value),
+        },
+        "tolerances": {},
+        "known_limitations": ["Market list depends on bundled workbook sheets."],
+    }
+    path = GOLDEN_DIR / "available_markets.json"
+    print(f"  Writing {path.name}")
+    _write_safe(path, payload)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Update golden output files.")
     parser.add_argument(
@@ -122,6 +152,7 @@ def main():
     print(f"  Current commit:      {_current_commit()}")
     update_app_tab_labels()
     update_bundled_workbook_structure()
+    update_available_markets()
     print("Done.")
     print()
     print("Review the diff:")

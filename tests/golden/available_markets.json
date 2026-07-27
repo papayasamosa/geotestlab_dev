@@ -1,25 +1,25 @@
 {
   "app_baseline_commit": "e964eb5",
   "expected": {
-    "n_sheets": 9,
-    "sheet_names": [
-      "UK",
-      "Ireland",
-      "Canada",
+    "default_market": "UK",
+    "markets": [
       "Australia",
+      "Canada",
+      "Germany",
+      "Ireland",
+      "Italy",
+      "Mexico",
       "New Zealand",
       "Sweden",
-      "Germany",
-      "Italy",
-      "Mexico"
+      "UK"
     ]
   },
   "fixture_version": 1,
   "golden_created_by_commit": "e964eb5",
   "known_limitations": [
-    "Sheet count may change when markets are added or removed."
+    "Market list depends on bundled workbook sheets."
   ],
-  "scenario": "bundled_workbook_structure",
+  "scenario": "available_markets",
   "schema_version": 1,
   "settings": {},
   "tolerances": {}
