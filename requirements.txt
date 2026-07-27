@@ -14,7 +14,6 @@ certifi==2026.7.22        # via requests
 charset-normalizer==3.4.9  # via requests
 click==8.4.2              # via streamlit, uvicorn
 cloudpickle==3.1.2        # via pymc
-colorama==0.4.6           # via click
 cons==0.4.7               # via etuples, minikanren, pytensor
 contourpy==1.3.3          # via matplotlib
 cycler==0.12.1            # via matplotlib
@@ -77,7 +76,6 @@ threadpoolctl==3.6.0      # via pymc, scikit-learn
 toml==0.10.2              # via streamlit
 toolz==1.1.0              # via logical-unification, minikanren
 typing-extensions==4.16.0  # via altair, anyio, arviz, minikanren, pymc, referencing, starlette, streamlit
-tzdata==2026.3            # via pandas
 urllib3==2.7.0            # via requests
 uvicorn==0.51.0           # via streamlit
 watchdog==6.0.0           # via streamlit

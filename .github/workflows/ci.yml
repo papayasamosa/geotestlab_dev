@@ -62,3 +62,20 @@ jobs:
 
       - name: Verify lock reproducibility
         run: python scripts/compile_requirements.py --check
+
+      - name: Generate lock diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p lock-diagnostics
+          python -m piptools compile --extra=bayesian --strip-extras --annotation-style=line --no-emit-index-url --no-emit-options --no-emit-trusted-host --output-file=lock-diagnostics/requirements.txt pyproject.toml
+          python -m piptools compile --extra=bayesian --extra=dev --strip-extras --annotation-style=line --no-emit-index-url --no-emit-options --no-emit-trusted-host --output-file=lock-diagnostics/requirements-dev.txt pyproject.toml
+          diff -u requirements.txt lock-diagnostics/requirements.txt > lock-diagnostics/requirements.txt.diff || true
+          diff -u requirements-dev.txt lock-diagnostics/requirements-dev.txt > lock-diagnostics/requirements-dev.txt.diff || true
+
+      - name: Upload lock diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lock-diagnostics
+          path: lock-diagnostics/
+          if-no-files-found: ignore
