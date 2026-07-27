@@ -1,10 +1,49 @@
+# Scandinavian palette adapted from:
+# EvobyteDigitalBiology/st-styled
+# src/st_yled/themes/scandinavian/config.toml
+# MIT licence
+
 [theme]
-base="light"
-primaryColor="#0F766E"
-backgroundColor="#F8FAFC"
-secondaryBackgroundColor="#FFFFFF"
-textColor="#111827"
-font="sans serif"
+base = "light"
+primaryColor = "#5B8C7D"
+backgroundColor = "#F7F7F2"
+secondaryBackgroundColor = "#E8ECE6"
+textColor = "#1E2421"
+linkColor = "#4A7B6C"
+codeBackgroundColor = "#E3E8E1"
+font = "sans-serif"
+headingFont = "sans-serif"
+codeFont = "monospace"
+baseFontSize = 16
+baseFontWeight = 400
+codeFontSize = "14px"
+codeFontWeight = 500
+baseRadius = "6px"
+buttonRadius = "8px"
+borderColor = "#CED7CE"
+dataframeBorderColor = "#C8D1C8"
+dataframeHeaderBackgroundColor = "#D8E0D7"
+showWidgetBorder = true
+showSidebarBorder = false
+
+[theme.sidebar]
+primaryColor = "#5B8C7D"
+backgroundColor = "#EEF2EC"
+secondaryBackgroundColor = "#E1E8E1"
+textColor = "#222925"
+linkColor = "#467565"
+codeBackgroundColor = "#DCE4DC"
+font = "sans-serif"
+headingFont = "sans-serif"
+codeFont = "monospace"
+codeFontSize = "13px"
+codeFontWeight = 500
+baseRadius = "6px"
+buttonRadius = "8px"
+borderColor = "#C8D2C8"
+dataframeBorderColor = "#C2CCC2"
+dataframeHeaderBackgroundColor = "#D2DCD2"
+showWidgetBorder = true
 
 [client]
 showSidebarNavigation = false
