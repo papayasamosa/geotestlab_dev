@@ -85,7 +85,7 @@ def update_structural_basic():
 
     result = drive_structural_basic()
     payload = _payload(
-        scenario="structural_basic",
+        scenario="numerical_structural_basic",
         settings={"strategy": "Basic (Fast)", "test_region": "Aberdeen City", "market": "UK"},
         expected=result,
         tolerances={
@@ -107,7 +107,7 @@ def update_structural_intermediate():
 
     result = drive_structural_intermediate()
     payload = _payload(
-        scenario="structural_intermediate",
+        scenario="numerical_structural_intermediate",
         settings={
             "strategy": "Intermediate (Balanced)",
             "test_region": "Aberdeen City",
@@ -133,7 +133,7 @@ def update_constraints():
 
     result = drive_constraints()
     payload = _payload(
-        scenario="constraints",
+        scenario="numerical_constraints",
         settings={"setup_mode": "Set Rules & Auto-Build Groups", "market": "UK"},
         expected=result,
         tolerances={},
@@ -172,7 +172,7 @@ def update_kpi_pattern():
     with tempfile.TemporaryDirectory() as tmp:
         result = drive_kpi_pattern(Path(tmp))
     payload = _payload(
-        scenario="kpi_pattern",
+        scenario="numerical_kpi_pattern",
         settings={
             "fixture": "write_aggregated_kpi_xlsx",
             "regions": ["RegionA", "RegionB", "RegionC", "RegionD", "RegionE"],
@@ -193,7 +193,7 @@ def update_weekly_validation():
     with tempfile.TemporaryDirectory() as tmp:
         result = drive_weekly_validation(Path(tmp))
     payload = _payload(
-        scenario="weekly_validation",
+        scenario="numerical_weekly_validation",
         settings={
             "fixture": "write_simple_kpi_xlsx",
             "test_region": "Aberdeen City",
@@ -227,7 +227,7 @@ def update_completed_test_evaluation():
     with tempfile.TemporaryDirectory() as tmp:
         result = drive_completed_test_evaluation(Path(tmp))
     payload = _payload(
-        scenario="completed_test_evaluation",
+        scenario="numerical_completed_test_evaluation",
         settings={
             "fixture": "write_simple_kpi_xlsx",
             "test_region": "Aberdeen City",
@@ -271,7 +271,7 @@ def update_daily_evaluation():
     with tempfile.TemporaryDirectory() as tmp:
         result = drive_daily_evaluation(Path(tmp))
     payload = _payload(
-        scenario="daily_evaluation",
+        scenario="numerical_daily_evaluation",
         settings={
             "fixture": "write_daily_kpi_xlsx",
             "test_region": "Aberdeen City",
