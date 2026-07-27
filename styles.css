@@ -1,36 +1,23 @@
 :root {
-  --bg: #F8FAFC;
-  --card: #FFFFFF;
-  --text: #111827;
-  --text-light: #4B5563;
-  --muted: #6B7280;
-  --border: #E5E7EB;
-  --teal: #0F766E;
-  --teal-dark: #0D5D5A;
-  --teal-light: #CCFBF1;
-  --teal-soft: #E6F7F5;
-  --purple: #7C3AED;
-  --purple-dark: #6D28D9;
-  --purple-light: #EDE9FE;
+  --border: #CED7CE;
+  --card: #E8ECE6;
+  --primary: #5B8C7D;
+  --primary-hover: #4A7B6C;
+  --primary-soft: #E8ECE6;
+  --primary-tint: #E3E8E1;
+  --muted: #5B6B62;
   --success: #10B981;
   --warning: #F59E0B;
   --error: #EF4444;
+  --info: #3B82F6;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
+  --radius-sm: 6px;
+  --radius-md: 8px;
 }
 
 .stTabs [data-baseweb="tab-list"] {
     background-color: transparent;
-}
-
-/* Base styles */
-html, body, [data-testid="stAppViewContainer"] { 
-  background: var(--bg); 
-  color: var(--text);
 }
 
 html {
@@ -38,20 +25,20 @@ html {
 }
 
 /* Main container */
-.block-container { 
-  max-width: 1400px; 
-  padding-top: 2rem; 
+.block-container {
+  max-width: 1400px;
+  padding-top: 2rem;
   padding-bottom: 2rem;
 }
 
-/* Sidebar styling */
-[data-testid="stSidebar"] { 
-  border-right: 1px solid var(--border); 
-  background: var(--card);
+/* Sidebar: vertical separator and background are owned by [theme] /
+   [theme.sidebar] (showSidebarBorder, backgroundColor) — only add the
+   depth cue native theming doesn't provide. */
+[data-testid="stSidebar"] {
   box-shadow: var(--shadow-sm);
 }
 
-[data-testid="stSidebarUserContent"] { 
+[data-testid="stSidebarUserContent"] {
   padding-top: 1rem;
   padding-bottom: 2rem;
 }
@@ -62,11 +49,12 @@ h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
   letter-spacing: -0.02em;
 }
 
-h1 { font-size: 2rem; color: var(--text); }
-h2 { font-size: 1.5rem; color: var(--text); }
-h3 { font-size: 1.25rem; color: var(--text); }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
 
-/* Cards / Containers */
+/* Cards / Containers — not native "input widgets", so showWidgetBorder
+   doesn't reach these; card chrome stays a CSS-level refinement. */
 .stExpander, [data-testid="stMetric"], .stAlert {
   background: var(--card);
   border: 1px solid var(--border);
@@ -75,17 +63,13 @@ h3 { font-size: 1.25rem; color: var(--text); }
 }
 
 .stExpander:hover {
-  border-color: var(--teal-light);
+  border-color: var(--primary-tint);
   transition: all 0.2s ease;
 }
 
 /* Metrics grid */
 [data-testid="stMetric"] {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   padding: 1rem;
-  box-shadow: var(--shadow-sm);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   gap: 0.5rem;
 }
@@ -93,11 +77,11 @@ h3 { font-size: 1.25rem; color: var(--text); }
 [data-testid="stMetric"]:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
-  border-color: var(--teal-light);
+  border-color: var(--primary-tint);
 }
 
-[data-testid="stMetricLabel"] { 
-  color: var(--text-light);
+[data-testid="stMetricLabel"] {
+  color: var(--muted);
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -105,7 +89,7 @@ h3 { font-size: 1.25rem; color: var(--text); }
 [data-testid="stMetricValue"] {
   font-size: 1.75rem;
   font-weight: 700;
-  color: var(--teal);
+  color: var(--primary);
 }
 
 /* Fallback metric selector for older Streamlit versions */
@@ -113,66 +97,55 @@ h3 { font-size: 1.25rem; color: var(--text); }
   gap: 0.5rem;
 }
 
-/* Buttons */
+/* Buttons — resting colours (primaryColor / secondaryBackgroundColor) and
+   radius (buttonRadius) come from [theme]; only hover-state affordances,
+   which native theming has no slot for, are added here. */
 .stButton > button {
-  border-radius: var(--radius-sm);
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
-.stButton > button[kind="primary"] {
-  background: var(--teal);
-  border: 1px solid var(--teal);
-  color: #fff;
-}
-
 .stButton > button[kind="primary"]:hover {
-  background: var(--teal-dark);
-  border-color: var(--teal-dark);
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
-.stButton > button:not([kind="primary"]) {
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
 .stButton > button:not([kind="primary"]):hover {
-  background: var(--bg);
-  border-color: var(--teal);
-  color: var(--teal);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
-/* Accessibility - focus outlines */
-button:focus-visible, 
-input:focus-visible, 
-select:focus-visible, 
-textarea:focus-visible, 
+/* Accessibility — visible keyboard focus on every interactive control */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="combobox"]:focus-visible,
+[role="radio"]:focus-visible,
+[role="checkbox"]:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 3px solid #5B8C7D;
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
-/* Dataframes and tables */
-[data-testid="stDataFrame"], .stDataFrame {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+/* Streamlit's own primary-button styling wins the cascade over the
+   generic button:focus-visible rule above at equal specificity, so
+   kind="primary" needs its own, more specific rule to stay visible. */
+button[kind="primary"]:focus-visible {
+  outline: 3px solid #5B8C7D !important;
+  outline-offset: 2px;
 }
 
 /* Expander headers */
 .streamlit-expanderHeader {
   font-weight: 500;
-  background: var(--bg);
   border-radius: var(--radius-md);
 }
 
 .streamlit-expanderHeader:hover {
-  background: var(--teal-soft);
-  color: var(--teal);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* Expander icon animation */
@@ -187,7 +160,6 @@ textarea:focus-visible,
 /* Tabs */
 .stTabs [data-baseweb="tab-list"] {
   gap: 2px;
-  background: var(--card);
   border-bottom: 2px solid var(--border);
   padding-bottom: 0;
 }
@@ -196,7 +168,7 @@ textarea:focus-visible,
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   padding: 0.5rem 1.1rem;
   font-weight: 500;
-  color: var(--text-light);
+  color: var(--muted);
   border: none;
   background: transparent;
   box-shadow: none;
@@ -204,14 +176,13 @@ textarea:focus-visible,
 }
 
 .stTabs [data-baseweb="tab"]:hover {
-  color: var(--teal);
-  background: var(--teal-soft);
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .stTabs [aria-selected="true"] {
-  color: var(--teal);
-  background: var(--card);
-  border-bottom: 2px solid var(--teal) !important;
+  color: var(--primary);
+  border-bottom: 2px solid var(--primary) !important;
   box-shadow: none !important;
   margin-bottom: -2px;
 }
@@ -219,10 +190,6 @@ textarea:focus-visible,
 /* Select boxes and inputs */
 .stSelectbox, .stMultiSelect, .stSlider {
   margin-bottom: 0.5rem;
-}
-
-.stSelectbox > div, .stMultiSelect > div {
-  border-radius: var(--radius-sm);
 }
 
 /* Radio buttons */
@@ -246,19 +213,23 @@ hr {
   border-radius: var(--radius-md);
 }
 
-.stAlert[data-testid="stAlertSuccess"] { 
+/* Semantic status colours are kept distinct from the chrome palette —
+   every alert also carries Streamlit's built-in status icon/text. */
+.stAlert[data-testid="stAlertSuccess"] {
   border-left-color: var(--success);
 }
 
-.stAlert[data-testid="stAlertWarning"] { 
+.stAlert[data-testid="stAlertWarning"] {
   border-left-color: var(--warning);
 }
 
-.stAlert[data-testid="stAlertError"] { 
+.stAlert[data-testid="stAlertError"] {
   border-left-color: var(--error);
 }
 
-/* NO PROGRESS BAR CSS - using Streamlit default (which works) */
+.stAlert[data-testid="stAlertInfo"] {
+  border-left-color: var(--info);
+}
 
 /* Captions and muted text */
 .small-muted, .stCaption, caption {
@@ -284,7 +255,7 @@ hr {
 }
 
 [data-testid="stTooltipIcon"]:hover {
-  color: var(--teal);
+  color: var(--primary);
 }
 
 /* Success/Info/Warning/Error boxes */
@@ -302,19 +273,15 @@ hr {
   height: 4px;
 }
 
-.stSlider [data-baseweb="slider"] .st-eb {
-  background: var(--teal-light);
-}
-
 .stSlider [data-testid="stThumbValue"] {
-  background: var(--teal);
+  background: var(--primary);
   border: 2px solid var(--card);
   box-shadow: var(--shadow-sm);
 }
 
 /* Loading spinner */
 [data-testid="stStatusWidget"] svg {
-  stroke: var(--teal);
+  stroke: var(--primary);
 }
 
 /* Images */
@@ -330,54 +297,23 @@ img {
 
 /* Responsive design */
 @media (max-width: 900px) {
-  .block-container { 
-    padding-top: 1.5rem; 
+  .block-container {
+    padding-top: 1.5rem;
     padding-left: 1rem;
     padding-right: 1rem;
   }
-  
+
   [data-testid="stMetric"] {
     padding: 0.75rem;
   }
-  
+
   [data-testid="stMetricValue"] {
     font-size: 1.25rem;
   }
-  
+
   h1 { font-size: 1.75rem; }
   h2 { font-size: 1.35rem; }
   h3 { font-size: 1.15rem; }
-}
-
-/* Dark mode support using Streamlit's native .dark class */
-.dark {
-  --bg: #0F172A;
-  --card: #1E293B;
-  --text: #F1F5F9;
-  --text-light: #CBD5E1;
-  --muted: #94A3B8;
-  --border: #334155;
-}
-
-/* Fallback dark mode using system preference */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0F172A;
-    --card: #1E293B;
-    --text: #F1F5F9;
-    --text-light: #CBD5E1;
-    --muted: #94A3B8;
-    --border: #334155;
-  }
-  
-  [data-testid="stMetric"] {
-    background: var(--card);
-  }
-  
-  .stButton > button:not([kind="primary"]) {
-    background: var(--card);
-    color: var(--text);
-  }
 }
 
 /* ============================================
@@ -409,31 +345,11 @@ img {
   background: transparent;
 }
 
-/* ============================================
-   FIX: Remove green focus box from dropdowns
-   ============================================ */
-
-/* Remove focus rings from select boxes when clicked */
-.stSelectbox *:focus,
-.stSelectbox *:focus-visible,
-.stSelectbox *:focus-within,
-[data-baseweb="select"] *:focus,
-[data-baseweb="select"] *:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
-}
-
-/* Keep subtle indicator for keyboard users only */
-.stSelectbox input:focus-visible {
-  outline: 1px solid var(--teal) !important;
-  outline-offset: -1px !important;
-}
-
-/* Style dropdown item hover and selection without green box */
+/* Style dropdown item hover and selection */
 [data-baseweb="popover"] [role="option"]:hover {
-  background-color: var(--teal-soft) !important;
+  background-color: var(--primary-soft) !important;
 }
 
 [data-baseweb="popover"] [role="option"][aria-selected="true"] {
-  background-color: var(--teal-light) !important;
+  background-color: var(--primary-tint) !important;
 }
