@@ -2,11 +2,13 @@
 
 import streamlit as st
 
+
 def init_session_state():
     """Initialise all session state variables."""
     if "current_step" not in st.session_state:
         st.session_state.current_step = 1
-        
+
+
 def reset_design_results():
     """Reset only the design step results (keeps market/geography selection)."""
     st.session_state.design["final_controls"] = None
@@ -19,7 +21,7 @@ def reset_design_results():
     st.session_state.design["selected_experiment_regions"] = []
     st.session_state.design["comp_df"] = None
     st.session_state.design["run_clicked"] = False
-    
+
     # Design step
     if "design" not in st.session_state:
         st.session_state.design = {
@@ -91,7 +93,8 @@ def reset_design_results():
     if "evaluation" not in st.session_state:
         st.session_state.evaluation = {}
 
-def reset_design_results():
+
+def reset_design_results():  # noqa: F811
     """Reset only the design step results (keeps market/geography selection)."""
     st.session_state.design["final_controls"] = None
     st.session_state.design["test_df"] = None
