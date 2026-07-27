@@ -1,14 +1,19 @@
 {
-  "baseline_commit": "fbd6cc6",
-  "fixture_version": "1.0",
+  "schema_version": 1,
   "scenario": "app_tab_labels",
-  "data": {
+  "fixture_version": 1,
+  "app_baseline_commit": "9072af2",
+  "golden_created_by_commit": "c52565a",
+  "settings": {},
+  "expected": {
+    "n_tabs": 4,
     "tab_labels": [
       "\u2699\ufe0f Region Matching",
       "\ud83d\udd0d Validate Test Design",
       "\ud83d\udcca Measure Test Impact",
       "\ud83e\udde0 Bayesian TBR"
-    ],
-    "n_tabs": 4
-  }
+    ]
+  },
+  "tolerances": {},
+  "known_limitations": []
 }

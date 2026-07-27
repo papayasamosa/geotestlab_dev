@@ -46,3 +46,6 @@ htmlcov/
 
 # --- Downloaded / generated ---
 *.py_backup/
+
+# --- Temp files ---
+.__atomic-*
