@@ -1,10 +1,5 @@
 {
-  "schema_version": 1,
-  "scenario": "app_tab_labels",
-  "fixture_version": 1,
-  "app_baseline_commit": "9072af2",
-  "golden_created_by_commit": "c52565a",
-  "settings": {},
+  "app_baseline_commit": "e964eb5",
   "expected": {
     "n_tabs": 4,
     "tab_labels": [
@@ -14,6 +9,11 @@
       "\ud83e\udde0 Bayesian TBR"
     ]
   },
-  "tolerances": {},
-  "known_limitations": []
+  "fixture_version": 1,
+  "golden_created_by_commit": "e964eb5",
+  "known_limitations": [],
+  "scenario": "app_tab_labels",
+  "schema_version": 1,
+  "settings": {},
+  "tolerances": {}
 }
