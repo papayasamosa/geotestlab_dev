@@ -383,13 +383,15 @@ def _validation_result_summary(res: dict) -> dict:
 
 
 def drive_weekly_validation(tmp_path: Path) -> dict:
-    from tests.fixture_factories.write_simple_kpi_xlsx import write_simple_kpi_xlsx
+    from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 
-    kpi_path = write_simple_kpi_xlsx(
+    kpi_path = write_correlated_kpi_xlsx(
         tmp_path / "weekly.xlsx",
-        [TEST_REGION] + CONTROL_REGIONS,
+        TEST_REGION,
+        CONTROL_REGIONS,
         metric_name="Sales",
-        n_weeks=60,
+        n_periods=60,
+        freq="W",
         seed=123,
     )
 
@@ -415,13 +417,15 @@ def drive_weekly_validation(tmp_path: Path) -> dict:
 
 
 def drive_completed_test_evaluation(tmp_path: Path) -> dict:
-    from tests.fixture_factories.write_simple_kpi_xlsx import write_simple_kpi_xlsx
+    from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 
-    kpi_path = write_simple_kpi_xlsx(
+    kpi_path = write_correlated_kpi_xlsx(
         tmp_path / "weekly_eval.xlsx",
-        [TEST_REGION] + CONTROL_REGIONS,
+        TEST_REGION,
+        CONTROL_REGIONS,
         metric_name="Sales",
-        n_weeks=60,
+        n_periods=60,
+        freq="W",
         seed=123,
     )
 
@@ -453,13 +457,15 @@ def drive_completed_test_evaluation(tmp_path: Path) -> dict:
 
 
 def drive_daily_evaluation(tmp_path: Path) -> dict:
-    from tests.fixture_factories.write_daily_kpi_xlsx import write_daily_kpi_xlsx
+    from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 
-    kpi_path = write_daily_kpi_xlsx(
+    kpi_path = write_correlated_kpi_xlsx(
         tmp_path / "daily.xlsx",
-        [TEST_REGION] + CONTROL_REGIONS,
+        TEST_REGION,
+        CONTROL_REGIONS,
         metric_name="Sales",
-        n_days=150,
+        n_periods=150,
+        freq="D",
         seed=321,
     )
 
