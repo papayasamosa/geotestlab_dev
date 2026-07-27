@@ -151,6 +151,15 @@ def update_constraints():
             "search / matching strategy, not guaranteed presence in the final "
             "selected control group — the matching strategy can still leave it "
             "unselected if it doesn't improve Weighted Structural Distance.",
+            "find_guided_test_group() is not seeded — n_test_regions, "
+            "n_control_regions, and guided_share_info.achieved vary between "
+            "identical runs (confirmed directly: two consecutive captures with "
+            "unchanged inputs produced different group sizes and achieved "
+            "shares). Only the constraint-satisfaction booleans "
+            "(forced/excluded region membership) are deterministic and are "
+            "what tests/test_numerical_characterisation.py actually asserts; "
+            "the counts and achieved share recorded here are illustrative, "
+            "not a reproducible golden value.",
         ],
     )
     _write_safe(GOLDEN_DIR / "numerical_constraints.json", payload)

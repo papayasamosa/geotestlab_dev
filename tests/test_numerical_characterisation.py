@@ -136,9 +136,24 @@ class TestConstraints:
         assert conflict["ctrl_include_value_after_conflict_attempt"] == []
         assert len(conflict["exp_include_value_after_conflict_attempt"]) == 1
 
-    def test_matches_golden(self, result):
+    def test_forced_control_region_selection_matches_golden(self, result):
+        """The one part of the guided-search output that IS stable across
+        runs despite find_guided_test_group() being unseeded (see golden's
+        known_limitations): whether the force-included control region
+        actually got selected by the (deterministic, Greedy/NearestNeighbor)
+        matching strategy from whatever pool the search happened to build."""
         golden = _load_golden("numerical_constraints")
-        _assert_matches_golden(result, golden)
+        expected = golden["expected"]["constraints"]
+        assert (
+            result["constraints"]["forced_control_region_in_control_group"]
+            == expected["forced_control_region_in_control_group"]
+        )
+
+    def test_target_share_met(self, result):
+        """find_guided_test_group() is unseeded (exact group sizes vary run
+        to run — see golden's known_limitations), but it should still reach
+        the target population share within tolerance on every run."""
+        assert result["constraints"]["guided_share_info"]["met"] is True
 
 
 # ---------------------------------------------------------------------------
