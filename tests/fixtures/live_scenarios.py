@@ -557,3 +557,78 @@ def drive_daily_evaluation(tmp_path: Path) -> dict:
     summary["run_button_disabled_before_run"] = run_btn_disabled_before_run
     summary.update(_app_messages(app))
     return summary
+
+
+# ---------------------------------------------------------------------------
+# 8. Time-series tracking-outage exclusion (Design mode)
+# ---------------------------------------------------------------------------
+
+
+def drive_outage_exclusion(tmp_path: Path) -> dict:
+    """Injects one market-wide zero week into an otherwise-clean correlated
+    weekly fixture, then drives Design-mode validation to prove: the outage
+    week is auto-detected and preselected in the 'Periods to exclude...'
+    widget, the selection survives the Run button click, and the run
+    snapshot records it as both an automatic and an effective exclusion."""
+    from openpyxl import load_workbook
+
+    from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
+
+    kpi_path = write_correlated_kpi_xlsx(
+        tmp_path / "outage.xlsx",
+        TEST_REGION,
+        CONTROL_REGIONS,
+        metric_name="Sales",
+        n_periods=60,
+        freq="W",
+        seed=123,
+    )
+
+    # Zero out one interior date column for every region — a market-wide
+    # tracking outage week, injected on top of otherwise-clean correlated data.
+    wb = load_workbook(kpi_path)
+    ws = wb.active
+    header = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+    outage_col_idx = 30  # 0-based; well inside the 60-period pre-period history
+    for row in ws.iter_rows(min_row=2):
+        row[outage_col_idx].value = 0
+    wb.save(kpi_path)
+    outage_date = pd.Timestamp(header[outage_col_idx])
+
+    app = _new_app()
+    _manual_match(app)
+    _upload_kpi(app, "design", "outage.xlsx", kpi_path.read_bytes())
+
+    outage_widget = [m for m in app.multiselect if m.label == "kpi_outage_exclude"][0]
+    preselected_labels = list(outage_widget.value)
+    outage_date_preselected = any(
+        lbl.startswith(outage_date.strftime("%d %b %y")) for lbl in preselected_labels
+    )
+
+    app.run(timeout=RUN_TIMEOUT)  # unrelated rerun — selection must survive
+    outage_widget_mid = [m for m in app.multiselect if m.label == "kpi_outage_exclude"][0]
+    value_persisted_before_run_click = list(outage_widget_mid.value) == preselected_labels
+
+    run_btn = [b for b in app.button if b.key == "design_run_button"][0]
+    run_btn.click()
+    app.run(timeout=RUN_TIMEOUT)
+
+    outage_widget_after = [m for m in app.multiselect if m.label == "kpi_outage_exclude"][0]
+    value_persisted_after_run_click = list(outage_widget_after.value) == preselected_labels
+
+    ss = app.session_state
+    vr = _sget(ss, "validation_results") or {}
+
+    summary = _to_jsonable(
+        {
+            "n_preselected": len(preselected_labels),
+            "outage_date_preselected": outage_date_preselected,
+            "value_persisted_before_run_click": value_persisted_before_run_click,
+            "value_persisted_after_run_click": value_persisted_after_run_click,
+            "automatic_outage_dates": vr.get("automatic_outage_dates", []),
+            "manual_excluded_dates": vr.get("manual_excluded_dates", []),
+            "effective_excluded_dates": vr.get("effective_excluded_dates", []),
+            **_app_messages(app),
+        }
+    )
+    return summary

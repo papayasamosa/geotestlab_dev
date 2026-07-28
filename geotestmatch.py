@@ -266,18 +266,14 @@ def add_lagged_control_features(
     `lag` periods earlier. The target remains the current period's `test_kpi`. Rows with
     missing lagged values are dropped.
 
-    Lag mechanics depend on frequency (pass `frequency_config` from get_frequency_config(),
-    or `time_series_frequency` — "weekly"/"daily" — and it will be resolved internally;
-    defaults to weekly if neither is given, preserving legacy row-shift behaviour for old
-    callers):
-
-    - Weekly (or any non-daily) mode: uses a row-based `.shift(lag)`. This is safe as long
-      as the weekly series has regular, evenly-spaced rows (the normal case for this app).
-    - Daily mode: uses a true *calendar-day* lag — each row is matched to the control's value
-      from exactly `date - lag days` via a date-based merge, not simply "N rows earlier".
-      If the exact `date - lag days` row is missing for a control (e.g. a gap in the daily
-      series), the lag value is left missing and the row is dropped by the dropna step below,
-      rather than silently borrowing a nearby date's value.
+    Uses a true *calendar* lag at both frequencies (pass `frequency_config` from
+    get_frequency_config(), or `time_series_frequency` — "weekly"/"daily" — and it will be
+    resolved internally; defaults to weekly if neither is given) — weekly lag N matches each
+    row to the control's value from exactly N*7 calendar days earlier, daily lag N from
+    exactly N calendar days earlier — via a date-keyed merge, never a row-position shift. If
+    the exact source date is missing or was excluded (e.g. a gap in the series), the lag
+    value is left missing and the row is dropped by the dropna step below, rather than
+    silently borrowing a nearby date's value as though it were the previous period.
 
     Args:
         model_df: DataFrame with a "date" column, a "test_kpi" column, and one column per
@@ -308,7 +304,7 @@ def add_lagged_control_features(
         frequency_config = get_frequency_config(
             time_series_frequency if time_series_frequency is not None else "weekly"
         )
-    use_date_based_lag = frequency_config.get("frequency") == "daily"
+    period_days = 1 if frequency_config.get("frequency") == "daily" else 7
 
     model_df_lagged = model_df.sort_values("date").reset_index(drop=True).copy()
     model_df_lagged["date"] = pd.to_datetime(model_df_lagged["date"])
@@ -316,29 +312,20 @@ def add_lagged_control_features(
     lagged_feature_map = {}
     lag_cols_all = []
 
-    if use_date_based_lag:
-        # True calendar-day lag: match each row to the control value from date - lag days,
-        # via a date-keyed merge rather than a row-position shift. Missing lag dates produce
-        # NaN (dropped below), never a borrowed/nearest value.
-        for c in control_list:
-            lagged_feature_map[c] = {"current": c}
-            for lag in lags:
-                lag_col = f"{c}_lag{lag}"
-                lookup = model_df_lagged[["date", c]].copy()
-                lookup["date"] = lookup["date"] + pd.Timedelta(days=int(lag))
-                lookup = lookup.rename(columns={c: lag_col})
-                model_df_lagged = model_df_lagged.merge(lookup, on="date", how="left")
-                lagged_feature_map[c][f"lag{lag}"] = lag_col
-                lag_cols_all.append(lag_col)
-    else:
-        # Row-based shift (weekly / regular-interval default): preserves existing behaviour.
-        for c in control_list:
-            lagged_feature_map[c] = {"current": c}
-            for lag in lags:
-                lag_col = f"{c}_lag{lag}"
-                model_df_lagged[lag_col] = model_df_lagged[c].shift(lag)
-                lagged_feature_map[c][f"lag{lag}"] = lag_col
-                lag_cols_all.append(lag_col)
+    # True calendar lag: match each row to the control value from exactly
+    # `lag * period_days` days earlier, via a date-keyed merge rather than a row-position
+    # shift. Missing/excluded source dates produce NaN (dropped below), never a
+    # borrowed/nearest value.
+    for c in control_list:
+        lagged_feature_map[c] = {"current": c}
+        for lag in lags:
+            lag_col = f"{c}_lag{lag}"
+            lookup = model_df_lagged[["date", c]].copy()
+            lookup["date"] = lookup["date"] + pd.Timedelta(days=int(lag) * period_days)
+            lookup = lookup.rename(columns={c: lag_col})
+            model_df_lagged = model_df_lagged.merge(lookup, on="date", how="left")
+            lagged_feature_map[c][f"lag{lag}"] = lag_col
+            lag_cols_all.append(lag_col)
 
     model_df_lagged = model_df_lagged.dropna(subset=lag_cols_all).reset_index(drop=True)
     rows_after_lag_drop = len(model_df_lagged)
@@ -1057,6 +1044,7 @@ def build_regularized_model(method_name, n_periods, n_splits_pref=5, fixed_alpha
 def rolling_origin_validation(
     X,
     y,
+    frequency_config,
     horizon=4,
     min_training_periods=13,
     dates=None,
@@ -1120,15 +1108,27 @@ def rolling_origin_validation(
             np.nan,
             np.nan,
             "No folds: insufficient pre-period history for rolling-origin validation.",
+            0,
         )
 
+    _dates_valid = dates is not None and len(dates) == n
     folds = []
     fold_num = 0
+    windows_skipped_non_contiguous = 0
     _all_starts = list(range(min_training_periods, n - horizon + 1))
     if len(_all_starts) > 20:
         _step = len(_all_starts) // 20
         _all_starts = _all_starts[::_step][:20]
     for start_idx in _all_starts:
+        # A held-out window must represent `horizon` CONSECUTIVE calendar periods —
+        # skip it if an excluded/missing date left a gap inside it (training history
+        # before the window may still contain earlier gaps).
+        if _dates_valid and not _dates_are_contiguous(
+            dates[start_idx : start_idx + horizon], frequency_config
+        ):
+            windows_skipped_non_contiguous += 1
+            continue
+
         train_X, train_y = X[:start_idx], y[:start_idx]
         test_X, test_y = X[start_idx : start_idx + horizon], y[start_idx : start_idx + horizon]
         if len(test_y) < horizon:
@@ -1139,7 +1139,13 @@ def rolling_origin_validation(
         test_X_scaled = scaler.transform(test_X)
 
         if model_type not in ("enet", "lasso"):
-            return empty_df, np.nan, np.nan, "Unsupported model_type"
+            return (
+                empty_df,
+                np.nan,
+                np.nan,
+                "Unsupported model_type",
+                windows_skipped_non_contiguous,
+            )
 
         model, fold_cv_status, fold_used_cv = build_regularized_model(
             model_type, len(train_y), n_splits_pref=3
@@ -1196,6 +1202,7 @@ def rolling_origin_validation(
             np.nan,
             np.nan,
             "No folds: insufficient pre-period history for rolling-origin validation.",
+            windows_skipped_non_contiguous,
         )
 
     fold_df = pd.DataFrame(folds)
@@ -1229,7 +1236,7 @@ def rolling_origin_validation(
             f"those folds were exploratory fixed-alpha fits and are excluded from rolling-origin "
             f"validation metrics (based on the remaining {n_cv_folds} TimeSeriesSplit-CV fold(s))."
         )
-    return fold_df, rolling_smape_mean, rolling_rmse_mean, cv_status
+    return fold_df, rolling_smape_mean, rolling_rmse_mean, cv_status, windows_skipped_non_contiguous
 
 
 def classify_validation_method(fold_df, main_model_used_cv_fallback):
@@ -1359,6 +1366,19 @@ def _summarize_rolling_origin_folds(fold_df):
     }
 
 
+def _dates_are_contiguous(dates, frequency_config):
+    """True if consecutive dates are each exactly one period apart (7 calendar days for
+    weekly, 1 day for daily) with no gap. Used to keep rolling-origin/placebo evaluation
+    windows from silently spanning an excluded or missing date as though the series were
+    unbroken."""
+    period_days = 1 if frequency_config.get("frequency") == "daily" else 7
+    step = pd.Timedelta(days=period_days)
+    ts = pd.to_datetime(pd.Series(list(dates)))
+    if len(ts) < 2:
+        return True
+    return bool((ts.diff().dropna() == step).all())
+
+
 def _run_placebo_windows(
     model_pre,
     model_feature_cols,
@@ -1366,6 +1386,7 @@ def _run_placebo_windows(
     min_training_periods,
     placebo_len,
     method_name,
+    frequency_config,
     max_windows=40,
 ):
     """
@@ -1373,6 +1394,13 @@ def _run_placebo_windows(
     ("placebo testing"): repeatedly trains on an expanding window and evaluates on the
     next placebo_len periods, using the same model type as the main fit. Never falls
     back to regular KFold for time-series data — see build_regularized_model().
+
+    A candidate window is skipped (not just under-filled) when its placebo_len test
+    dates aren't calendar-contiguous at the given frequency — this happens when an
+    outage date was excluded from the pre-period, and prevents a window from silently
+    treating "period before the gap" and "period after the gap" as adjacent. Training
+    history before the window may still contain earlier gaps; only the evaluation
+    window itself must be unbroken.
 
     Subsamples to at most `max_windows` evenly-spaced windows when more are available,
     to keep runtime bounded (each window fits a fresh model). This caps the resolution
@@ -1382,27 +1410,38 @@ def _run_placebo_windows(
     "Placebo Windows" count should treat "p < 0.05" claims from very small window counts
     with this precision limit in mind.
 
-    Returns four parallel lists (placebos, placebo_uplift_pcts, placebo_smapes,
-    placebo_rmses), one entry per placebo window. All empty if placebo_len is missing/
-    non-positive or there isn't enough pre-period history for even one window.
+    Returns (placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses,
+    window_diagnostics) — the first four are parallel lists, one entry per USED placebo
+    window (all empty if placebo_len is missing/non-positive or there isn't enough
+    pre-period history for even one window). window_diagnostics is a dict with
+    windows_available, windows_used, and windows_skipped_non_contiguous.
     """
     placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses = [], [], [], []
+    window_diagnostics = {
+        "windows_available": 0,
+        "windows_used": 0,
+        "windows_skipped_non_contiguous": 0,
+    }
 
     if placebo_len is None or placebo_len <= 0:
-        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses
+        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
 
     n_pre = len(dates_pre)
     if n_pre < placebo_len + min_training_periods:
-        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses
+        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
 
     all_starts = list(range(min_training_periods, n_pre - placebo_len + 1))
     if len(all_starts) > max_windows:
         step = len(all_starts) // max_windows
         all_starts = all_starts[::step][:max_windows]
+    window_diagnostics["windows_available"] = len(all_starts)
 
     for start_idx in all_starts:
         train_dates = dates_pre[:start_idx]
         test_dates = dates_pre[start_idx : start_idx + placebo_len]
+        if not _dates_are_contiguous(test_dates, frequency_config):
+            window_diagnostics["windows_skipped_non_contiguous"] += 1
+            continue
         # Slice from the already-lagged pre-period matrix — this preserves lagged
         # features computed from the full continuous series rather than recomputing
         # (and losing the first row of) each placebo window independently.
@@ -1433,8 +1472,9 @@ def _run_placebo_windows(
         placebo_uplift_pcts.append((uplift_p / pred_sum) * 100 if pred_sum != 0 else np.nan)
         placebo_smapes.append(smape(y_te, pred_p))
         placebo_rmses.append(np.sqrt(mean_squared_error(y_te, pred_p)))
+        window_diagnostics["windows_used"] += 1
 
-    return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses
+    return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
 
 
 def _summarize_placebo_results(
@@ -1781,9 +1821,16 @@ def run_validation_method(
         if placebo_length_periods is not None
         else frequency_config["default_validation_horizon_periods"]
     )
-    fold_df, rolling_smape_mean, rolling_rmse_mean, rolling_cv_status = rolling_origin_validation(
+    (
+        fold_df,
+        rolling_smape_mean,
+        rolling_rmse_mean,
+        rolling_cv_status,
+        rolling_windows_skipped_non_contiguous,
+    ) = rolling_origin_validation(
         X_pre,
         y_pre,
+        frequency_config,
         horizon=cv_horizon,
         min_training_periods=min_training_periods,
         dates=dates_pre,
@@ -1884,8 +1931,16 @@ def run_validation_method(
     else:
         placebo_len = None
 
-    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses = _run_placebo_windows(
-        model_pre, model_feature_cols, dates_pre, min_training_periods, placebo_len, method_name
+    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, placebo_window_diagnostics = (
+        _run_placebo_windows(
+            model_pre,
+            model_feature_cols,
+            dates_pre,
+            min_training_periods,
+            placebo_len,
+            method_name,
+            frequency_config,
+        )
     )
 
     # Placebo summary statistics (use the same functions)
@@ -2003,6 +2058,7 @@ def run_validation_method(
         "holdout_rmse_mean": holdout_rmse_mean,
         "rolling_origin_folds": fold_df,
         "rolling_smape_mean": rolling_smape_mean,
+        "rolling_windows_skipped_non_contiguous": rolling_windows_skipped_non_contiguous,
         "rolling_rmse_mean": rolling_rmse_mean,
         "rolling_smape_p90": rolling_smape_p90,
         "rolling_bias_pct_mean": rolling_bias_pct_mean,
@@ -2047,6 +2103,7 @@ def run_validation_method(
         "placebo_uplift_pcts": placebo_uplift_pcts,
         "placebo_smapes": placebo_smapes,
         "placebo_rmses": placebo_rmses,
+        "placebo_window_diagnostics": placebo_window_diagnostics,
         "median_placebo_uplift": median_uplift,
         "placebo_range_lower": p2_5,
         "placebo_range_upper": p97_5,
@@ -5836,6 +5893,93 @@ def render_time_series_validation(mode: str):
             )
 
     # -------------------------------------------------------------------------
+    # 4b. Tracking-outage / data-quality period exclusion — persists across
+    # reruns and the Run button click (options never depend on this widget's
+    # own current selection, so a previously-selected exclusion can't be
+    # silently dropped by Streamlit on a later rerun). Applied once to
+    # agg_df_val inside the Run handler below, so validation, evaluation, and
+    # Bayesian TBR all share the exact same retained dates (they all read
+    # from the one agg_df_val stored in st.session_state.validation_results).
+    # -------------------------------------------------------------------------
+    _ts_metric_df = df_long[df_long["metric_name"] == selected_metric]
+    _ts_wide = _ts_metric_df.pivot_table(
+        index="region_raw", columns="date", values="kpi", aggfunc="sum"
+    )
+    _ts_quality_report = compute_period_quality(_ts_wide)
+    _ts_reason_by_date = {
+        row.date: "; ".join(row.reasons) for row in _ts_quality_report.rows if row.reasons
+    }
+    _ts_auto_flagged_dates = set(_ts_quality_report.definite_outage_dates) | set(
+        _ts_quality_report.missing_period_dates
+    )
+    _ts_date_option_labels = []
+    _ts_label_to_date = {}
+    for _d in sorted(_ts_wide.columns):
+        _d = pd.Timestamp(_d)
+        _reason = _ts_reason_by_date.get(_d)
+        _label = f"{_d.strftime('%d %b %y')} — {_reason}" if _reason else _d.strftime("%d %b %y")
+        _ts_date_option_labels.append(_label)
+        _ts_label_to_date[_label] = _d
+
+    _ts_exclude_widget_key = f"{mode_prefix}_outage_exclude_select"
+    if _ts_exclude_widget_key not in st.session_state:
+        st.session_state[_ts_exclude_widget_key] = [
+            lbl for lbl, d in _ts_label_to_date.items() if d in _ts_auto_flagged_dates
+        ]
+    st.markdown("**Periods to exclude because of tracking or data-quality issues:**")
+    _ts_selected_exclude_labels = st.multiselect(
+        "kpi_outage_exclude",
+        _ts_date_option_labels,
+        label_visibility="collapsed",
+        help=(
+            "Dates that look like a market-wide tracking outage (all or almost all "
+            "regions exactly zero, or most regions missing) are preselected. This "
+            "exclusion is shared by validation, evaluation, and Bayesian TBR for this "
+            "uploaded file."
+        ),
+        key=_ts_exclude_widget_key,
+    )
+    _ts_manual_excluded_dates = {_ts_label_to_date[lbl] for lbl in _ts_selected_exclude_labels}
+
+    _ts_planned_test_dates = (
+        {
+            pd.Timestamp(d)
+            for d in _ts_wide.columns
+            if pd.Timestamp(test_start) <= pd.Timestamp(d) <= pd.Timestamp(test_end)
+        }
+        if test_start is not None and test_end is not None
+        else set()
+    )
+    _ts_excluded_test_dates = _ts_manual_excluded_dates & _ts_planned_test_dates
+    _ts_test_exclusion_share = (
+        len(_ts_excluded_test_dates) / len(_ts_planned_test_dates)
+        if _ts_planned_test_dates
+        else 0.0
+    )
+    _ts_test_guard_triggered = _ts_test_exclusion_share > 0.20
+    _ts_test_guard_override_key = f"{mode_prefix}_test_exclusion_override"
+    if _ts_test_guard_triggered:
+        st.warning(
+            f"⚠️ {len(_ts_excluded_test_dates)} of {len(_ts_planned_test_dates)} planned test "
+            f"period(s) ({_ts_test_exclusion_share:.0%}) are excluded as tracking-outage/"
+            "data-quality periods. Uplift would be estimated only over the remaining "
+            "analysed periods."
+        )
+        _ts_test_guard_override = st.checkbox(
+            "Advanced: run anyway despite the excluded test-period share above 20%",
+            value=False,
+            key=_ts_test_guard_override_key,
+        )
+    else:
+        _ts_test_guard_override = st.session_state.get(_ts_test_guard_override_key, False)
+
+    if _ts_manual_excluded_dates:
+        st.caption(
+            f"ℹ️ {len(_ts_manual_excluded_dates)} period(s) excluded from the analysis below "
+            f"({len(_ts_auto_flagged_dates)} auto-flagged)."
+        )
+
+    # -------------------------------------------------------------------------
     # 5. Run button
     # -------------------------------------------------------------------------
     run_label = "Assess Region Alignment" if mode == "Design" else "Evaluate Test Impact"
@@ -5879,6 +6023,17 @@ def render_time_series_validation(mode: str):
                 "Not enough pre-period observations for the selected minimum training period and "
                 "validation window. Choose a longer pre-period, shorter validation window, or switch to "
                 "weekly aggregation."
+            )
+            st.session_state.validation_triggered = False
+            st.stop()
+
+        if _ts_test_guard_triggered and not _ts_test_guard_override:
+            st.error(
+                f"{len(_ts_excluded_test_dates)} of {len(_ts_planned_test_dates)} planned test "
+                f"period(s) ({_ts_test_exclusion_share:.0%}) are excluded as tracking-outage/"
+                "data-quality periods — above the 20% guard threshold. Repair/reupload the data, "
+                "exclude fewer test-period dates, or enable the advanced override above to "
+                "proceed anyway."
             )
             st.session_state.validation_triggered = False
             st.stop()
@@ -5938,6 +6093,15 @@ def render_time_series_validation(mode: str):
             if agg_df_val.empty:
                 st.error("Aggregation resulted in empty dataset.")
                 st.stop()
+
+            # Apply the shared tracking-outage/data-quality exclusion (section 4b above) —
+            # the same retained dates are then used by validation, evaluation, and Bayesian
+            # TBR, since they all read this stored agg_df_val.
+            if _ts_manual_excluded_dates:
+                agg_df_val = agg_df_val[~agg_df_val["date"].isin(_ts_manual_excluded_dates)]
+                if agg_df_val.empty:
+                    st.error("No data remains after excluding flagged/selected periods.")
+                    st.stop()
 
             # Region Mapping Diagnostics (unchanged)
             with st.expander("Region Mapping Diagnostics"):
@@ -6247,6 +6411,14 @@ def render_time_series_validation(mode: str):
                 "include_lagged_controls": include_lagged_controls,
                 "time_series_frequency": time_series_frequency,
                 "frequency_config": freq_config,
+                "automatic_outage_dates": sorted(_ts_auto_flagged_dates),
+                "manual_excluded_dates": sorted(_ts_manual_excluded_dates),
+                "effective_excluded_dates": sorted(_ts_manual_excluded_dates),
+                "planned_test_periods": len(_ts_planned_test_dates),
+                "analysed_test_periods": len(_ts_planned_test_dates) - len(_ts_excluded_test_dates),
+                "test_exclusion_guard_overridden": bool(
+                    _ts_test_guard_triggered and _ts_test_guard_override
+                ),
             }
 
             st.session_state.validation_triggered = False
@@ -7083,6 +7255,18 @@ with tab4:
                                         "use_structural_priors", False
                                     )
                                     _use_ar1 = st.session_state.get("use_ar1_errors", True)
+                                    if _use_ar1 and not _dates_are_contiguous(
+                                        pre_dates, bayes_freq_config
+                                    ):
+                                        st.error(
+                                            "Bayesian TBR's AR(1) noise-streak model assumes the "
+                                            "pre-period has no calendar gaps (e.g. from an excluded "
+                                            "tracking-outage date) — a gap would be silently treated "
+                                            "as one adjacent period. Either repair/reupload the data "
+                                            "so the pre-period is contiguous, or turn off 'Allow for "
+                                            "noise streaks — AR(1) errors' above and re-run."
+                                        )
+                                        st.stop()
                                     if _use_structural:
                                         # Data-driven sigma bounds from pre-period KPI correlations
                                         # corr[i] = how well control i tracks the test KPI historically
