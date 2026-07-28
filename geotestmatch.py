@@ -29,6 +29,7 @@ from geotestlab.data.exceptions import (
 )
 from geotestlab.data.ingestion import detect_date_columns, detect_metric_column
 from geotestlab.data.ingestion import load_and_reshape_kpi as _load_and_reshape_kpi
+from geotestlab.data.period_quality import compute_period_quality
 
 # ------------------------------------------------------------
 # App configuration
@@ -2798,6 +2799,13 @@ def format_numeric_value(col_name, val, proportion_cols):
     return f"{val:.3f}"
 
 
+def format_percentage(value, decimals=1):
+    """Shared formatter for test/control share cards, the target caption, the
+    closest-achieved-share warning, and text exports. Formats only for display —
+    never rounds the value before it's stored in session state or exports."""
+    return f"{value:.{decimals}f}%"
+
+
 def format_display_df(df, proportion_cols):
     out = df.copy()
     for c in out.columns:
@@ -3173,8 +3181,76 @@ else:
         )
         st.stop()
 
-    _kp_wide_raw = _kp_filtered.groupby(kpi_pattern_agg_col)[_kp_dates_in_range].sum()
-    _kp_wide_raw = _kp_wide_raw[_kp_wide_raw.sum(axis=1) > 0]  # drop all-zero regions (can't index)
+    # Coerce to numeric BEFORE aggregating, so a non-numeric cell becomes missing (and is
+    # reported) rather than silently raising or being dropped by groupby/sum.
+    _kp_raw_date_values = _kp_filtered[_kp_dates_in_range]
+    _kp_numeric_date_values = _kp_raw_date_values.apply(pd.to_numeric, errors="coerce")
+    _kp_non_numeric_cells = int(
+        _kp_numeric_date_values.isna().sum().sum() - _kp_raw_date_values.isna().sum().sum()
+    )
+    _kp_filtered[_kp_dates_in_range] = _kp_numeric_date_values
+
+    # sum(min_count=1): an aggregation-level/date group where every contributing row is
+    # missing stays missing, instead of silently becoming a real-looking 0.
+    _kp_wide_raw_full = _kp_filtered.groupby(kpi_pattern_agg_col)[_kp_dates_in_range].sum(
+        min_count=1
+    )
+
+    _kp_quality_report = compute_period_quality(_kp_wide_raw_full)
+    _kp_reason_by_date = {
+        row.date: "; ".join(row.reasons) for row in _kp_quality_report.rows if row.reasons
+    }
+    _kp_auto_flagged_dates = set(_kp_quality_report.definite_outage_dates) | set(
+        _kp_quality_report.missing_period_dates
+    )
+
+    _kp_date_option_labels = []
+    _kp_label_to_date = {}
+    for d in _kp_dates_in_range:
+        reason = _kp_reason_by_date.get(d)
+        label = f"{d.strftime('%d %b %y')} — {reason}" if reason else d.strftime("%d %b %y")
+        _kp_date_option_labels.append(label)
+        _kp_label_to_date[label] = d
+
+    _kp_exclude_widget_key = "kpi_pattern_outage_exclude_select"
+    if _kp_exclude_widget_key not in st.session_state:
+        st.session_state[_kp_exclude_widget_key] = [
+            lbl for lbl, d in _kp_label_to_date.items() if d in _kp_auto_flagged_dates
+        ]
+    st.markdown("**Periods to exclude because of tracking or data-quality issues:**")
+    _kp_selected_exclude_labels = st.multiselect(
+        "kpi_pattern_outage_exclude",
+        _kp_date_option_labels,
+        label_visibility="collapsed",
+        help=(
+            "Dates that look like a market-wide tracking outage (all or almost all "
+            "regions exactly zero, or most regions missing) are preselected. Add or "
+            "remove dates as needed — excluded dates are dropped before matching, but "
+            "remain part of the selected date range shown elsewhere."
+        ),
+        key=_kp_exclude_widget_key,
+    )
+    _kp_manual_excluded_dates = {_kp_label_to_date[lbl] for lbl in _kp_selected_exclude_labels}
+    _kp_dates_retained = [d for d in _kp_dates_in_range if d not in _kp_manual_excluded_dates]
+    if len(_kp_dates_retained) < 2:
+        st.error(
+            "Fewer than 2 dates remain after excluding flagged/selected periods — "
+            "select a wider date range or exclude fewer periods."
+        )
+        st.stop()
+    if _kp_manual_excluded_dates:
+        st.caption(
+            f"ℹ️ {len(_kp_dates_in_range)} period(s) in range, "
+            f"{len(_kp_manual_excluded_dates)} excluded, {len(_kp_dates_retained)} retained "
+            f"({len(_kp_auto_flagged_dates)} auto-flagged)."
+        )
+
+    _kp_wide_raw = _kp_wide_raw_full[_kp_dates_retained]
+    _kp_wide_raw = _kp_wide_raw.dropna(how="all")
+    _kp_incomplete_regions = sorted(_kp_wide_raw[_kp_wide_raw.isna().any(axis=1)].index)
+    _kp_wide_raw = _kp_wide_raw[
+        _kp_wide_raw.sum(axis=1, min_count=1) > 0
+    ]  # drop all-zero regions (can't index)
     if _kp_wide_raw.empty:
         st.error("No regions with non-zero data in this range.")
         st.stop()
@@ -3187,7 +3263,7 @@ else:
 
     geography_level = kpi_pattern_agg_col
     geo_col = geography_level
-    active_features = [f"wk_{d.strftime('%Y%m%d')}" for d in _kp_dates_in_range]
+    active_features = [f"wk_{d.strftime('%Y%m%d')}" for d in _kp_dates_retained]
     agg_df = _kp_wide_indexed.reset_index().rename(columns={kpi_pattern_agg_col: geo_col})
     agg_df.columns = [geo_col] + active_features
     # POPULATION_COL is aliased here to mean "total KPI volume over the selected range" rather
@@ -3199,10 +3275,24 @@ else:
 
     st.session_state["kpi_pattern_wide_raw"] = _kp_wide_raw
     st.session_state["kpi_pattern_metric_value"] = kpi_pattern_metric_value
-    st.session_state["kpi_pattern_dates_in_range"] = _kp_dates_in_range
+    st.session_state["kpi_pattern_dates_in_range"] = _kp_dates_retained
+    st.session_state["kpi_pattern_period_quality"] = {
+        "automatic_outage_dates": sorted(_kp_auto_flagged_dates),
+        "manual_excluded_dates": sorted(_kp_manual_excluded_dates),
+        "effective_excluded_dates": sorted(_kp_manual_excluded_dates),
+        "incomplete_regions_after_exclusion": _kp_incomplete_regions,
+    }
 
     if _kp_n_dropped > 0:
         st.caption(f"ℹ️ {_kp_n_dropped} row(s) dropped: blank '{kpi_pattern_agg_col}' value.")
+    if _kp_non_numeric_cells > 0:
+        st.caption(f"ℹ️ {_kp_non_numeric_cells} non-numeric date-value cell(s) treated as missing.")
+    if _kp_incomplete_regions:
+        st.caption(
+            f"ℹ️ {len(_kp_incomplete_regions)} region(s) have a missing value on a retained "
+            f"date and were excluded: {', '.join(_kp_incomplete_regions[:10])}"
+            f"{'…' if len(_kp_incomplete_regions) > 10 else ''}"
+        )
 
 
 def kpi_share_label(base_label):
@@ -3345,11 +3435,12 @@ def render_structural_matching_tab():
                 )
                 st.metric(
                     kpi_share_label("Test group market population included"),
-                    f"{test_pop_pct:.1f}%",
+                    format_percentage(test_pop_pct),
                     help=kpi_share_label(
                         "Percentage of the total market population covered by the selected test regions."
                     ),
                 )
+            global_exclude = []
             force_exp_include = []
             force_exp_exclude = []
             force_ctrl_include = []
@@ -3377,11 +3468,12 @@ def render_structural_matching_tab():
                 )
                 st.metric(
                     kpi_share_label("Test group market population included"),
-                    f"{test_pop_pct:.1f}%",
+                    format_percentage(test_pop_pct),
                     help=kpi_share_label(
                         "Percentage of the total market population covered by the selected test geographies. Larger test groups are typically more representative of the overall market, but leave fewer regions available for control selection."
                     ),
                 )
+            global_exclude = []
             force_exp_include = []
             force_exp_exclude = []
             force_ctrl_include = []
@@ -3392,12 +3484,34 @@ def render_structural_matching_tab():
 
         else:  # "Set Rules & Auto‑Build Groups"
             st.markdown(
+                "Geographies to <span style='color:#dc2626;font-weight:600'>exclude from both</span> test and control:",
+                unsafe_allow_html=True,
+            )
+            selected_global_exclude_labels = st.multiselect(
+                "global_exclude",
+                geo_options_with_pop,
+                label_visibility="collapsed",
+                help=(
+                    "Removes a region from both the test and control candidate pools "
+                    "entirely — the preferred way to drop a region from the experiment. "
+                    "It stays part of the total market population used as the share "
+                    "denominator, so shares are not recalculated on a smaller market."
+                ),
+                key="global_exclude_select",
+            )
+            global_exclude = [label_to_geo[label] for label in selected_global_exclude_labels]
+
+            st.markdown(
                 "Test geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
                 unsafe_allow_html=True,
             )
             selected_include_labels = st.multiselect(
                 "exp_include",
-                geo_options_with_pop,
+                [
+                    label
+                    for label in geo_options_with_pop
+                    if label_to_geo[label] not in global_exclude
+                ],
                 label_visibility="collapsed",
                 key="exp_include_select",
             )
@@ -3406,6 +3520,7 @@ def render_structural_matching_tab():
                 label
                 for label in geo_options_with_pop
                 if label_to_geo[label] not in force_exp_include
+                and label_to_geo[label] not in global_exclude
             ]
             st.markdown(
                 "Test geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
@@ -3418,7 +3533,7 @@ def render_structural_matching_tab():
                 help=(
                     "Excluded from the TEST group only — these regions remain available "
                     "for the control pool. To remove a region from the analysis entirely, "
-                    "also exclude it from the control list."
+                    "use the 'exclude from both' field above instead."
                 ),
                 key="exp_exclude_select",
             )
@@ -3426,21 +3541,25 @@ def render_structural_matching_tab():
             force_ctrl_include = []
             force_ctrl_exclude = []
             target_test_share = st.slider(
-                "Target test population share",
+                kpi_share_label("Target test population share"),
                 5,
                 80,
                 25,
                 1,
-                help="Desired percentage of the total market population to include in the test group. A larger test group is more representative but leaves fewer regions available as controls.",
+                help=kpi_share_label(
+                    "Desired percentage of the total market population to include in the test group. A larger test group is more representative but leaves fewer regions available as controls."
+                ),
                 key="target_share_slider",
             )
             target_tolerance_pp = st.slider(
-                "Population share tolerance (± pp)",
+                kpi_share_label("Population share tolerance (± pp)"),
                 1,
                 30,
                 5,
                 1,
-                help="Acceptable deviation from the target population share, in percentage points.",
+                help=kpi_share_label(
+                    "Acceptable deviation from the target population share, in percentage points."
+                ),
                 key="tolerance_slider",
             )
             guided_iterations = st.slider(
@@ -3516,19 +3635,31 @@ def render_structural_matching_tab():
 
         else:  # "Set Rules & Auto‑Build Groups"
             total_pop = agg_df[POPULATION_COL].sum()
-            force_ctrl_exclude = st.session_state.get("force_ctrl_exclude", [])
-            eligible_for_control = [
+            # Last run's control-exclude selection — used only to shrink the
+            # ctrl_include widget's OPTIONS (a different widget, so this is safe).
+            # It must never be subtracted when building ctrl_exclude's own options
+            # below, since that would remove a previously-selected exclusion from
+            # its own widget's options on this rerun, silently clearing it.
+            _force_ctrl_exclude_prev = set(st.session_state.get("force_ctrl_exclude", []))
+
+            def _geo_labels(geos):
+                labels, mapping = [], {}
+                for geo in geos:
+                    geo_pop = agg_df[agg_df[geo_col] == geo][POPULATION_COL].sum()
+                    pop_pct = (geo_pop / total_pop) * 100
+                    label = f"{geo} ({pop_pct:.1f}%)"
+                    labels.append(label)
+                    mapping[label] = geo
+                return labels, mapping
+
+            eligible_for_ctrl_include = [
                 g
                 for g in all_geo_values
-                if g not in force_exp_include and g not in force_ctrl_exclude
+                if g not in force_exp_include
+                and g not in global_exclude
+                and g not in _force_ctrl_exclude_prev
             ]
-            ctrl_options_with_pop = []
-            label_to_ctrl = {}
-            for geo in eligible_for_control:
-                geo_pop = agg_df[agg_df[geo_col] == geo][POPULATION_COL].sum()
-                pop_pct = (geo_pop / total_pop) * 100
-                ctrl_options_with_pop.append(f"{geo} ({pop_pct:.1f}%)")
-                label_to_ctrl[f"{geo} ({pop_pct:.1f}%)"] = geo
+            ctrl_options_with_pop, label_to_ctrl_include = _geo_labels(eligible_for_ctrl_include)
             st.markdown(
                 "Control geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
                 unsafe_allow_html=True,
@@ -3543,12 +3674,18 @@ def render_structural_matching_tab():
                 ),
                 key="ctrl_include_select",
             )
-            force_ctrl_include = [label_to_ctrl[label] for label in selected_ctrl_include_labels]
-            exclude_ctrl_options = [
-                label
-                for label in ctrl_options_with_pop
-                if label_to_ctrl[label] not in force_ctrl_include
+            force_ctrl_include = [
+                label_to_ctrl_include[label] for label in selected_ctrl_include_labels
             ]
+
+            eligible_for_ctrl_exclude = [
+                g
+                for g in all_geo_values
+                if g not in force_exp_include
+                and g not in global_exclude
+                and g not in force_ctrl_include
+            ]
+            exclude_ctrl_options, label_to_ctrl_exclude = _geo_labels(eligible_for_ctrl_exclude)
             st.markdown(
                 "Control geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
                 unsafe_allow_html=True,
@@ -3560,18 +3697,21 @@ def render_structural_matching_tab():
                 help=(
                     "Excluded from the CONTROL group only — these regions remain "
                     "available for test selection. To remove a region from the analysis "
-                    "entirely, also exclude it from the test list."
+                    "entirely, use the 'exclude from both' field above instead."
                 ),
                 key="ctrl_exclude_select",
             )
-            force_ctrl_exclude = [label_to_ctrl[label] for label in selected_ctrl_exclude_labels]
+            force_ctrl_exclude = [
+                label_to_ctrl_exclude[label] for label in selected_ctrl_exclude_labels
+            ]
             st.session_state.force_ctrl_exclude = force_ctrl_exclude
-            eligible_for_control = [
+            control_pool_geos = [
                 g
                 for g in all_geo_values
-                if g not in force_exp_include and g not in force_ctrl_exclude
+                if g not in force_exp_include
+                and g not in global_exclude
+                and g not in force_ctrl_exclude
             ]
-            control_pool_geos = eligible_for_control
 
     if "force_ctrl_exclude" not in st.session_state:
         st.session_state.force_ctrl_exclude = []
@@ -3767,6 +3907,10 @@ def render_structural_matching_tab():
                 "test_geos": list(test_geos),
                 "control_pool_geos": [],
                 "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
+                "global_exclusions": sorted(global_exclude),
+                "test_only_exclusions": sorted(force_exp_exclude),
+                "control_only_exclusions": [],
+                "kpi_pattern_period_quality": st.session_state.get("kpi_pattern_period_quality"),
                 "active_features": list(active_features),
                 "weights": dict(weights),
                 "eligible_means": tuple(
@@ -3798,9 +3942,12 @@ def render_structural_matching_tab():
 
         else:
             if setup_mode == "Set Rules & Auto‑Build Groups":
+                global_exclude_set = set(global_exclude)
+                excluded_from_test = set(force_exp_exclude) | global_exclude_set
+                excluded_from_control = set(force_ctrl_exclude) | global_exclude_set
                 conflicts = (
-                    (set(force_exp_include) & set(force_exp_exclude))
-                    | (set(force_ctrl_include) & set(force_ctrl_exclude))
+                    (set(force_exp_include) & excluded_from_test)
+                    | (set(force_ctrl_include) & excluded_from_control)
                     | (set(force_exp_include) & set(force_ctrl_include))
                 )
                 if conflicts:
@@ -3813,9 +3960,9 @@ def render_structural_matching_tab():
                     geo_col,
                     total_market_pop,
                     force_exp_include,
-                    force_exp_exclude,
+                    list(excluded_from_test),
                     force_ctrl_include,
-                    force_ctrl_exclude,
+                    list(excluded_from_control),
                     target_test_share,
                     target_tolerance_pp,
                     guided_iterations,
@@ -3827,7 +3974,11 @@ def render_structural_matching_tab():
                     st.stop()
                 if not target_met:
                     st.warning(
-                        f"Target population share range was not met. Closest achieved: {achieved_share * 100:.1f}% (target {target_test_share}%, ±{target_tolerance_pp}pp)."
+                        kpi_share_label(
+                            f"Target population share range was not met. Closest achieved: "
+                            f"{format_percentage(achieved_share * 100)} "
+                            f"(target {format_percentage(target_test_share)}, ±{target_tolerance_pp}pp)."
+                        )
                     )
                 st.session_state.guided_share_info = {
                     "achieved": achieved_share * 100,
@@ -3838,10 +3989,10 @@ def render_structural_matching_tab():
                 all_geos = set(agg_df[geo_col].unique())
                 # Note: force_exp_exclude is deliberately NOT subtracted here — a region
                 # excluded from the test group remains available as a control. Exclusions
-                # are one-sided; only excluding a region from BOTH lists removes it from
-                # the analysis entirely.
+                # are one-sided unless a region appears in BOTH exclusion lists, or in
+                # global_exclude, which removes it from the analysis entirely.
                 control_pool_geos = list(
-                    (all_geos - set(test_geos) - set(force_ctrl_exclude)) | set(force_ctrl_include)
+                    (all_geos - set(test_geos) - excluded_from_control) | set(force_ctrl_include)
                 )
             else:
                 st.session_state.guided_share_info = None
@@ -4077,6 +4228,10 @@ def render_structural_matching_tab():
                 if "control_pool_geos" in locals()
                 else [],
                 "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
+                "global_exclusions": sorted(global_exclude),
+                "test_only_exclusions": sorted(force_exp_exclude),
+                "control_only_exclusions": sorted(force_ctrl_exclude),
+                "kpi_pattern_period_quality": st.session_state.get("kpi_pattern_period_quality"),
                 "active_features": list(active_features),
                 "weights": dict(weights),
                 "eligible_means": tuple(eligible_means_tuple)
@@ -4259,17 +4414,19 @@ def render_structural_matching_tab():
             with ck4:
                 st.metric(
                     kpi_share_label("Test Population Share"),
-                    f"{experiment_pop_pct:.1f}%",
+                    format_percentage(experiment_pop_pct),
                     help=kpi_share_label(
                         "Percentage of total market population covered by the test regions used in the last completed run."
                     ),
                 )
                 if st.session_state.guided_share_info:
-                    st.caption(f"Target: {st.session_state.guided_share_info['target']}%")
+                    st.caption(
+                        f"Target: {format_percentage(st.session_state.guided_share_info['target'])}"
+                    )
             with ck5:
                 st.metric(
                     kpi_share_label("Control Population Share"),
-                    f"{control_pop_pct:.1f}%",
+                    format_percentage(control_pop_pct),
                     help=kpi_share_label(
                         "Percentage of total market population covered by the control regions selected in the last completed run."
                     ),
@@ -4593,7 +4750,9 @@ def render_structural_matching_tab():
                             st.code(f"{type(e).__name__}: {e}")
             with col2:
                 if st.button("📋 Copy Summary to Clipboard", width="stretch"):
-                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {(experiment_pop / eligible_market_pop * 100):.1f}%\n{kpi_share_label("Control Population Share")}: {(control_pop / eligible_market_pop * 100):.1f}%"""
+                    _summary_test_share_pct = experiment_pop / eligible_market_pop * 100
+                    _summary_control_share_pct = control_pop / eligible_market_pop * 100
+                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {format_percentage(_summary_test_share_pct)}\n{kpi_share_label("Control Population Share")}: {format_percentage(_summary_control_share_pct)}"""
                     st.code(summary_text, language="text")
                     st.caption("Copy the text above manually")
 

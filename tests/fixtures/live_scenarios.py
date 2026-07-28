@@ -241,6 +241,62 @@ def drive_constraints() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# 3b. Global exclusion (exclude-from-both control)
+# ---------------------------------------------------------------------------
+
+
+def drive_global_exclusion() -> dict:
+    """Exercise the 'exclude from both' global-exclusion multiselect in one
+    'Set Rules & Auto-Build Groups' run: selects one region, drives two more
+    reruns (an unrelated rerun, then the Run button click) to prove the
+    selection survives, then checks the region is absent from the frozen
+    control candidate pool (not just the final control group) and from the
+    final test group."""
+    app = _new_app()
+    setup_radio = [r for r in app.radio if r.label == "Setup Mode"][0]
+    setup_radio.set_value(setup_radio.options[2])
+    app.run(timeout=RUN_TIMEOUT)
+
+    global_exclude = [m for m in app.multiselect if m.label == "global_exclude"][0]
+    excluded_label = global_exclude.options[0]
+    excluded_geo = _geo_of(excluded_label)
+    global_exclude.set_value([excluded_label])
+    app.run(timeout=RUN_TIMEOUT)
+
+    # An unrelated rerun (re-running with no new widget interaction) — the
+    # selection must still be there afterwards, not just immediately after
+    # the multiselect's own on_change rerun.
+    app.run(timeout=RUN_TIMEOUT)
+    global_exclude_mid = [m for m in app.multiselect if m.label == "global_exclude"][0]
+    value_before_run_click = list(global_exclude_mid.value)
+
+    _run_match(app)
+
+    global_exclude_after = [m for m in app.multiselect if m.label == "global_exclude"][0]
+    value_after_run_click = list(global_exclude_after.value)
+
+    ss = app.session_state
+    snapshot = _sget(ss, "match_run_snapshot") or {}
+    test_regions = _sget(ss, "selected_experiment_regions") or []
+    fc = _sget(ss, "final_controls")
+    control_regions = fc["Local Authority Area"].tolist() if fc is not None else []
+
+    return _to_jsonable(
+        {
+            "excluded_geo": excluded_geo,
+            "value_persisted_before_run_click": value_before_run_click == [excluded_label],
+            "value_persisted_after_run_click": value_after_run_click == [excluded_label],
+            "excluded_from_control_candidate_pool": excluded_geo
+            not in snapshot.get("control_pool_geos", []),
+            "excluded_from_final_test_group": excluded_geo not in test_regions,
+            "excluded_from_final_control_group": excluded_geo not in control_regions,
+            "snapshot_global_exclusions": snapshot.get("global_exclusions", []),
+            **_app_messages(app),
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
 # 4. KPI pattern
 # ---------------------------------------------------------------------------
 
