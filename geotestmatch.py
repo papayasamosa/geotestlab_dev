@@ -29,6 +29,7 @@ from geotestlab.data.exceptions import (
 )
 from geotestlab.data.ingestion import detect_date_columns, detect_metric_column
 from geotestlab.data.ingestion import load_and_reshape_kpi as _load_and_reshape_kpi
+from geotestlab.data.period_quality import compute_period_quality
 
 # ------------------------------------------------------------
 # App configuration
@@ -265,18 +266,14 @@ def add_lagged_control_features(
     `lag` periods earlier. The target remains the current period's `test_kpi`. Rows with
     missing lagged values are dropped.
 
-    Lag mechanics depend on frequency (pass `frequency_config` from get_frequency_config(),
-    or `time_series_frequency` — "weekly"/"daily" — and it will be resolved internally;
-    defaults to weekly if neither is given, preserving legacy row-shift behaviour for old
-    callers):
-
-    - Weekly (or any non-daily) mode: uses a row-based `.shift(lag)`. This is safe as long
-      as the weekly series has regular, evenly-spaced rows (the normal case for this app).
-    - Daily mode: uses a true *calendar-day* lag — each row is matched to the control's value
-      from exactly `date - lag days` via a date-based merge, not simply "N rows earlier".
-      If the exact `date - lag days` row is missing for a control (e.g. a gap in the daily
-      series), the lag value is left missing and the row is dropped by the dropna step below,
-      rather than silently borrowing a nearby date's value.
+    Uses a true *calendar* lag at both frequencies (pass `frequency_config` from
+    get_frequency_config(), or `time_series_frequency` — "weekly"/"daily" — and it will be
+    resolved internally; defaults to weekly if neither is given) — weekly lag N matches each
+    row to the control's value from exactly N*7 calendar days earlier, daily lag N from
+    exactly N calendar days earlier — via a date-keyed merge, never a row-position shift. If
+    the exact source date is missing or was excluded (e.g. a gap in the series), the lag
+    value is left missing and the row is dropped by the dropna step below, rather than
+    silently borrowing a nearby date's value as though it were the previous period.
 
     Args:
         model_df: DataFrame with a "date" column, a "test_kpi" column, and one column per
@@ -307,7 +304,7 @@ def add_lagged_control_features(
         frequency_config = get_frequency_config(
             time_series_frequency if time_series_frequency is not None else "weekly"
         )
-    use_date_based_lag = frequency_config.get("frequency") == "daily"
+    period_days = 1 if frequency_config.get("frequency") == "daily" else 7
 
     model_df_lagged = model_df.sort_values("date").reset_index(drop=True).copy()
     model_df_lagged["date"] = pd.to_datetime(model_df_lagged["date"])
@@ -315,29 +312,20 @@ def add_lagged_control_features(
     lagged_feature_map = {}
     lag_cols_all = []
 
-    if use_date_based_lag:
-        # True calendar-day lag: match each row to the control value from date - lag days,
-        # via a date-keyed merge rather than a row-position shift. Missing lag dates produce
-        # NaN (dropped below), never a borrowed/nearest value.
-        for c in control_list:
-            lagged_feature_map[c] = {"current": c}
-            for lag in lags:
-                lag_col = f"{c}_lag{lag}"
-                lookup = model_df_lagged[["date", c]].copy()
-                lookup["date"] = lookup["date"] + pd.Timedelta(days=int(lag))
-                lookup = lookup.rename(columns={c: lag_col})
-                model_df_lagged = model_df_lagged.merge(lookup, on="date", how="left")
-                lagged_feature_map[c][f"lag{lag}"] = lag_col
-                lag_cols_all.append(lag_col)
-    else:
-        # Row-based shift (weekly / regular-interval default): preserves existing behaviour.
-        for c in control_list:
-            lagged_feature_map[c] = {"current": c}
-            for lag in lags:
-                lag_col = f"{c}_lag{lag}"
-                model_df_lagged[lag_col] = model_df_lagged[c].shift(lag)
-                lagged_feature_map[c][f"lag{lag}"] = lag_col
-                lag_cols_all.append(lag_col)
+    # True calendar lag: match each row to the control value from exactly
+    # `lag * period_days` days earlier, via a date-keyed merge rather than a row-position
+    # shift. Missing/excluded source dates produce NaN (dropped below), never a
+    # borrowed/nearest value.
+    for c in control_list:
+        lagged_feature_map[c] = {"current": c}
+        for lag in lags:
+            lag_col = f"{c}_lag{lag}"
+            lookup = model_df_lagged[["date", c]].copy()
+            lookup["date"] = lookup["date"] + pd.Timedelta(days=int(lag) * period_days)
+            lookup = lookup.rename(columns={c: lag_col})
+            model_df_lagged = model_df_lagged.merge(lookup, on="date", how="left")
+            lagged_feature_map[c][f"lag{lag}"] = lag_col
+            lag_cols_all.append(lag_col)
 
     model_df_lagged = model_df_lagged.dropna(subset=lag_cols_all).reset_index(drop=True)
     rows_after_lag_drop = len(model_df_lagged)
@@ -1056,6 +1044,7 @@ def build_regularized_model(method_name, n_periods, n_splits_pref=5, fixed_alpha
 def rolling_origin_validation(
     X,
     y,
+    frequency_config,
     horizon=4,
     min_training_periods=13,
     dates=None,
@@ -1119,15 +1108,27 @@ def rolling_origin_validation(
             np.nan,
             np.nan,
             "No folds: insufficient pre-period history for rolling-origin validation.",
+            0,
         )
 
+    _dates_valid = dates is not None and len(dates) == n
     folds = []
     fold_num = 0
+    windows_skipped_non_contiguous = 0
     _all_starts = list(range(min_training_periods, n - horizon + 1))
     if len(_all_starts) > 20:
         _step = len(_all_starts) // 20
         _all_starts = _all_starts[::_step][:20]
     for start_idx in _all_starts:
+        # A held-out window must represent `horizon` CONSECUTIVE calendar periods —
+        # skip it if an excluded/missing date left a gap inside it (training history
+        # before the window may still contain earlier gaps).
+        if _dates_valid and not _dates_are_contiguous(
+            dates[start_idx : start_idx + horizon], frequency_config
+        ):
+            windows_skipped_non_contiguous += 1
+            continue
+
         train_X, train_y = X[:start_idx], y[:start_idx]
         test_X, test_y = X[start_idx : start_idx + horizon], y[start_idx : start_idx + horizon]
         if len(test_y) < horizon:
@@ -1138,7 +1139,13 @@ def rolling_origin_validation(
         test_X_scaled = scaler.transform(test_X)
 
         if model_type not in ("enet", "lasso"):
-            return empty_df, np.nan, np.nan, "Unsupported model_type"
+            return (
+                empty_df,
+                np.nan,
+                np.nan,
+                "Unsupported model_type",
+                windows_skipped_non_contiguous,
+            )
 
         model, fold_cv_status, fold_used_cv = build_regularized_model(
             model_type, len(train_y), n_splits_pref=3
@@ -1195,6 +1202,7 @@ def rolling_origin_validation(
             np.nan,
             np.nan,
             "No folds: insufficient pre-period history for rolling-origin validation.",
+            windows_skipped_non_contiguous,
         )
 
     fold_df = pd.DataFrame(folds)
@@ -1228,7 +1236,7 @@ def rolling_origin_validation(
             f"those folds were exploratory fixed-alpha fits and are excluded from rolling-origin "
             f"validation metrics (based on the remaining {n_cv_folds} TimeSeriesSplit-CV fold(s))."
         )
-    return fold_df, rolling_smape_mean, rolling_rmse_mean, cv_status
+    return fold_df, rolling_smape_mean, rolling_rmse_mean, cv_status, windows_skipped_non_contiguous
 
 
 def classify_validation_method(fold_df, main_model_used_cv_fallback):
@@ -1358,6 +1366,19 @@ def _summarize_rolling_origin_folds(fold_df):
     }
 
 
+def _dates_are_contiguous(dates, frequency_config):
+    """True if consecutive dates are each exactly one period apart (7 calendar days for
+    weekly, 1 day for daily) with no gap. Used to keep rolling-origin/placebo evaluation
+    windows from silently spanning an excluded or missing date as though the series were
+    unbroken."""
+    period_days = 1 if frequency_config.get("frequency") == "daily" else 7
+    step = pd.Timedelta(days=period_days)
+    ts = pd.to_datetime(pd.Series(list(dates)))
+    if len(ts) < 2:
+        return True
+    return bool((ts.diff().dropna() == step).all())
+
+
 def _run_placebo_windows(
     model_pre,
     model_feature_cols,
@@ -1365,6 +1386,7 @@ def _run_placebo_windows(
     min_training_periods,
     placebo_len,
     method_name,
+    frequency_config,
     max_windows=40,
 ):
     """
@@ -1372,6 +1394,13 @@ def _run_placebo_windows(
     ("placebo testing"): repeatedly trains on an expanding window and evaluates on the
     next placebo_len periods, using the same model type as the main fit. Never falls
     back to regular KFold for time-series data — see build_regularized_model().
+
+    A candidate window is skipped (not just under-filled) when its placebo_len test
+    dates aren't calendar-contiguous at the given frequency — this happens when an
+    outage date was excluded from the pre-period, and prevents a window from silently
+    treating "period before the gap" and "period after the gap" as adjacent. Training
+    history before the window may still contain earlier gaps; only the evaluation
+    window itself must be unbroken.
 
     Subsamples to at most `max_windows` evenly-spaced windows when more are available,
     to keep runtime bounded (each window fits a fresh model). This caps the resolution
@@ -1381,27 +1410,38 @@ def _run_placebo_windows(
     "Placebo Windows" count should treat "p < 0.05" claims from very small window counts
     with this precision limit in mind.
 
-    Returns four parallel lists (placebos, placebo_uplift_pcts, placebo_smapes,
-    placebo_rmses), one entry per placebo window. All empty if placebo_len is missing/
-    non-positive or there isn't enough pre-period history for even one window.
+    Returns (placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses,
+    window_diagnostics) — the first four are parallel lists, one entry per USED placebo
+    window (all empty if placebo_len is missing/non-positive or there isn't enough
+    pre-period history for even one window). window_diagnostics is a dict with
+    windows_available, windows_used, and windows_skipped_non_contiguous.
     """
     placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses = [], [], [], []
+    window_diagnostics = {
+        "windows_available": 0,
+        "windows_used": 0,
+        "windows_skipped_non_contiguous": 0,
+    }
 
     if placebo_len is None or placebo_len <= 0:
-        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses
+        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
 
     n_pre = len(dates_pre)
     if n_pre < placebo_len + min_training_periods:
-        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses
+        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
 
     all_starts = list(range(min_training_periods, n_pre - placebo_len + 1))
     if len(all_starts) > max_windows:
         step = len(all_starts) // max_windows
         all_starts = all_starts[::step][:max_windows]
+    window_diagnostics["windows_available"] = len(all_starts)
 
     for start_idx in all_starts:
         train_dates = dates_pre[:start_idx]
         test_dates = dates_pre[start_idx : start_idx + placebo_len]
+        if not _dates_are_contiguous(test_dates, frequency_config):
+            window_diagnostics["windows_skipped_non_contiguous"] += 1
+            continue
         # Slice from the already-lagged pre-period matrix — this preserves lagged
         # features computed from the full continuous series rather than recomputing
         # (and losing the first row of) each placebo window independently.
@@ -1432,8 +1472,9 @@ def _run_placebo_windows(
         placebo_uplift_pcts.append((uplift_p / pred_sum) * 100 if pred_sum != 0 else np.nan)
         placebo_smapes.append(smape(y_te, pred_p))
         placebo_rmses.append(np.sqrt(mean_squared_error(y_te, pred_p)))
+        window_diagnostics["windows_used"] += 1
 
-    return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses
+    return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
 
 
 def _summarize_placebo_results(
@@ -1780,9 +1821,16 @@ def run_validation_method(
         if placebo_length_periods is not None
         else frequency_config["default_validation_horizon_periods"]
     )
-    fold_df, rolling_smape_mean, rolling_rmse_mean, rolling_cv_status = rolling_origin_validation(
+    (
+        fold_df,
+        rolling_smape_mean,
+        rolling_rmse_mean,
+        rolling_cv_status,
+        rolling_windows_skipped_non_contiguous,
+    ) = rolling_origin_validation(
         X_pre,
         y_pre,
+        frequency_config,
         horizon=cv_horizon,
         min_training_periods=min_training_periods,
         dates=dates_pre,
@@ -1883,8 +1931,16 @@ def run_validation_method(
     else:
         placebo_len = None
 
-    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses = _run_placebo_windows(
-        model_pre, model_feature_cols, dates_pre, min_training_periods, placebo_len, method_name
+    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, placebo_window_diagnostics = (
+        _run_placebo_windows(
+            model_pre,
+            model_feature_cols,
+            dates_pre,
+            min_training_periods,
+            placebo_len,
+            method_name,
+            frequency_config,
+        )
     )
 
     # Placebo summary statistics (use the same functions)
@@ -2002,6 +2058,7 @@ def run_validation_method(
         "holdout_rmse_mean": holdout_rmse_mean,
         "rolling_origin_folds": fold_df,
         "rolling_smape_mean": rolling_smape_mean,
+        "rolling_windows_skipped_non_contiguous": rolling_windows_skipped_non_contiguous,
         "rolling_rmse_mean": rolling_rmse_mean,
         "rolling_smape_p90": rolling_smape_p90,
         "rolling_bias_pct_mean": rolling_bias_pct_mean,
@@ -2046,6 +2103,7 @@ def run_validation_method(
         "placebo_uplift_pcts": placebo_uplift_pcts,
         "placebo_smapes": placebo_smapes,
         "placebo_rmses": placebo_rmses,
+        "placebo_window_diagnostics": placebo_window_diagnostics,
         "median_placebo_uplift": median_uplift,
         "placebo_range_lower": p2_5,
         "placebo_range_upper": p97_5,
@@ -2798,6 +2856,13 @@ def format_numeric_value(col_name, val, proportion_cols):
     return f"{val:.3f}"
 
 
+def format_percentage(value, decimals=1):
+    """Shared formatter for test/control share cards, the target caption, the
+    closest-achieved-share warning, and text exports. Formats only for display —
+    never rounds the value before it's stored in session state or exports."""
+    return f"{value:.{decimals}f}%"
+
+
 def format_display_df(df, proportion_cols):
     out = df.copy()
     for c in out.columns:
@@ -3173,8 +3238,76 @@ else:
         )
         st.stop()
 
-    _kp_wide_raw = _kp_filtered.groupby(kpi_pattern_agg_col)[_kp_dates_in_range].sum()
-    _kp_wide_raw = _kp_wide_raw[_kp_wide_raw.sum(axis=1) > 0]  # drop all-zero regions (can't index)
+    # Coerce to numeric BEFORE aggregating, so a non-numeric cell becomes missing (and is
+    # reported) rather than silently raising or being dropped by groupby/sum.
+    _kp_raw_date_values = _kp_filtered[_kp_dates_in_range]
+    _kp_numeric_date_values = _kp_raw_date_values.apply(pd.to_numeric, errors="coerce")
+    _kp_non_numeric_cells = int(
+        _kp_numeric_date_values.isna().sum().sum() - _kp_raw_date_values.isna().sum().sum()
+    )
+    _kp_filtered[_kp_dates_in_range] = _kp_numeric_date_values
+
+    # sum(min_count=1): an aggregation-level/date group where every contributing row is
+    # missing stays missing, instead of silently becoming a real-looking 0.
+    _kp_wide_raw_full = _kp_filtered.groupby(kpi_pattern_agg_col)[_kp_dates_in_range].sum(
+        min_count=1
+    )
+
+    _kp_quality_report = compute_period_quality(_kp_wide_raw_full)
+    _kp_reason_by_date = {
+        row.date: "; ".join(row.reasons) for row in _kp_quality_report.rows if row.reasons
+    }
+    _kp_auto_flagged_dates = set(_kp_quality_report.definite_outage_dates) | set(
+        _kp_quality_report.missing_period_dates
+    )
+
+    _kp_date_option_labels = []
+    _kp_label_to_date = {}
+    for d in _kp_dates_in_range:
+        reason = _kp_reason_by_date.get(d)
+        label = f"{d.strftime('%d %b %y')} — {reason}" if reason else d.strftime("%d %b %y")
+        _kp_date_option_labels.append(label)
+        _kp_label_to_date[label] = d
+
+    _kp_exclude_widget_key = "kpi_pattern_outage_exclude_select"
+    if _kp_exclude_widget_key not in st.session_state:
+        st.session_state[_kp_exclude_widget_key] = [
+            lbl for lbl, d in _kp_label_to_date.items() if d in _kp_auto_flagged_dates
+        ]
+    st.markdown("**Periods to exclude because of tracking or data-quality issues:**")
+    _kp_selected_exclude_labels = st.multiselect(
+        "kpi_pattern_outage_exclude",
+        _kp_date_option_labels,
+        label_visibility="collapsed",
+        help=(
+            "Dates that look like a market-wide tracking outage (all or almost all "
+            "regions exactly zero, or most regions missing) are preselected. Add or "
+            "remove dates as needed — excluded dates are dropped before matching, but "
+            "remain part of the selected date range shown elsewhere."
+        ),
+        key=_kp_exclude_widget_key,
+    )
+    _kp_manual_excluded_dates = {_kp_label_to_date[lbl] for lbl in _kp_selected_exclude_labels}
+    _kp_dates_retained = [d for d in _kp_dates_in_range if d not in _kp_manual_excluded_dates]
+    if len(_kp_dates_retained) < 2:
+        st.error(
+            "Fewer than 2 dates remain after excluding flagged/selected periods — "
+            "select a wider date range or exclude fewer periods."
+        )
+        st.stop()
+    if _kp_manual_excluded_dates:
+        st.caption(
+            f"ℹ️ {len(_kp_dates_in_range)} period(s) in range, "
+            f"{len(_kp_manual_excluded_dates)} excluded, {len(_kp_dates_retained)} retained "
+            f"({len(_kp_auto_flagged_dates)} auto-flagged)."
+        )
+
+    _kp_wide_raw = _kp_wide_raw_full[_kp_dates_retained]
+    _kp_wide_raw = _kp_wide_raw.dropna(how="all")
+    _kp_incomplete_regions = sorted(_kp_wide_raw[_kp_wide_raw.isna().any(axis=1)].index)
+    _kp_wide_raw = _kp_wide_raw[
+        _kp_wide_raw.sum(axis=1, min_count=1) > 0
+    ]  # drop all-zero regions (can't index)
     if _kp_wide_raw.empty:
         st.error("No regions with non-zero data in this range.")
         st.stop()
@@ -3187,7 +3320,7 @@ else:
 
     geography_level = kpi_pattern_agg_col
     geo_col = geography_level
-    active_features = [f"wk_{d.strftime('%Y%m%d')}" for d in _kp_dates_in_range]
+    active_features = [f"wk_{d.strftime('%Y%m%d')}" for d in _kp_dates_retained]
     agg_df = _kp_wide_indexed.reset_index().rename(columns={kpi_pattern_agg_col: geo_col})
     agg_df.columns = [geo_col] + active_features
     # POPULATION_COL is aliased here to mean "total KPI volume over the selected range" rather
@@ -3199,10 +3332,24 @@ else:
 
     st.session_state["kpi_pattern_wide_raw"] = _kp_wide_raw
     st.session_state["kpi_pattern_metric_value"] = kpi_pattern_metric_value
-    st.session_state["kpi_pattern_dates_in_range"] = _kp_dates_in_range
+    st.session_state["kpi_pattern_dates_in_range"] = _kp_dates_retained
+    st.session_state["kpi_pattern_period_quality"] = {
+        "automatic_outage_dates": sorted(_kp_auto_flagged_dates),
+        "manual_excluded_dates": sorted(_kp_manual_excluded_dates),
+        "effective_excluded_dates": sorted(_kp_manual_excluded_dates),
+        "incomplete_regions_after_exclusion": _kp_incomplete_regions,
+    }
 
     if _kp_n_dropped > 0:
         st.caption(f"ℹ️ {_kp_n_dropped} row(s) dropped: blank '{kpi_pattern_agg_col}' value.")
+    if _kp_non_numeric_cells > 0:
+        st.caption(f"ℹ️ {_kp_non_numeric_cells} non-numeric date-value cell(s) treated as missing.")
+    if _kp_incomplete_regions:
+        st.caption(
+            f"ℹ️ {len(_kp_incomplete_regions)} region(s) have a missing value on a retained "
+            f"date and were excluded: {', '.join(_kp_incomplete_regions[:10])}"
+            f"{'…' if len(_kp_incomplete_regions) > 10 else ''}"
+        )
 
 
 def kpi_share_label(base_label):
@@ -3345,11 +3492,12 @@ def render_structural_matching_tab():
                 )
                 st.metric(
                     kpi_share_label("Test group market population included"),
-                    f"{test_pop_pct:.1f}%",
+                    format_percentage(test_pop_pct),
                     help=kpi_share_label(
                         "Percentage of the total market population covered by the selected test regions."
                     ),
                 )
+            global_exclude = []
             force_exp_include = []
             force_exp_exclude = []
             force_ctrl_include = []
@@ -3377,11 +3525,12 @@ def render_structural_matching_tab():
                 )
                 st.metric(
                     kpi_share_label("Test group market population included"),
-                    f"{test_pop_pct:.1f}%",
+                    format_percentage(test_pop_pct),
                     help=kpi_share_label(
                         "Percentage of the total market population covered by the selected test geographies. Larger test groups are typically more representative of the overall market, but leave fewer regions available for control selection."
                     ),
                 )
+            global_exclude = []
             force_exp_include = []
             force_exp_exclude = []
             force_ctrl_include = []
@@ -3392,12 +3541,34 @@ def render_structural_matching_tab():
 
         else:  # "Set Rules & Auto‑Build Groups"
             st.markdown(
+                "Geographies to <span style='color:#dc2626;font-weight:600'>exclude from both</span> test and control:",
+                unsafe_allow_html=True,
+            )
+            selected_global_exclude_labels = st.multiselect(
+                "global_exclude",
+                geo_options_with_pop,
+                label_visibility="collapsed",
+                help=(
+                    "Removes a region from both the test and control candidate pools "
+                    "entirely — the preferred way to drop a region from the experiment. "
+                    "It stays part of the total market population used as the share "
+                    "denominator, so shares are not recalculated on a smaller market."
+                ),
+                key="global_exclude_select",
+            )
+            global_exclude = [label_to_geo[label] for label in selected_global_exclude_labels]
+
+            st.markdown(
                 "Test geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
                 unsafe_allow_html=True,
             )
             selected_include_labels = st.multiselect(
                 "exp_include",
-                geo_options_with_pop,
+                [
+                    label
+                    for label in geo_options_with_pop
+                    if label_to_geo[label] not in global_exclude
+                ],
                 label_visibility="collapsed",
                 key="exp_include_select",
             )
@@ -3406,6 +3577,7 @@ def render_structural_matching_tab():
                 label
                 for label in geo_options_with_pop
                 if label_to_geo[label] not in force_exp_include
+                and label_to_geo[label] not in global_exclude
             ]
             st.markdown(
                 "Test geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
@@ -3418,7 +3590,7 @@ def render_structural_matching_tab():
                 help=(
                     "Excluded from the TEST group only — these regions remain available "
                     "for the control pool. To remove a region from the analysis entirely, "
-                    "also exclude it from the control list."
+                    "use the 'exclude from both' field above instead."
                 ),
                 key="exp_exclude_select",
             )
@@ -3426,21 +3598,25 @@ def render_structural_matching_tab():
             force_ctrl_include = []
             force_ctrl_exclude = []
             target_test_share = st.slider(
-                "Target test population share",
+                kpi_share_label("Target test population share"),
                 5,
                 80,
                 25,
                 1,
-                help="Desired percentage of the total market population to include in the test group. A larger test group is more representative but leaves fewer regions available as controls.",
+                help=kpi_share_label(
+                    "Desired percentage of the total market population to include in the test group. A larger test group is more representative but leaves fewer regions available as controls."
+                ),
                 key="target_share_slider",
             )
             target_tolerance_pp = st.slider(
-                "Population share tolerance (± pp)",
+                kpi_share_label("Population share tolerance (± pp)"),
                 1,
                 30,
                 5,
                 1,
-                help="Acceptable deviation from the target population share, in percentage points.",
+                help=kpi_share_label(
+                    "Acceptable deviation from the target population share, in percentage points."
+                ),
                 key="tolerance_slider",
             )
             guided_iterations = st.slider(
@@ -3516,19 +3692,31 @@ def render_structural_matching_tab():
 
         else:  # "Set Rules & Auto‑Build Groups"
             total_pop = agg_df[POPULATION_COL].sum()
-            force_ctrl_exclude = st.session_state.get("force_ctrl_exclude", [])
-            eligible_for_control = [
+            # Last run's control-exclude selection — used only to shrink the
+            # ctrl_include widget's OPTIONS (a different widget, so this is safe).
+            # It must never be subtracted when building ctrl_exclude's own options
+            # below, since that would remove a previously-selected exclusion from
+            # its own widget's options on this rerun, silently clearing it.
+            _force_ctrl_exclude_prev = set(st.session_state.get("force_ctrl_exclude", []))
+
+            def _geo_labels(geos):
+                labels, mapping = [], {}
+                for geo in geos:
+                    geo_pop = agg_df[agg_df[geo_col] == geo][POPULATION_COL].sum()
+                    pop_pct = (geo_pop / total_pop) * 100
+                    label = f"{geo} ({pop_pct:.1f}%)"
+                    labels.append(label)
+                    mapping[label] = geo
+                return labels, mapping
+
+            eligible_for_ctrl_include = [
                 g
                 for g in all_geo_values
-                if g not in force_exp_include and g not in force_ctrl_exclude
+                if g not in force_exp_include
+                and g not in global_exclude
+                and g not in _force_ctrl_exclude_prev
             ]
-            ctrl_options_with_pop = []
-            label_to_ctrl = {}
-            for geo in eligible_for_control:
-                geo_pop = agg_df[agg_df[geo_col] == geo][POPULATION_COL].sum()
-                pop_pct = (geo_pop / total_pop) * 100
-                ctrl_options_with_pop.append(f"{geo} ({pop_pct:.1f}%)")
-                label_to_ctrl[f"{geo} ({pop_pct:.1f}%)"] = geo
+            ctrl_options_with_pop, label_to_ctrl_include = _geo_labels(eligible_for_ctrl_include)
             st.markdown(
                 "Control geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
                 unsafe_allow_html=True,
@@ -3543,12 +3731,18 @@ def render_structural_matching_tab():
                 ),
                 key="ctrl_include_select",
             )
-            force_ctrl_include = [label_to_ctrl[label] for label in selected_ctrl_include_labels]
-            exclude_ctrl_options = [
-                label
-                for label in ctrl_options_with_pop
-                if label_to_ctrl[label] not in force_ctrl_include
+            force_ctrl_include = [
+                label_to_ctrl_include[label] for label in selected_ctrl_include_labels
             ]
+
+            eligible_for_ctrl_exclude = [
+                g
+                for g in all_geo_values
+                if g not in force_exp_include
+                and g not in global_exclude
+                and g not in force_ctrl_include
+            ]
+            exclude_ctrl_options, label_to_ctrl_exclude = _geo_labels(eligible_for_ctrl_exclude)
             st.markdown(
                 "Control geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
                 unsafe_allow_html=True,
@@ -3560,18 +3754,21 @@ def render_structural_matching_tab():
                 help=(
                     "Excluded from the CONTROL group only — these regions remain "
                     "available for test selection. To remove a region from the analysis "
-                    "entirely, also exclude it from the test list."
+                    "entirely, use the 'exclude from both' field above instead."
                 ),
                 key="ctrl_exclude_select",
             )
-            force_ctrl_exclude = [label_to_ctrl[label] for label in selected_ctrl_exclude_labels]
+            force_ctrl_exclude = [
+                label_to_ctrl_exclude[label] for label in selected_ctrl_exclude_labels
+            ]
             st.session_state.force_ctrl_exclude = force_ctrl_exclude
-            eligible_for_control = [
+            control_pool_geos = [
                 g
                 for g in all_geo_values
-                if g not in force_exp_include and g not in force_ctrl_exclude
+                if g not in force_exp_include
+                and g not in global_exclude
+                and g not in force_ctrl_exclude
             ]
-            control_pool_geos = eligible_for_control
 
     if "force_ctrl_exclude" not in st.session_state:
         st.session_state.force_ctrl_exclude = []
@@ -3767,6 +3964,10 @@ def render_structural_matching_tab():
                 "test_geos": list(test_geos),
                 "control_pool_geos": [],
                 "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
+                "global_exclusions": sorted(global_exclude),
+                "test_only_exclusions": sorted(force_exp_exclude),
+                "control_only_exclusions": [],
+                "kpi_pattern_period_quality": st.session_state.get("kpi_pattern_period_quality"),
                 "active_features": list(active_features),
                 "weights": dict(weights),
                 "eligible_means": tuple(
@@ -3798,9 +3999,12 @@ def render_structural_matching_tab():
 
         else:
             if setup_mode == "Set Rules & Auto‑Build Groups":
+                global_exclude_set = set(global_exclude)
+                excluded_from_test = set(force_exp_exclude) | global_exclude_set
+                excluded_from_control = set(force_ctrl_exclude) | global_exclude_set
                 conflicts = (
-                    (set(force_exp_include) & set(force_exp_exclude))
-                    | (set(force_ctrl_include) & set(force_ctrl_exclude))
+                    (set(force_exp_include) & excluded_from_test)
+                    | (set(force_ctrl_include) & excluded_from_control)
                     | (set(force_exp_include) & set(force_ctrl_include))
                 )
                 if conflicts:
@@ -3813,9 +4017,9 @@ def render_structural_matching_tab():
                     geo_col,
                     total_market_pop,
                     force_exp_include,
-                    force_exp_exclude,
+                    list(excluded_from_test),
                     force_ctrl_include,
-                    force_ctrl_exclude,
+                    list(excluded_from_control),
                     target_test_share,
                     target_tolerance_pp,
                     guided_iterations,
@@ -3827,7 +4031,11 @@ def render_structural_matching_tab():
                     st.stop()
                 if not target_met:
                     st.warning(
-                        f"Target population share range was not met. Closest achieved: {achieved_share * 100:.1f}% (target {target_test_share}%, ±{target_tolerance_pp}pp)."
+                        kpi_share_label(
+                            f"Target population share range was not met. Closest achieved: "
+                            f"{format_percentage(achieved_share * 100)} "
+                            f"(target {format_percentage(target_test_share)}, ±{target_tolerance_pp}pp)."
+                        )
                     )
                 st.session_state.guided_share_info = {
                     "achieved": achieved_share * 100,
@@ -3838,10 +4046,10 @@ def render_structural_matching_tab():
                 all_geos = set(agg_df[geo_col].unique())
                 # Note: force_exp_exclude is deliberately NOT subtracted here — a region
                 # excluded from the test group remains available as a control. Exclusions
-                # are one-sided; only excluding a region from BOTH lists removes it from
-                # the analysis entirely.
+                # are one-sided unless a region appears in BOTH exclusion lists, or in
+                # global_exclude, which removes it from the analysis entirely.
                 control_pool_geos = list(
-                    (all_geos - set(test_geos) - set(force_ctrl_exclude)) | set(force_ctrl_include)
+                    (all_geos - set(test_geos) - excluded_from_control) | set(force_ctrl_include)
                 )
             else:
                 st.session_state.guided_share_info = None
@@ -4077,6 +4285,10 @@ def render_structural_matching_tab():
                 if "control_pool_geos" in locals()
                 else [],
                 "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
+                "global_exclusions": sorted(global_exclude),
+                "test_only_exclusions": sorted(force_exp_exclude),
+                "control_only_exclusions": sorted(force_ctrl_exclude),
+                "kpi_pattern_period_quality": st.session_state.get("kpi_pattern_period_quality"),
                 "active_features": list(active_features),
                 "weights": dict(weights),
                 "eligible_means": tuple(eligible_means_tuple)
@@ -4259,17 +4471,19 @@ def render_structural_matching_tab():
             with ck4:
                 st.metric(
                     kpi_share_label("Test Population Share"),
-                    f"{experiment_pop_pct:.1f}%",
+                    format_percentage(experiment_pop_pct),
                     help=kpi_share_label(
                         "Percentage of total market population covered by the test regions used in the last completed run."
                     ),
                 )
                 if st.session_state.guided_share_info:
-                    st.caption(f"Target: {st.session_state.guided_share_info['target']}%")
+                    st.caption(
+                        f"Target: {format_percentage(st.session_state.guided_share_info['target'])}"
+                    )
             with ck5:
                 st.metric(
                     kpi_share_label("Control Population Share"),
-                    f"{control_pop_pct:.1f}%",
+                    format_percentage(control_pop_pct),
                     help=kpi_share_label(
                         "Percentage of total market population covered by the control regions selected in the last completed run."
                     ),
@@ -4593,7 +4807,9 @@ def render_structural_matching_tab():
                             st.code(f"{type(e).__name__}: {e}")
             with col2:
                 if st.button("📋 Copy Summary to Clipboard", width="stretch"):
-                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {(experiment_pop / eligible_market_pop * 100):.1f}%\n{kpi_share_label("Control Population Share")}: {(control_pop / eligible_market_pop * 100):.1f}%"""
+                    _summary_test_share_pct = experiment_pop / eligible_market_pop * 100
+                    _summary_control_share_pct = control_pop / eligible_market_pop * 100
+                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {format_percentage(_summary_test_share_pct)}\n{kpi_share_label("Control Population Share")}: {format_percentage(_summary_control_share_pct)}"""
                     st.code(summary_text, language="text")
                     st.caption("Copy the text above manually")
 
@@ -5677,6 +5893,93 @@ def render_time_series_validation(mode: str):
             )
 
     # -------------------------------------------------------------------------
+    # 4b. Tracking-outage / data-quality period exclusion — persists across
+    # reruns and the Run button click (options never depend on this widget's
+    # own current selection, so a previously-selected exclusion can't be
+    # silently dropped by Streamlit on a later rerun). Applied once to
+    # agg_df_val inside the Run handler below, so validation, evaluation, and
+    # Bayesian TBR all share the exact same retained dates (they all read
+    # from the one agg_df_val stored in st.session_state.validation_results).
+    # -------------------------------------------------------------------------
+    _ts_metric_df = df_long[df_long["metric_name"] == selected_metric]
+    _ts_wide = _ts_metric_df.pivot_table(
+        index="region_raw", columns="date", values="kpi", aggfunc="sum"
+    )
+    _ts_quality_report = compute_period_quality(_ts_wide)
+    _ts_reason_by_date = {
+        row.date: "; ".join(row.reasons) for row in _ts_quality_report.rows if row.reasons
+    }
+    _ts_auto_flagged_dates = set(_ts_quality_report.definite_outage_dates) | set(
+        _ts_quality_report.missing_period_dates
+    )
+    _ts_date_option_labels = []
+    _ts_label_to_date = {}
+    for _d in sorted(_ts_wide.columns):
+        _d = pd.Timestamp(_d)
+        _reason = _ts_reason_by_date.get(_d)
+        _label = f"{_d.strftime('%d %b %y')} — {_reason}" if _reason else _d.strftime("%d %b %y")
+        _ts_date_option_labels.append(_label)
+        _ts_label_to_date[_label] = _d
+
+    _ts_exclude_widget_key = f"{mode_prefix}_outage_exclude_select"
+    if _ts_exclude_widget_key not in st.session_state:
+        st.session_state[_ts_exclude_widget_key] = [
+            lbl for lbl, d in _ts_label_to_date.items() if d in _ts_auto_flagged_dates
+        ]
+    st.markdown("**Periods to exclude because of tracking or data-quality issues:**")
+    _ts_selected_exclude_labels = st.multiselect(
+        "kpi_outage_exclude",
+        _ts_date_option_labels,
+        label_visibility="collapsed",
+        help=(
+            "Dates that look like a market-wide tracking outage (all or almost all "
+            "regions exactly zero, or most regions missing) are preselected. This "
+            "exclusion is shared by validation, evaluation, and Bayesian TBR for this "
+            "uploaded file."
+        ),
+        key=_ts_exclude_widget_key,
+    )
+    _ts_manual_excluded_dates = {_ts_label_to_date[lbl] for lbl in _ts_selected_exclude_labels}
+
+    _ts_planned_test_dates = (
+        {
+            pd.Timestamp(d)
+            for d in _ts_wide.columns
+            if pd.Timestamp(test_start) <= pd.Timestamp(d) <= pd.Timestamp(test_end)
+        }
+        if test_start is not None and test_end is not None
+        else set()
+    )
+    _ts_excluded_test_dates = _ts_manual_excluded_dates & _ts_planned_test_dates
+    _ts_test_exclusion_share = (
+        len(_ts_excluded_test_dates) / len(_ts_planned_test_dates)
+        if _ts_planned_test_dates
+        else 0.0
+    )
+    _ts_test_guard_triggered = _ts_test_exclusion_share > 0.20
+    _ts_test_guard_override_key = f"{mode_prefix}_test_exclusion_override"
+    if _ts_test_guard_triggered:
+        st.warning(
+            f"⚠️ {len(_ts_excluded_test_dates)} of {len(_ts_planned_test_dates)} planned test "
+            f"period(s) ({_ts_test_exclusion_share:.0%}) are excluded as tracking-outage/"
+            "data-quality periods. Uplift would be estimated only over the remaining "
+            "analysed periods."
+        )
+        _ts_test_guard_override = st.checkbox(
+            "Advanced: run anyway despite the excluded test-period share above 20%",
+            value=False,
+            key=_ts_test_guard_override_key,
+        )
+    else:
+        _ts_test_guard_override = st.session_state.get(_ts_test_guard_override_key, False)
+
+    if _ts_manual_excluded_dates:
+        st.caption(
+            f"ℹ️ {len(_ts_manual_excluded_dates)} period(s) excluded from the analysis below "
+            f"({len(_ts_auto_flagged_dates)} auto-flagged)."
+        )
+
+    # -------------------------------------------------------------------------
     # 5. Run button
     # -------------------------------------------------------------------------
     run_label = "Assess Region Alignment" if mode == "Design" else "Evaluate Test Impact"
@@ -5720,6 +6023,17 @@ def render_time_series_validation(mode: str):
                 "Not enough pre-period observations for the selected minimum training period and "
                 "validation window. Choose a longer pre-period, shorter validation window, or switch to "
                 "weekly aggregation."
+            )
+            st.session_state.validation_triggered = False
+            st.stop()
+
+        if _ts_test_guard_triggered and not _ts_test_guard_override:
+            st.error(
+                f"{len(_ts_excluded_test_dates)} of {len(_ts_planned_test_dates)} planned test "
+                f"period(s) ({_ts_test_exclusion_share:.0%}) are excluded as tracking-outage/"
+                "data-quality periods — above the 20% guard threshold. Repair/reupload the data, "
+                "exclude fewer test-period dates, or enable the advanced override above to "
+                "proceed anyway."
             )
             st.session_state.validation_triggered = False
             st.stop()
@@ -5779,6 +6093,15 @@ def render_time_series_validation(mode: str):
             if agg_df_val.empty:
                 st.error("Aggregation resulted in empty dataset.")
                 st.stop()
+
+            # Apply the shared tracking-outage/data-quality exclusion (section 4b above) —
+            # the same retained dates are then used by validation, evaluation, and Bayesian
+            # TBR, since they all read this stored agg_df_val.
+            if _ts_manual_excluded_dates:
+                agg_df_val = agg_df_val[~agg_df_val["date"].isin(_ts_manual_excluded_dates)]
+                if agg_df_val.empty:
+                    st.error("No data remains after excluding flagged/selected periods.")
+                    st.stop()
 
             # Region Mapping Diagnostics (unchanged)
             with st.expander("Region Mapping Diagnostics"):
@@ -6088,6 +6411,14 @@ def render_time_series_validation(mode: str):
                 "include_lagged_controls": include_lagged_controls,
                 "time_series_frequency": time_series_frequency,
                 "frequency_config": freq_config,
+                "automatic_outage_dates": sorted(_ts_auto_flagged_dates),
+                "manual_excluded_dates": sorted(_ts_manual_excluded_dates),
+                "effective_excluded_dates": sorted(_ts_manual_excluded_dates),
+                "planned_test_periods": len(_ts_planned_test_dates),
+                "analysed_test_periods": len(_ts_planned_test_dates) - len(_ts_excluded_test_dates),
+                "test_exclusion_guard_overridden": bool(
+                    _ts_test_guard_triggered and _ts_test_guard_override
+                ),
             }
 
             st.session_state.validation_triggered = False
@@ -6924,6 +7255,18 @@ with tab4:
                                         "use_structural_priors", False
                                     )
                                     _use_ar1 = st.session_state.get("use_ar1_errors", True)
+                                    if _use_ar1 and not _dates_are_contiguous(
+                                        pre_dates, bayes_freq_config
+                                    ):
+                                        st.error(
+                                            "Bayesian TBR's AR(1) noise-streak model assumes the "
+                                            "pre-period has no calendar gaps (e.g. from an excluded "
+                                            "tracking-outage date) — a gap would be silently treated "
+                                            "as one adjacent period. Either repair/reupload the data "
+                                            "so the pre-period is contiguous, or turn off 'Allow for "
+                                            "noise streaks — AR(1) errors' above and re-run."
+                                        )
+                                        st.stop()
                                     if _use_structural:
                                         # Data-driven sigma bounds from pre-period KPI correlations
                                         # corr[i] = how well control i tracks the test KPI historically
