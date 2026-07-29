@@ -43,6 +43,12 @@ htmlcov/
 # --- Environment ---
 .env
 .env.local
+.env.*
+!.env.example
+
+# --- MCP local/secret-bearing config ---
+*.local.mcp.json
+.mcp.local.json
 
 # --- Downloaded / generated ---
 *.py_backup/
