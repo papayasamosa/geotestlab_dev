@@ -287,6 +287,14 @@ class TestCLI:
         source = inspect.getsource(cr.main)
         assert "--check" in source
 
+    def test_main_has_diagnostics_flag(self):
+        import inspect
+
+        import scripts.compile_requirements as cr
+
+        source = inspect.getsource(cr.main)
+        assert "--diagnostics-dir" in source
+
     def test_main_calls_generate_or_check(self):
         import inspect
 
@@ -295,3 +303,125 @@ class TestCLI:
         source = inspect.getsource(cr.main)
         assert "args.check" in source
         assert "generate()" in source or "check()" in source
+
+    def test_main_rejects_diagnostics_dir_without_check(self, monkeypatch):
+        """--diagnostics-dir without --check must be rejected by argparse."""
+        import scripts.compile_requirements as cr
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["compile_requirements.py", "--diagnostics-dir", "lock-diagnostics"],
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            cr.main()
+        assert exc_info.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestLockDiagnostics:
+    """Verify the --diagnostics-dir mode reproduces the exact check output."""
+
+    def test_build_diff_none_for_identical_files(self, tmp_dir):
+        from scripts.compile_requirements import _build_diff
+
+        a = tmp_dir / "a.txt"
+        b = tmp_dir / "b.txt"
+        a.write_text("same content\n", encoding="utf-8")
+        b.write_text("same content\n", encoding="utf-8")
+        assert _build_diff(a, b) is None
+
+    def test_build_diff_returns_unified_diff_for_mismatch(self, tmp_dir):
+        from scripts.compile_requirements import _build_diff
+
+        a = tmp_dir / "requirements.txt"
+        b = tmp_dir / "requirements.generated.txt"
+        a.write_text("old\n", encoding="utf-8")
+        b.write_text("new\n", encoding="utf-8")
+        diff = _build_diff(a, b)
+        assert diff is not None
+        assert "committed/requirements.txt" in diff
+        assert "generated/requirements.generated.txt" in diff
+        assert "-old" in diff
+        assert "+new" in diff
+
+    def test_write_diagnostics_copies_generated_and_diff(self, tmp_dir, monkeypatch):
+        """Diagnostics must contain the generated file and the exact unified diff."""
+        import scripts.compile_requirements as cr
+
+        fake_repo = tmp_dir / "repo"
+        fake_repo.mkdir()
+        committed = fake_repo / "requirements.txt"
+        committed.write_text("old\n", encoding="utf-8")
+
+        workspace = tmp_dir / "workspace"
+        workspace.mkdir()
+        generated = workspace / "requirements.txt"
+        generated.write_text("new\n", encoding="utf-8")
+
+        diag = tmp_dir / "diag"
+        monkeypatch.setattr(cr, "REPO_ROOT", fake_repo)
+
+        cr._write_diagnostics(diag, "requirements.txt", workspace)
+
+        assert (diag / "requirements.txt").read_text(encoding="utf-8") == "new\n"
+        diff = (diag / "requirements.txt.diff").read_text(encoding="utf-8")
+        assert "-old" in diff
+        assert "+new" in diff
+
+    def test_check_with_diagnostics_reproduces_failed_check(self, tmp_dir, monkeypatch):
+        """check() with a diagnostics dir must copy the exact generated files and
+        diffs for every mismatch, and must never modify the repository locks."""
+        import scripts.compile_requirements as cr
+
+        if sys.version_info[:2] != (3, 11):
+            pytest.skip("Lock check requires Python 3.11")
+
+        diag = tmp_dir / "diag"
+
+        def fake_run_piptools(cmd, cwd, label):
+            """Simulate pip-compile producing a perturbed lock in the workspace."""
+            target = Path(cwd) / label
+            committed = cr.REPO_ROOT / label
+            if committed.exists():
+                target.write_text(
+                    committed.read_text(encoding="utf-8") + "\n# diagnostic-test-marker\n",
+                    encoding="utf-8",
+                )
+
+        monkeypatch.setattr(cr, "_run_piptools", fake_run_piptools)
+
+        repo_locks_before = {
+            fname: (cr.REPO_ROOT / fname).read_bytes()
+            for fname in ("requirements.txt", "requirements-dev.txt")
+        }
+
+        with pytest.raises(SystemExit) as exc_info:
+            cr.check(diagnostics_dir=diag)
+        assert exc_info.value.code == 1
+
+        # 1. Check mode must not modify repository locks.
+        for fname, before in repo_locks_before.items():
+            assert (cr.REPO_ROOT / fname).read_bytes() == before, (
+                f"check() modified the repository lock file {fname}"
+            )
+
+        # 2. Diagnostics contain both generated lock files.
+        for fname in ("requirements.txt", "requirements-dev.txt"):
+            generated = diag / fname
+            assert generated.exists(), f"missing generated {fname} in diagnostics"
+            # 3. The copied files are the exact outputs check() compared.
+            expected = (cr.REPO_ROOT / fname).read_text(encoding="utf-8") + (
+                "\n# diagnostic-test-marker\n"
+            )
+            assert generated.read_text(encoding="utf-8") == expected
+
+        # 4. Diagnostics contain both diffs when both mismatch.
+        for fname in ("requirements.txt", "requirements-dev.txt"):
+            diff = diag / f"{fname}.diff"
+            assert diff.exists(), f"missing diff for {fname} in diagnostics"
+            assert "# diagnostic-test-marker" in diff.read_text(encoding="utf-8")

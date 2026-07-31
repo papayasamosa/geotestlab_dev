@@ -2156,8 +2156,12 @@ def repair_text_value(v):
 
 def clean_dataframe_text(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    obj_cols = df.select_dtypes(include=["object"]).columns
-    for c in obj_cols:
+    # pandas 3.0 stores strings in the new "str" dtype by default, so selecting
+    # only "object" would silently miss them (and raises a Pandas4Warning).
+    # "object" + "string" selects text columns on both pandas 2.x and 3.x —
+    # see the pandas 3.0 string migration guide.
+    text_cols = df.select_dtypes(include=["object", "string"]).columns
+    for c in text_cols:
         df[c] = df[c].map(repair_text_value)
     return df
 

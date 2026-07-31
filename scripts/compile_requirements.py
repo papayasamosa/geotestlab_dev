@@ -2,8 +2,12 @@
 """Reproducible lock-file generator for GeoTestLab.
 
 Usage:
-    python scripts/compile_requirements.py          # generate both lock files
-    python scripts/compile_requirements.py --check   # verify committed files match
+    python scripts/compile_requirements.py           # generate both lock files
+    python scripts/compile_requirements.py --check    # verify committed files match
+    python scripts/compile_requirements.py --check --diagnostics-dir lock-diagnostics
+        # verify committed files, and when a lock mismatches copy the exact
+        # generated workspace file and the exact unified diff (the same diff the
+        # checker printed) into lock-diagnostics/ for CI to upload.
 
 Requires Python 3.11 and pip-tools >=7,<8.
 
@@ -20,6 +24,11 @@ It copies the committed locks into the workspace first so that
 pip-compile's resolver sees the current pins.  The compile runs
 from the workspace directory using relative output-file names,
 so the generated header never contains an absolute temporary path.
+
+Diagnostics mode does not run a second, independent resolver pass: it
+simply copies out the exact files and unified diffs that check() already
+generated and compared.  The repository lock files are never modified by
+check mode — generation happens only in the temporary workspace.
 """
 
 from __future__ import annotations
@@ -152,6 +161,48 @@ def _prepare_workspace(tmpdir: Path) -> Path:
     return workspace
 
 
+def _build_diff(committed: Path, generated: Path) -> str | None:
+    """Return the unified diff between committed and generated lock files.
+
+    Uses exactly the same comparison and diff the checker relies on.  Returns
+    None when the two files are byte-for-byte identical.
+    """
+    committed_bytes = committed.read_bytes()
+    generated_bytes = generated.read_bytes()
+
+    if committed_bytes == generated_bytes:
+        return None
+
+    committed_lines = committed_bytes.decode("utf-8").splitlines(keepends=True)
+    generated_lines = generated_bytes.decode("utf-8").splitlines(keepends=True)
+    return "".join(
+        difflib.unified_diff(
+            committed_lines,
+            generated_lines,
+            fromfile=f"committed/{committed.name}",
+            tofile=f"generated/{generated.name}",
+        )
+    )
+
+
+def _write_diagnostics(diagnostics_dir: Path, fname: str, workspace: Path) -> None:
+    """Copy the exact generated lock file and its unified diff into the diagnostics dir.
+
+    Copies the workspace-generated file byte-for-byte (``shutil.copy2``) and
+    writes the same unified diff that ``check()`` compares with, so the
+    uploaded diagnostics reproduce the failed checker workspace exactly.
+    """
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
+
+    generated = workspace / fname
+    if generated.exists():
+        shutil.copy2(generated, diagnostics_dir / fname)
+
+    diff_text = _build_diff(REPO_ROOT / fname, generated)
+    if diff_text is not None:
+        (diagnostics_dir / f"{fname}.diff").write_text(diff_text, encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Generation mode
 # ---------------------------------------------------------------------------
@@ -178,11 +229,16 @@ def generate() -> None:
 # ---------------------------------------------------------------------------
 
 
-def check() -> None:
+def check(diagnostics_dir: str | Path | None = None) -> None:
     """Generate both lock files in a temp workspace and compare with committed files.
 
     Exits with code 1 when any lock mismatches.  Reports ALL mismatches
     before exiting.
+
+    When ``diagnostics_dir`` is given and a lock mismatches, the exact
+    workspace-generated lock file and the exact unified diff (the same diff
+    printed here) are written into that directory for CI to upload.  The
+    repository's committed lock files are never modified.
     """
     _check_python_version()
 
@@ -191,6 +247,7 @@ def check() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         workspace = _prepare_workspace(tmp_path)
+        diag_path = Path(diagnostics_dir) if diagnostics_dir is not None else None
 
         for fname, extras in LOCK_SPECS:
             committed = REPO_ROOT / fname
@@ -205,24 +262,17 @@ def check() -> None:
                 mismatches.append(fname)
                 continue
 
-            committed_bytes = committed.read_bytes()
-            generated_bytes = generated.read_bytes()
+            diff_text = _build_diff(committed, generated)
 
-            if committed_bytes == generated_bytes:
+            if diff_text is None:
                 print(f"  {fname}: OK")
             else:
                 print(f"  {fname}: MISMATCH")
                 mismatches.append(fname)
-                committed_lines = committed_bytes.decode("utf-8").splitlines(keepends=True)
-                generated_lines = generated_bytes.decode("utf-8").splitlines(keepends=True)
-                diff = difflib.unified_diff(
-                    committed_lines,
-                    generated_lines,
-                    fromfile=f"committed/{fname}",
-                    tofile=f"generated/{fname}",
-                )
-                for line in diff:
+                for line in diff_text.splitlines(keepends=True):
                     print(f"    {line}", end="")
+                if diag_path is not None:
+                    _write_diagnostics(diag_path, fname, workspace)
 
         if mismatches:
             sys.exit(1)
@@ -242,13 +292,24 @@ def main() -> None:
         action="store_true",
         help="Verify committed lock files match freshly generated ones.",
     )
+    parser.add_argument(
+        "--diagnostics-dir",
+        metavar="PATH",
+        default=None,
+        help=(
+            "With --check, copy the exact generated lock files and unified diffs for "
+            "every mismatch into this directory (uploaded by CI on failure)."
+        ),
+    )
     args = parser.parse_args()
 
     if os.environ.get("CI"):
         print("Running in CI environment...")
 
     if args.check:
-        check()
+        check(diagnostics_dir=args.diagnostics_dir)
+    elif args.diagnostics_dir:
+        parser.error("--diagnostics-dir can only be used together with --check")
     else:
         generate()
 
