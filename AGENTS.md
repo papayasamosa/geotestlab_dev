@@ -23,6 +23,17 @@ client) working in this repository.
 - Record which MCP sources materially informed a code change in the pull-request
   description.
 
+## Local storage policy (D-drive rule)
+
+- All newly created local environments and caches must use `D:` — never `C:`.
+- Playwright browser storage must use `PLAYWRIGHT_BROWSERS_PATH` on `D:`.
+- Hugging Face storage must use `HF_HOME` on `D:`.
+- npm and pip caches must use `D:` (`npm_config_cache`, `PIP_CACHE_DIR`).
+- No new system-wide installations; use session-scoped environment variables.
+- Existing tools may be used from their current location, but new installs must
+  not target `C:`.
+- Do not commit machine-specific absolute repository paths or usernames.
+
 Before changing matching, time-series validation, placebo, uplift, or Bayesian
 behaviour, inspect the current implementation and numerical-characterisation
 tests. MCP tools provide context and operational access; they do not override the

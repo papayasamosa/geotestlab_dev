@@ -56,6 +56,29 @@ Full GeoTestLab-specific usage rules live in [`AGENTS.md`](../../AGENTS.md).
 Re-run the checks above at any time with `scripts/check_mcp_prereqs.py` (see
 [below](#prerequisite-checker)).
 
+## Local storage policy (D-drive rule)
+
+All locally created development environments and caches for this repository
+must live on the `D:` drive, never on `C:`. This covers MCP server runtime
+artifacts (Playwright browsers, npm cache) as well as Python environments and
+pip cache.
+
+- Newly created environments and caches use `D:` (e.g.
+  `D:\GeoTestLabDev\venvs\`, `D:\GeoTestLabDev\cache\pip\`,
+  `D:\GeoTestLabDev\cache\npm\`, `D:\GeoTestLabDev\cache\playwright\`,
+  `D:\GeoTestLabDev\cache\huggingface\`, `D:\GeoTestLabDev\tmp\`).
+- Playwright browser storage uses `PLAYWRIGHT_BROWSERS_PATH` pointing at `D:`
+  (e.g. `D:\GeoTestLabDev\cache\playwright`).
+- Hugging Face storage uses `HF_HOME` / `HUGGINGFACE_HUB_CACHE` pointing at
+  `D:` (e.g. `D:\GeoTestLabDev\cache\huggingface`).
+- npm and pip caches use `D:` (`npm_config_cache`, `PIP_CACHE_DIR`).
+- No new system-wide installations; prefer session-scoped environment
+  variables.
+- Existing tools may be used from their current location, but new installs must
+  not target `C:`.
+
+Never commit machine-specific absolute repository paths or usernames.
+
 ## Configuration
 
 ### Where the config lives
@@ -90,7 +113,7 @@ claude mcp add --transport http github https://api.githubcopilot.com/mcp/ \
 claude mcp add --transport http context7 https://mcp.context7.com/mcp \
   --header "CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}" --scope project
 
-claude mcp add --transport stdio playwright --scope project -- npx @playwright/mcp@latest
+claude mcp add --transport stdio playwright --scope project -- npx @playwright/mcp@0.0.78
 
 claude mcp add --transport http huggingface https://huggingface.co/mcp \
   --header "Authorization: Bearer ${HF_TOKEN}" --scope project
@@ -108,9 +131,10 @@ token for servers that advertise it; run `/mcp` and follow the sign-in prompt
 if you'd rather not manage a PAT/API key manually. Playwright runs as a local
 `npx` process and needs no authentication.
 
-> Pin the Playwright version once you've confirmed it works, e.g.
-> `@playwright/mcp@0.x.y`, instead of `@latest`, if you want reproducible CI-like
-> behaviour. Record the pinned version here when you do.
+> Playwright MCP is pinned to `@playwright/mcp@0.0.78` (verified against the npm
+> registry; see the pinned references in `.mcp.json` and
+> `mcp-config-examples/codex-config.toml`). Do not bump back to `@latest` without
+> re-verifying the new version against the live app.
 
 ### Other clients (Codex, Cursor, VS Code)
 
@@ -133,7 +157,7 @@ client's config syntax verbatim.
 
   [mcp_servers.playwright]
   command = "npx"
-  args = ["@playwright/mcp@latest"]
+  args = ["@playwright/mcp@0.0.78"]
   startup_timeout_sec = 30
   tool_timeout_sec = 120
   required = false
@@ -148,7 +172,7 @@ client's config syntax verbatim.
   [`mcp-config-examples/codex-config.toml`](mcp-config-examples/codex-config.toml).
 
 - **Cursor** — add the three remote servers by URL and Playwright as a command
-  server (`npx @playwright/mcp@latest`) via Cursor's MCP settings or
+  server (`npx @playwright/mcp@0.0.78`) via Cursor's MCP settings or
   `mcp.json`; use Cursor's secure credential mechanism for the tokens if
   environment-variable substitution isn't supported by your version.
 
@@ -240,7 +264,7 @@ sandbox. Once your tokens are set, run inside a Claude Code session:
 - **Missing-variable warning in `claude mcp list`** — the referenced env var
   isn't visible to the MCP client process; set it at the user/session level
   (not just inside a subshell) and restart the client.
-- **Playwright fails to launch** — confirm `npx @playwright/mcp@latest`
+- **Playwright fails to launch** — confirm `npx @playwright/mcp@0.0.78`
   installs without a proxy/registry error; corporate networks sometimes block
   the npm registry.
 - **An MCP server is simply unavailable** — proceed with the rest of the task

@@ -16,6 +16,10 @@ build/
 venv/
 env/
 
+# --- Local tooling (graphify) ---
+.graphify-venv/
+graphify-out/
+
 # --- IDE / Editor ---
 .vscode/settings.json
 .idea/
