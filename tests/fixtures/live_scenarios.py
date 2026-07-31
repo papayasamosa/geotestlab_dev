@@ -180,9 +180,11 @@ def drive_constraints() -> dict:
 
     _run_match(app)
     ss = app.session_state
+    snapshot = _sget(ss, "match_run_snapshot") or {}
     test_regions = _sget(ss, "selected_experiment_regions") or []
     fc = _sget(ss, "final_controls")
     control_regions = fc["Local Authority Area"].tolist() if fc is not None else []
+    control_candidate_pool = snapshot.get("control_pool_geos", []) or []
 
     constraints_result = _to_jsonable(
         {
@@ -191,12 +193,17 @@ def drive_constraints() -> dict:
             "excluded_test_region": excluded_test,
             "excluded_test_region_in_test_group": excluded_test in test_regions,
             "forced_control_region": forced_ctrl,
+            # force_ctrl_include guarantees candidate-pool ELIGIBILITY, not
+            # guaranteed final selection — the matching strategy decides the
+            # final control group (see the golden's known_limitations).
+            "forced_control_region_in_candidate_pool": forced_ctrl in control_candidate_pool,
             "forced_control_region_in_control_group": forced_ctrl in control_regions,
             "excluded_control_region": excluded_ctrl,
             "excluded_control_region_in_control_group": excluded_ctrl in control_regions,
             "n_test_regions": len(test_regions),
             "n_control_regions": len(control_regions),
             "guided_share_info": _sget(ss, "guided_share_info"),
+            "guided_seed": snapshot.get("guided_seed"),
             **_app_messages(app),
         }
     )

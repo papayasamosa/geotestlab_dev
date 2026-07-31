@@ -1,7 +1,7 @@
 import io
-import random
 import re
 import unicodedata
+from dataclasses import dataclass
 
 import altair as alt
 import numpy as np
@@ -2955,6 +2955,8 @@ def matching_setup_changed_since_last_run(
         return True
     if match_mode != run_snapshot.get("match_mode"):
         return True
+    if run_snapshot.get("guided_seed") != GUIDED_SEARCH_CONFIG.seed:
+        return True
     if set(test_geos) != set(run_snapshot.get("test_geos", [])):
         return True
     run_weights = run_snapshot.get("weights", {}) or {}
@@ -3031,6 +3033,96 @@ def cleanup_session_state():
 # ------------------------------------------------------------
 # Guided experiment group search
 # ------------------------------------------------------------
+@dataclass(frozen=True)
+class GuidedSearchConfig:
+    """Typed configuration for the guided 'Set Rules & Auto-Build Groups' search.
+
+    ``seed`` makes the stochastic guided search reproducible: the caller builds
+    a ``numpy.random.Generator`` from it and injects it into
+    ``find_guided_test_group()``.  The seed is recorded in run snapshots,
+    exports, input fingerprints, and the numerical golden settings.
+    """
+
+    seed: int = 42
+    search_iterations_default: int = 2000
+    target_share_default: int = 25
+    tolerance_pp_default: int = 5
+
+
+GUIDED_SEARCH_CONFIG = GuidedSearchConfig()
+
+
+@dataclass(frozen=True)
+class MatchConstraints:
+    """One explicit, typed constraint model for 'Set Rules & Auto-Build Groups'.
+
+    A region may be assigned to at most ONE field.  ``validate_constraints()``
+    is the single authority for detecting overlaps — widget option subtraction
+    is a convenience, never the only conflict-prevention mechanism.
+    """
+
+    exclude_from_both: tuple[str, ...] = ()
+    force_test_include: tuple[str, ...] = ()
+    test_only_exclude: tuple[str, ...] = ()
+    force_control_include: tuple[str, ...] = ()
+    control_only_exclude: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ConstraintConflict:
+    """Structured overlap error: a region assigned to more than one field."""
+
+    region: str
+    fields: tuple[str, ...]
+
+
+def validate_constraints(constraints: MatchConstraints) -> tuple[ConstraintConflict, ...]:
+    """Return one structured ConstraintConflict per region with a CONTRADICTORY
+    assignment.
+
+    The one-sided exclusion semantics remain valid: a region assigned to
+    ``test_only_exclude`` AND ``force_control_include`` is simply
+    'control-only' (consistent), and ``force_test_include`` +
+    ``control_only_exclude`` is 'test-only' (consistent).  Only contradictory
+    assignments are conflicts:
+    - ``exclude_from_both`` combined with any other field;
+    - ``force_test_include`` with ``test_only_exclude``;
+    - ``force_test_include`` with ``force_control_include``;
+    - ``force_control_include`` with ``control_only_exclude``.
+
+    Pure function — no Streamlit dependency.
+    """
+    field_regions: dict[str, tuple[str, ...]] = {
+        "exclude_from_both": constraints.exclude_from_both,
+        "force_test_include": constraints.force_test_include,
+        "test_only_exclude": constraints.test_only_exclude,
+        "force_control_include": constraints.force_control_include,
+        "control_only_exclude": constraints.control_only_exclude,
+    }
+    region_to_fields: dict[str, list[str]] = {}
+    for field, regions in field_regions.items():
+        for region in regions:
+            region_to_fields.setdefault(region, []).append(field)
+
+    def _is_conflicting(fields: list[str]) -> bool:
+        field_set = set(fields)
+        if "exclude_from_both" in field_set and len(field_set) > 1:
+            return True
+        if {"force_test_include", "force_control_include"} <= field_set:
+            return True
+        if {"force_test_include", "test_only_exclude"} <= field_set:
+            return True
+        if {"force_control_include", "control_only_exclude"} <= field_set:
+            return True
+        return False
+
+    return tuple(
+        ConstraintConflict(region=region, fields=tuple(fields))
+        for region, fields in sorted(region_to_fields.items())
+        if _is_conflicting(fields)
+    )
+
+
 def find_guided_test_group(
     agg_df,
     geo_col,
@@ -3042,7 +3134,16 @@ def find_guided_test_group(
     target_share,
     tolerance_pp,
     search_iterations=2000,
+    rng=None,
 ):
+    """Search for a test group satisfying the guided-share constraints.
+
+    ``rng`` is an injected ``numpy.random.Generator`` — the caller controls
+    reproducibility (see ``GuidedSearchConfig.seed``).  No module-global
+    ``random`` state is used.  Returns (best_set, best_share, met).
+    """
+    if rng is None:
+        rng = np.random.default_rng(GUIDED_SEARCH_CONFIG.seed)
     all_geos = set(agg_df[geo_col].unique())
     forced_test = set(force_exp_include)
     # Exclusions are one-sided: force_ctrl_exclude removes a region from the
@@ -3052,14 +3153,17 @@ def find_guided_test_group(
     # BOTH lists. Control-side INCLUDES are barred from test because a region
     # can belong to only one group.
     forbidden_test = set(force_exp_exclude) | set(force_ctrl_include)
-    candidate = list(all_geos - forced_test - forbidden_test)
+    # sorted() keeps the candidate list order deterministic across processes —
+    # Python string-set iteration order is randomized per process, and the rng
+    # picks candidates by index.
+    candidate = sorted(all_geos - forced_test - forbidden_test)
     pop_map = agg_df.set_index(geo_col)[POPULATION_COL].to_dict()
     if any(g not in all_geos for g in forced_test):
         return [], 0, False
     forced_pop = sum(pop_map.get(g, 0) for g in forced_test)
     low = max(0, target_share - tolerance_pp) / 100
     high = min(100, target_share + tolerance_pp) / 100
-    best_set = list(forced_test)
+    best_set = sorted(forced_test)
     best_share = (forced_pop / total_market_pop) if total_market_pop > 0 else 0
     best_dist = (
         min(abs(best_share - low), abs(best_share - high)) if not (low <= best_share <= high) else 0
@@ -3070,7 +3174,7 @@ def find_guided_test_group(
 
         for r in range(len(candidate) + 1):
             for comb in combinations(candidate, r):
-                trial = list(forced_test | set(comb))
+                trial = sorted(forced_test | set(comb))
                 share = (
                     agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop
                     if total_market_pop > 0
@@ -3085,9 +3189,9 @@ def find_guided_test_group(
                     met = low <= share <= high
     else:
         for _ in range(search_iterations):
-            k = random.randint(0, len(candidate))
-            sampled = random.sample(candidate, k)
-            trial = list(forced_test | set(sampled))
+            k = int(rng.integers(0, len(candidate) + 1))
+            sampled = [candidate[i] for i in rng.choice(len(candidate), size=k, replace=False)]
+            trial = sorted(forced_test | set(sampled))
             share = (
                 agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop
                 if total_market_pop > 0
@@ -3690,22 +3794,35 @@ def render_structural_matching_tab():
                 "Test geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
                 unsafe_allow_html=True,
             )
+            # A persisted selection is never silently dropped when it would
+            # conflict with another rule — it stays selectable so the run's
+            # structured conflict blocker (validate_constraints) surfaces it.
+            _exp_include_persisted = {
+                label_to_geo[lbl] for lbl in st.session_state.get("exp_include_select", [])
+            }
             selected_include_labels = st.multiselect(
                 "exp_include",
                 [
                     label
                     for label in geo_options_with_pop
-                    if label_to_geo[label] not in global_exclude
+                    if label_to_geo[label] in _exp_include_persisted
+                    or label_to_geo[label] not in global_exclude
                 ],
                 label_visibility="collapsed",
                 key="exp_include_select",
             )
             force_exp_include = [label_to_geo[label] for label in selected_include_labels]
+            _exp_exclude_persisted = {
+                label_to_geo[lbl] for lbl in st.session_state.get("exp_exclude_select", [])
+            }
             exclude_options = [
                 label
                 for label in geo_options_with_pop
-                if label_to_geo[label] not in force_exp_include
-                and label_to_geo[label] not in global_exclude
+                if label_to_geo[label] in _exp_exclude_persisted
+                or (
+                    label_to_geo[label] not in force_exp_include
+                    and label_to_geo[label] not in global_exclude
+                )
             ]
             st.markdown(
                 "Test geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
@@ -3837,12 +3954,21 @@ def render_structural_matching_tab():
                     mapping[label] = geo
                 return labels, mapping
 
+            # Persisted ctrl_include selections stay selectable even when they now
+            # conflict with another rule, so the run's structured conflict blocker
+            # (validate_constraints) surfaces the overlap instead of a silent reset.
+            _ctrl_include_persisted = {
+                label_to_geo[lbl] for lbl in st.session_state.get("ctrl_include_select", [])
+            }
             eligible_for_ctrl_include = [
                 g
                 for g in all_geo_values
-                if g not in force_exp_include
-                and g not in global_exclude
-                and g not in _force_ctrl_exclude_prev
+                if g in _ctrl_include_persisted
+                or (
+                    g not in force_exp_include
+                    and g not in global_exclude
+                    and g not in _force_ctrl_exclude_prev
+                )
             ]
             ctrl_options_with_pop, label_to_ctrl_include = _geo_labels(eligible_for_ctrl_include)
             st.markdown(
@@ -3854,8 +3980,11 @@ def render_structural_matching_tab():
                 ctrl_options_with_pop,
                 label_visibility="collapsed",
                 help=(
-                    "A region can only be force-included in one group, so regions "
-                    "force-included in the test group are not shown here."
+                    "Force-includes the region in the CONTROL candidate pool (it "
+                    "cannot be a test region). It is ELIGIBLE for — but not "
+                    "guaranteed in — the final control group: the matching "
+                    "strategy decides final selection. A region can only be "
+                    "force-included in one group."
                 ),
                 key="ctrl_include_select",
             )
@@ -3863,12 +3992,18 @@ def render_structural_matching_tab():
                 label_to_ctrl_include[label] for label in selected_ctrl_include_labels
             ]
 
+            _ctrl_exclude_persisted = {
+                label_to_geo[lbl] for lbl in st.session_state.get("ctrl_exclude_select", [])
+            }
             eligible_for_ctrl_exclude = [
                 g
                 for g in all_geo_values
-                if g not in force_exp_include
-                and g not in global_exclude
-                and g not in force_ctrl_include
+                if g in _ctrl_exclude_persisted
+                or (
+                    g not in force_exp_include
+                    and g not in global_exclude
+                    and g not in force_ctrl_include
+                )
             ]
             exclude_ctrl_options, label_to_ctrl_exclude = _geo_labels(eligible_for_ctrl_exclude)
             st.markdown(
@@ -4127,19 +4262,31 @@ def render_structural_matching_tab():
 
         else:
             if setup_mode == "Set Rules & Auto‑Build Groups":
+                constraints = MatchConstraints(
+                    exclude_from_both=tuple(global_exclude),
+                    force_test_include=tuple(force_exp_include),
+                    test_only_exclude=tuple(force_exp_exclude),
+                    force_control_include=tuple(force_ctrl_include),
+                    control_only_exclude=tuple(force_ctrl_exclude),
+                )
+                # Structured overlap validation — the single authority for
+                # constraint conflicts (widget option subtraction is only a
+                # convenience, never the only prevention mechanism). Every
+                # overlap is reported as a visible structured blocker.
+                constraint_conflicts = validate_constraints(constraints)
+                if constraint_conflicts:
+                    for _conflict in constraint_conflicts:
+                        st.error(
+                            f"🚫 Invalid constraints: **{_conflict.region}** is assigned to "
+                            f"multiple constraint fields: {', '.join(_conflict.fields)}. "
+                            "A region can only be assigned to one rule — remove the "
+                            "overlapping assignment before running."
+                        )
+                    st.stop()
                 global_exclude_set = set(global_exclude)
                 excluded_from_test = set(force_exp_exclude) | global_exclude_set
                 excluded_from_control = set(force_ctrl_exclude) | global_exclude_set
-                conflicts = (
-                    (set(force_exp_include) & excluded_from_test)
-                    | (set(force_ctrl_include) & excluded_from_control)
-                    | (set(force_exp_include) & set(force_ctrl_include))
-                )
-                if conflicts:
-                    st.error(
-                        f"Invalid constraints. These geographies have conflicting assignments: {sorted(conflicts)}"
-                    )
-                    st.stop()
+                _guided_rng = np.random.default_rng(GUIDED_SEARCH_CONFIG.seed)
                 test_geos, achieved_share, target_met = find_guided_test_group(
                     agg_df,
                     geo_col,
@@ -4151,6 +4298,7 @@ def render_structural_matching_tab():
                     target_test_share,
                     target_tolerance_pp,
                     guided_iterations,
+                    rng=_guided_rng,
                 )
                 if len(test_geos) == 0:
                     st.error(
@@ -4176,7 +4324,7 @@ def render_structural_matching_tab():
                 # excluded from the test group remains available as a control. Exclusions
                 # are one-sided unless a region appears in BOTH exclusion lists, or in
                 # global_exclude, which removes it from the analysis entirely.
-                control_pool_geos = list(
+                control_pool_geos = sorted(
                     (all_geos - set(test_geos) - excluded_from_control) | set(force_ctrl_include)
                 )
             else:
@@ -4416,6 +4564,7 @@ def render_structural_matching_tab():
                 "global_exclusions": sorted(global_exclude),
                 "test_only_exclusions": sorted(force_exp_exclude),
                 "control_only_exclusions": sorted(force_ctrl_exclude),
+                "guided_seed": GUIDED_SEARCH_CONFIG.seed,
                 "kpi_pattern_period_quality": st.session_state.get("kpi_pattern_period_quality"),
                 "active_features": list(active_features),
                 "weights": dict(weights),
@@ -4937,7 +5086,12 @@ def render_structural_matching_tab():
                 if st.button("📋 Copy Summary to Clipboard", width="stretch"):
                     _summary_test_share_pct = experiment_pop / eligible_market_pop * 100
                     _summary_control_share_pct = control_pop / eligible_market_pop * 100
-                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {format_percentage(_summary_test_share_pct)}\n{kpi_share_label("Control Population Share")}: {format_percentage(_summary_control_share_pct)}"""
+                    _guided_seed_line = (
+                        f"\nGuided Search Seed: {GUIDED_SEARCH_CONFIG.seed}"
+                        if setup_mode == "Set Rules & Auto-Build Groups"
+                        else ""
+                    )
+                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}{_guided_seed_line}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {format_percentage(_summary_test_share_pct)}\n{kpi_share_label("Control Population Share")}: {format_percentage(_summary_control_share_pct)}"""
                     st.code(summary_text, language="text")
                     st.caption("Copy the text above manually")
 
