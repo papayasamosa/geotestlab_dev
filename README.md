@@ -86,9 +86,19 @@ pytest --cov=.           # With coverage
 
 ## Architecture
 
-The application is currently monolithic (`geotestmatch.py`). The `utils/` package was removed in `fix/baseline-safety-net` as it was stale code not imported by the live application.
+The application entry point is `geotestmatch.py` (Streamlit), which acts as a thin adapter over the `geotestlab/` package. The package is being split out of the monolith incrementally, one behaviour-preserving stage at a time:
 
-Target architecture (in progress): `src/geotestlab/` package with `data/`, `matching/`, `modelling/`, `reporting/`, and `ui/` subpackages.
+- `geotestlab/data/` — ingestion, data-quality contract, region mapping, period-quality reports. (Stages 1–2)
+- `geotestlab/matching/` — the pure matching core (Stage 4): no Streamlit imports, unit-tested directly.
+  - `models.py` — immutable typed objects (`MatchConfig`, `FeatureWeightConfig`, `MatchConstraints`, `MatchDiagnostics`, `MatchResult`) and shared column constants.
+  - `structural.py` — structural feature preparation (market-dataframe cleaning, weighted aggregation, median imputation).
+  - `metrics.py` — population-weighted profiles, SMD, Weighted Structural Distance, the vectorised scorer, and NN pre-processing.
+  - `kpi_pattern.py` — KPI-pattern feature preparation (index-to-100 pattern distance).
+  - `constraints.py` — guided 'Set Rules & Auto-Build Groups' search + conflict validation.
+  - `strategies.py` — Basic (Greedy Nearest Neighbor), Intermediate (Hill Climbing), Advanced (Stochastic Genetic Search).
+- `geotestlab/modelling/`, `geotestlab/reporting/`, `geotestlab/ui/` — target subpackages (not yet extracted).
+
+The Streamlit app keeps `@st.cache_data` wrappers around the pure package functions (aggregation, metric caching, KPI workbook parsing, NN pre-processing) so caching behaviour is unchanged. Numerical characterisation goldens (`tests/test_numerical_characterisation.py`) guard that every extraction is behaviour-preserving.
 
 ## Methodology caveat
 

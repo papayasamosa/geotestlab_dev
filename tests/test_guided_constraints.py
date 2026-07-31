@@ -1,8 +1,8 @@
 """Pure tests for guided-search determinism and the constraint model (Stage 3).
 
-The matching core still lives inside ``geotestmatch.py`` (extraction is
-Stage 4), so these tests load the exact production symbols via AST — as
-``tests/test_text_cleaning.py`` does — without launching the Streamlit app.
+The matching core now lives in the ``geotestlab.matching`` package (Stage 4
+extraction), so these tests import the production symbols directly — no
+Streamlit app required.
 
 Desired corrected behaviour (fails on the current unseeded / untyped code):
 - ``find_guided_test_group`` accepts an injected ``numpy.random.Generator``;
@@ -14,35 +14,17 @@ Desired corrected behaviour (fails on the current unseeded / untyped code):
 
 from __future__ import annotations
 
-import ast
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-APP_PATH = REPO_ROOT / "geotestmatch.py"
-
-
-def _load_app_symbols(*names: str) -> dict:
-    """Extract and execute the named top-level functions/classes from geotestmatch.py."""
-    import dataclasses
-
-    tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
-    namespace: dict = {
-        "dataclass": dataclasses.dataclass,
-        "np": np,
-        "pd": pd,
-        "POPULATION_COL": "Population",
-    }
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in names:
-            module = ast.Module(body=[node], type_ignores=[])
-            exec(compile(module, str(APP_PATH), "exec"), namespace)
-    missing = [n for n in names if n not in namespace]
-    assert not missing, f"Symbols not found in {APP_PATH.name}: {missing}"
-    return namespace
+from geotestlab.matching import (
+    ConstraintConflict,
+    GuidedSearchConfig,
+    MatchConstraints,
+    find_guided_test_group,
+    validate_constraints,
+)
 
 
 def _make_agg_df(regions: list[str], pops: list[float]) -> pd.DataFrame:
@@ -58,7 +40,11 @@ class TestMatchConstraints:
     @classmethod
     @pytest.fixture(scope="class")
     def symbols(cls):
-        return _load_app_symbols("MatchConstraints", "ConstraintConflict", "validate_constraints")
+        return {
+            "MatchConstraints": MatchConstraints,
+            "ConstraintConflict": ConstraintConflict,
+            "validate_constraints": validate_constraints,
+        }
 
     def test_typed_model_exists(self, symbols):
         MatchConstraints = symbols["MatchConstraints"]
@@ -152,7 +138,10 @@ class TestGuidedSearchDeterminism:
     @classmethod
     @pytest.fixture(scope="class")
     def symbols(cls):
-        return _load_app_symbols("find_guided_test_group", "GuidedSearchConfig")
+        return {
+            "find_guided_test_group": find_guided_test_group,
+            "GuidedSearchConfig": GuidedSearchConfig,
+        }
 
     def test_seed_defined_in_typed_config(self, symbols):
         GuidedSearchConfig = symbols["GuidedSearchConfig"]
