@@ -1,7 +1,6 @@
 import io
 import re
 import unicodedata
-from dataclasses import dataclass
 
 import altair as alt
 import numpy as np
@@ -16,7 +15,6 @@ from scipy import stats
 from sklearn.linear_model import ElasticNet, ElasticNetCV
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 
 from geotestlab.data.exceptions import (
@@ -31,6 +29,45 @@ from geotestlab.data.ingestion import detect_date_columns, detect_metric_column
 from geotestlab.data.ingestion import load_and_reshape_kpi as _load_and_reshape_kpi
 from geotestlab.data.models import compute_mapping_report
 from geotestlab.data.period_quality import compute_period_quality
+
+# Matching core (geotestlab.matching) — pure functions, no Streamlit imports.
+from geotestlab.matching import (
+    ADOBE_COL,
+    GUIDED_SEARCH_CONFIG,
+    POPULATION_COL,
+    MatchConstraints,
+    basic_strategy,
+    build_kpi_pattern_agg_df,
+    build_kpi_pattern_wide,
+    calculate_experiment_population_coverage,
+    calculate_metrics,
+    calculate_metrics_from_flat,
+    coerce_kpi_date_values,
+    filter_kpi_rows,
+    find_guided_test_group,
+    fit_structural_stats,
+    get_grouping_columns,
+    get_numeric_metric_columns,
+    impute_missing_features,
+    index_kpi_series_to_100,
+    intermediate_strategy,
+    make_fast_metrics_fn,
+    nearest_neighbor_start,
+    normalise_column_names,
+    prepare_market_dataframe,
+    retain_kpi_dates,
+    stochastic_genetic_search,
+    validate_constraints,
+)
+from geotestlab.matching import (
+    aggregate_market_data as _aggregate_market_data,
+)
+from geotestlab.matching import (
+    preprocess_data as _preprocess_data,
+)
+from geotestlab.matching import (
+    read_kpi_pattern_excel as _read_kpi_pattern_excel,
+)
 
 # ------------------------------------------------------------
 # App configuration
@@ -116,9 +153,6 @@ SMD_GOOD_THRESHOLD = CONFIG["smd_thresholds"]["good"]
 SMD_HIGH_THRESHOLD = CONFIG["smd_thresholds"]["high"]
 
 DATA_PATH = "data/Population Stats for Geo Tests - Master Sheet Only v2 (Standardised).xlsx"
-POPULATION_COL_RAW = "Total Population"
-POPULATION_COL = "Population"
-ADOBE_COL = "Adobe Reference List"
 
 # ------------------------------------------------------------
 # Time-Series Validation helpers
@@ -2290,13 +2324,6 @@ def clean_dataframe_text(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def normalise_column_names(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df.columns = [str(c).strip() for c in df.columns]
-    df = df.loc[:, ~df.columns.str.contains("^Unnamed", case=False, na=False)]
-    return df
-
-
 def inspect_excel_sheet(path: str, sheet_name: str) -> dict:
     try:
         df_raw = pd.read_excel(
@@ -2346,150 +2373,14 @@ def load_market_sheet(path: str, sheet_name: str) -> pd.DataFrame:
     return df
 
 
-def get_population_column(df: pd.DataFrame) -> str:
-    if POPULATION_COL_RAW in df.columns:
-        return POPULATION_COL_RAW
-    if POPULATION_COL in df.columns:
-        return POPULATION_COL
-    candidates = [c for c in df.columns if c.strip().lower() in ["total population", "population"]]
-    if candidates:
-        return candidates[0]
-    raise ValueError(
-        "Could not find a population column. Expected 'Total Population' or 'Population'."
-    )
-
-
-def get_base_geography_column(df: pd.DataFrame) -> str:
-    non_market_cols = [c for c in df.columns if c != "Market"]
-    if not non_market_cols:
-        raise ValueError("Could not identify a base geography column.")
-    return non_market_cols[0]
-
-
-def get_grouping_columns(df: pd.DataFrame) -> list[str]:
-    pop_col = get_population_column(df)
-    pop_idx = list(df.columns).index(pop_col)
-    pre_population_cols = list(df.columns[:pop_idx])
-    grouping_cols = [c for c in pre_population_cols if c not in ["Market", ADOBE_COL]]
-    grouping_cols = [c for c in grouping_cols if not c.lower().startswith("adobe")]
-    if not grouping_cols:
-        grouping_cols = [get_base_geography_column(df)]
-    return grouping_cols
-
-
-def standardise_population_column(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    pop_col = get_population_column(df)
-    if pop_col != POPULATION_COL:
-        df = df.rename(columns={pop_col: POPULATION_COL})
-    return df
-
-
-def get_numeric_metric_columns(df: pd.DataFrame, grouping_cols: list[str]) -> list[str]:
-    categorical_keywords = [
-        "area",
-        "region",
-        "county",
-        "city",
-        "district",
-        "borough",
-        "territory",
-        "province",
-        "state",
-        "country",
-        "name",
-        "code",
-    ]
-    excluded = set(grouping_cols + ["Market", ADOBE_COL, POPULATION_COL, POPULATION_COL_RAW])
-    numeric_cols = []
-    for c in df.columns:
-        if c in excluded:
-            continue
-        if any(keyword in c.lower() for keyword in categorical_keywords):
-            continue
-        if pd.api.types.is_numeric_dtype(df[c]):
-            numeric_cols.append(c)
-        else:
-            numeric_attempt = pd.to_numeric(df[c], errors="coerce")
-            if numeric_attempt.notna().sum() > len(df[c]) * 0.5:
-                numeric_cols.append(c)
-    return numeric_cols
-
-
-def prepare_market_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    df = standardise_population_column(df)
-    if POPULATION_COL not in df.columns:
-        raise ValueError("Population column not found after standardisation.")
-    df[POPULATION_COL] = pd.to_numeric(df[POPULATION_COL], errors="coerce")
-    grouping_cols = get_grouping_columns(df)
-    excluded_cols = set(grouping_cols + ["Market", ADOBE_COL, POPULATION_COL])
-    for c in df.columns:
-        if c not in excluded_cols and c != POPULATION_COL:
-            sample = df[c].dropna().head(10)
-            if len(sample) > 0:
-                sample_str = sample.astype(str)
-                looks_numeric = sample_str.str.match(r"^[\d\-\.\,]+$").all()
-                if looks_numeric:
-                    df[c] = pd.to_numeric(df[c], errors="coerce")
-    df = df.dropna(subset=[POPULATION_COL])
-    df = df[df[POPULATION_COL] > 0]
-    return df
-
-
-# ------------------------------------------------------------
-# Aggregation helpers
-# ------------------------------------------------------------
-def weighted_average_vectorized(
-    df: pd.DataFrame, value_cols: list[str], weight_col: str
-) -> pd.Series:
-    result_dict = {}
-    if not value_cols:
-        result_dict[weight_col] = df[weight_col].sum()
-        return pd.Series(result_dict)
-    weights = df[weight_col].values.reshape(-1, 1)
-    values = df[value_cols].values
-    valid_mask = pd.notna(df[value_cols]).values
-    weighted_sums = np.where(valid_mask, values * weights, 0).sum(axis=0)
-    weight_sums = np.where(valid_mask, weights, 0).sum(axis=0)
-    results = np.divide(
-        weighted_sums,
-        weight_sums,
-        out=np.full(weighted_sums.shape, np.nan, dtype=float),
-        where=weight_sums != 0,
-    )
-    result_dict.update(dict(zip(value_cols, results)))
-    result_dict[weight_col] = df[weight_col].sum()
-    return pd.Series(result_dict)
-
-
 @st.cache_data(ttl=CONFIG["cache_ttl"])
 def aggregate_market_data(
     market_df: pd.DataFrame, grouping_col: str, numeric_metric_cols: list[str]
 ) -> pd.DataFrame:
-    keep_cols = ["Market", grouping_col, POPULATION_COL] + numeric_metric_cols
-    keep_cols = [c for c in keep_cols if c in market_df.columns]
-    df = market_df[keep_cols].copy()
-    df = df.dropna(subset=[grouping_col, POPULATION_COL])
-    agg_df = (
-        df.groupby(grouping_col, dropna=True)
-        .apply(lambda x: weighted_average_vectorized(x, numeric_metric_cols, POPULATION_COL))
-        .reset_index()
+    """Streamlit-cached wrapper over the pure geotestlab.matching.aggregate_market_data."""
+    return _aggregate_market_data(
+        market_df, grouping_col, numeric_metric_cols, population_col=POPULATION_COL
     )
-    agg_df["Market"] = market_df["Market"].iloc[0]
-    ordered_cols = ["Market", grouping_col, POPULATION_COL] + numeric_metric_cols
-    ordered_cols = [c for c in ordered_cols if c in agg_df.columns]
-    return agg_df[ordered_cols]
-
-
-def impute_missing_features(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
-    df = df.copy()
-    for c in feature_cols:
-        if c in df.columns:
-            median_val = df[c].median()
-            if pd.isna(median_val):
-                median_val = 0
-            df[c] = df[c].fillna(median_val)
-    return df
 
 
 @st.cache_data(ttl=CONFIG["cache_ttl"], show_spinner=False)
@@ -2498,341 +2389,39 @@ def read_kpi_pattern_excel(file_bytes: bytes) -> pd.DataFrame:
     Streamlit reruns the whole script on every widget interaction, and this file was
     previously parsed twice per rerun (sidebar peek + main tab) — with caching it is
     parsed once per unique upload, no matter how many reruns occur."""
-    bio = io.BytesIO(file_bytes)
-    try:
-        return pd.read_excel(bio, engine="calamine", header=0)
-    except Exception:
-        bio.seek(0)
-        return pd.read_excel(bio, engine="openpyxl", header=0)
+    return _read_kpi_pattern_excel(file_bytes)
 
 
 # ------------------------------------------------------------
 # Matching metric helpers
 # ------------------------------------------------------------
-def weighted_profile(
-    df: pd.DataFrame, features: list[str], population_col: str = POPULATION_COL
-) -> pd.Series:
-    """Population-weighted feature means. Falls back to equal-weighted means
-    if the population column is missing, all-NaN, or sums to zero/negative."""
-    if population_col in df.columns:
-        w = pd.to_numeric(df[population_col], errors="coerce")
-        if w.notna().any() and w.fillna(0).sum() > 0:
-            w = w.fillna(0).values
-            return pd.Series(
-                {f: np.average(df[f].values, weights=w) for f in features}, index=features
-            )
-    return df[features].mean()
-
-
-def fit_structural_stats(eligible_df: pd.DataFrame, features: list[str]):
-    """Fit ONE structural mean/std basis on the eligible region universe
-    (selected test regions + full control candidate pool) for this run.
-    Using the same basis for every candidate group is what makes
-    Weighted Structural Distance comparable across candidates of different sizes."""
-    means = eligible_df[features].mean()
-    stds = eligible_df[features].std(ddof=0)
-    return means, stds
-
-
-def calculate_metrics(
-    test_df,
-    control_df,
-    features,
-    weights_dict,
-    eligible_means,
-    eligible_stds,
-    population_col=POPULATION_COL,
-):
-    """
-    eligible_means / eligible_stds: dict-like {feature: value}, fitted ONCE per run
-    via fit_structural_stats() on the eligible region universe — NOT refit per candidate.
-    Returns a dict (not an ambiguous tuple).
-    """
-    empty = {
-        "mean_abs_smd": 0.0,
-        "weighted_structural_distance": 0.0,
-        "smd_list": [],
-        "test_means": np.array([]),
-        "control_means": np.array([]),
-        "raw_diffs": np.array([]),
-        "weighted_contributions": np.array([]),
-    }
-    if not features:
-        return empty
-    test_df = impute_missing_features(test_df, features)
-    control_df = impute_missing_features(control_df, features)
-    # Guard: only use features present in both dataframes
-    features = [f for f in features if f in test_df.columns and f in control_df.columns]
-    if not features:
-        return empty
-
-    # Population-weighted structural profiles (falls back to equal-weighted mean internally)
-    test_profile = weighted_profile(test_df, features, population_col)
-    control_profile = weighted_profile(control_df, features, population_col)
-
-    means_arr = np.array([eligible_means[f] for f in features], dtype=float)
-    stds_arr = np.array([eligible_stds[f] for f in features], dtype=float)
-    # Safe denominator for z-scoring only (never divide by 0); SMD uses the raw stds_arr below.
-    z_scale = np.where((stds_arr > 0) & np.isfinite(stds_arr), stds_arr, 1.0)
-
-    z_test = (test_profile.values - means_arr) / z_scale
-    z_control = (control_profile.values - means_arr) / z_scale
-
-    w_vector = np.array([weights_dict.get(f, 1.0) for f in features])
-    sq_diff = (z_test - z_control) ** 2
-    # weighted_structural_distance is the slider-weighted optimisation metric, scored on the
-    # fixed eligible-pool basis so it is comparable across candidate groups of different sizes.
-    weighted_contributions = w_vector * sq_diff
-    weighted_structural_distance = float(np.sqrt(np.sum(weighted_contributions)))
-
-    raw_diffs = test_profile.values - control_profile.values
-
-    # mean_abs_smd is the unweighted diagnostic balance metric (no slider weights),
-    # using the FULL eligible pool's std as a stable denominator — not the selected
-    # group's own std, which can be 0 (or near-0) with a single test/control region.
-    smd_list = []
-    for i, f in enumerate(features):
-        feature_scale = stds_arr[i]
-        if feature_scale > 0 and np.isfinite(feature_scale):
-            smd_list.append(abs(raw_diffs[i] / feature_scale))
-        else:
-            smd_list.append(
-                np.nan
-            )  # flagged: feature has zero/invalid variance across the eligible pool
-    mean_abs_smd = float(np.nanmean(smd_list)) if smd_list else 0.0
-
-    return {
-        "mean_abs_smd": mean_abs_smd,
-        "weighted_structural_distance": weighted_structural_distance,
-        "smd_list": smd_list,
-        "test_means": test_profile.values,
-        "control_means": control_profile.values,
-        "raw_diffs": raw_diffs,
-        "weighted_contributions": weighted_contributions,
-    }
-
-
 @st.cache_data(ttl=CONFIG["cache_ttl"])
 def calculate_metrics_cached(
     test_df, control_df, features_tuple, weights_tuple, eligible_means_tuple, eligible_stds_tuple
 ):
-    features = list(features_tuple)
-    weights_dict = dict(zip(features, weights_tuple))
-    eligible_means = dict(zip(features, eligible_means_tuple))
-    eligible_stds = dict(zip(features, eligible_stds_tuple))
-    return calculate_metrics(
-        test_df, control_df, features, weights_dict, eligible_means, eligible_stds
+    """Streamlit-cached wrapper over the pure geotestlab.matching scorer."""
+    return calculate_metrics_from_flat(
+        test_df,
+        control_df,
+        features_tuple,
+        weights_tuple,
+        eligible_means_tuple,
+        eligible_stds_tuple,
     )
-
-
-def make_fast_metrics_fn(
-    pool_df,
-    test_df_run,
-    features,
-    weights_dict,
-    eligible_means,
-    eligible_stds,
-    population_col=POPULATION_COL,
-):
-    """Builds a vectorised scorer for candidate control groups drawn from a FIXED pool.
-
-    Returns fast_metrics(idx_list) -> the same dict calculate_metrics() produces, where
-    idx_list contains pool_df index labels. The matching strategy loops call the metrics
-    function hundreds to thousands of times per run; calculate_metrics() pays for two
-    dataframe copies, per-feature median imputation (a no-op there — pool/test frames are
-    already imputed upstream), and per-feature Python loops on EVERY call. Here all of
-    that is hoisted: the feature matrix, population weights, eligible-basis arrays, and
-    the (constant) test profile are computed once, and each candidate is scored with a
-    handful of NumPy array ops.
-
-    The test profile is computed with the same weighted_profile() helper that
-    calculate_metrics() uses, and the control profile / SMD math mirrors it exactly, so
-    scores are numerically equivalent."""
-    features = [f for f in features if f in test_df_run.columns and f in pool_df.columns]
-    pos_map = {label: i for i, label in enumerate(pool_df.index)}
-    X = pool_df[features].to_numpy(dtype=float) if features else np.empty((len(pool_df), 0))
-
-    if population_col in pool_df.columns:
-        _pop_raw = pd.to_numeric(pool_df[population_col], errors="coerce")
-        pop_notna = _pop_raw.notna().to_numpy()
-        pop_filled = _pop_raw.fillna(0).to_numpy(dtype=float)
-    else:
-        pop_notna = None
-        pop_filled = None
-
-    test_imputed = impute_missing_features(test_df_run, features)
-    test_profile = (
-        weighted_profile(test_imputed, features, population_col).values
-        if features
-        else np.array([])
-    )
-
-    means_arr = np.array([eligible_means[f] for f in features], dtype=float)
-    stds_arr = np.array([eligible_stds[f] for f in features], dtype=float)
-    z_scale = np.where((stds_arr > 0) & np.isfinite(stds_arr), stds_arr, 1.0)
-    z_test = (test_profile - means_arr) / z_scale if features else np.array([])
-    w_vector = np.array([weights_dict.get(f, 1.0) for f in features])
-    valid_std = (stds_arr > 0) & np.isfinite(stds_arr)
-    safe_stds = np.where(valid_std, stds_arr, 1.0)
-
-    def fast_metrics(idx_list):
-        # Rare edge cases (no features / empty candidate group) defer to the reference
-        # implementation so behaviour is identical.
-        if not features or len(idx_list) == 0:
-            return calculate_metrics(
-                test_df_run,
-                pool_df.loc[list(idx_list)],
-                features,
-                weights_dict,
-                eligible_means,
-                eligible_stds,
-                population_col,
-            )
-        rows = [pos_map[i] for i in idx_list]
-        Xg = X[rows]
-        # Population-weighted control profile, with the same equal-weight fallback
-        # weighted_profile() applies when population is missing or sums to zero.
-        if pop_filled is not None and pop_notna[rows].any() and pop_filled[rows].sum() > 0:
-            w = pop_filled[rows]
-            control_profile = (Xg * w[:, None]).sum(axis=0) / w.sum()
-        else:
-            control_profile = Xg.mean(axis=0)
-
-        z_control = (control_profile - means_arr) / z_scale
-        sq_diff = (z_test - z_control) ** 2
-        weighted_contributions = w_vector * sq_diff
-        weighted_structural_distance = float(np.sqrt(np.sum(weighted_contributions)))
-
-        raw_diffs = test_profile - control_profile
-        smd_arr = np.where(valid_std, np.abs(raw_diffs) / safe_stds, np.nan)
-        mean_abs_smd = (
-            float(np.nanmean(smd_arr))
-            if smd_arr.size and not np.isnan(smd_arr).all()
-            else (float("nan") if smd_arr.size else 0.0)
-        )
-
-        return {
-            "mean_abs_smd": mean_abs_smd,
-            "weighted_structural_distance": weighted_structural_distance,
-            "smd_list": smd_arr.tolist(),
-            "test_means": test_profile.copy(),
-            "control_means": control_profile,
-            "raw_diffs": raw_diffs,
-            "weighted_contributions": weighted_contributions,
-        }
-
-    return fast_metrics
 
 
 @st.cache_data(ttl=CONFIG["cache_ttl"])
 def preprocess_data(
     pool_df, test_df_run, active_features, weights, eligible_means_tuple, eligible_stds_tuple
 ):
-    """Nearest-neighbour candidate search uses the SAME fixed eligible-pool basis
+    """Streamlit-cached wrapper over the pure geotestlab.matching.preprocess_data.
+
+    Nearest-neighbour candidate search uses the SAME fixed eligible-pool basis
     (eligible_means/eligible_stds) as calculate_metrics(), so the NN ranking is
     consistent with the Weighted Structural Distance objective."""
-    pool_df = impute_missing_features(pool_df, active_features)
-    test_df_run = impute_missing_features(test_df_run, active_features)
-    means_arr = np.array(eligible_means_tuple, dtype=float)
-    stds_arr = np.array(eligible_stds_tuple, dtype=float)
-    z_scale = np.where((stds_arr > 0) & np.isfinite(stds_arr), stds_arr, 1.0)
-    w_vec = np.array([np.sqrt(weights.get(f, 1.0)) for f in active_features])
-    p_scaled = ((pool_df[active_features].values - means_arr) / z_scale) * w_vec
-    t_profile = weighted_profile(test_df_run, active_features, POPULATION_COL).values
-    t_cent = (((t_profile - means_arr) / z_scale) * w_vec).reshape(1, -1)
-    return w_vec, p_scaled, t_cent
-
-
-def stochastic_genetic_search(
-    pool_df,
-    test_df_run,
-    active_features,
-    weights,
-    n,
-    calculate_metrics_fn,
-    eligible_means,
-    eligible_stds,
-    nn_start_idx,
-    n_iterations=1000,
-    random_state=42,
-    fast_metrics_fn=None,
-):
-    """
-    Stochastic (Genetic Search) — the "Advanced (Thorough)" matching strategy.
-
-    Starts from a good nearest-neighbour candidate group, then repeatedly swaps one
-    selected control for one unselected control at random. Candidate groups are scored
-    on Weighted Structural Distance (optimisation objective; Mean Abs SMD is diagnostic
-    only). Swaps that improve the score are kept; the best group found is tracked and
-    returned. Reproducible via a fixed random seed.
-
-    fast_metrics_fn: optional vectorised scorer from make_fast_metrics_fn() taking an
-    index-label list directly. When provided it replaces the per-candidate
-    calculate_metrics_fn call (same outputs, no per-call dataframe slicing/copying).
-
-    Returns:
-        best_idx: list of selected control indices for this n
-        best_metrics: the metrics dict for best_idx (from the scoring function)
-        evaluated_count: number of candidate groups scored during the search
-        convergence: list of best Weighted Structural Distance values over the search
-    """
-    pool_indices = list(pool_df.index)
-    evaluated_count = 0
-    convergence = []
-    rng = np.random.default_rng(random_state)
-
-    if n <= 0 or n > len(pool_indices):
-        empty_metrics = calculate_metrics_fn(
-            test_df_run, pool_df.loc[[]], active_features, weights, eligible_means, eligible_stds
-        )
-        return [], empty_metrics, 0, convergence
-
-    def score(idx_list):
-        nonlocal evaluated_count
-        if fast_metrics_fn is not None:
-            metrics = fast_metrics_fn(idx_list)
-        else:
-            metrics = calculate_metrics_fn(
-                test_df_run,
-                pool_df.loc[idx_list],
-                active_features,
-                weights,
-                eligible_means,
-                eligible_stds,
-            )
-        evaluated_count += 1
-        return metrics["weighted_structural_distance"], metrics
-
-    # ---- Start from a good nearest-neighbour candidate group ----
-    current_idx = list(nn_start_idx)
-    current_score, current_metrics = score(current_idx)
-    convergence.append(current_score)
-
-    best_idx = list(current_idx)
-    best_score = current_score
-    best_metrics = current_metrics
-
-    for _iteration in range(n_iterations):
-        # Set membership keeps this O(pool) instead of O(pool x n); iteration order over
-        # pool_indices is unchanged, so the seeded RNG picks the same swaps as before.
-        current_set = set(current_idx)
-        available = [idx for idx in pool_indices if idx not in current_set]
-        if not available or not current_idx:
-            break
-        remove_idx = current_idx[rng.integers(0, len(current_idx))]
-        add_idx = available[rng.integers(0, len(available))]
-        candidate_idx = [idx for idx in current_idx if idx != remove_idx] + [add_idx]
-        cand_score, cand_metrics = score(candidate_idx)
-        # Keep swaps that improve the score (Weighted Structural Distance).
-        if cand_score < current_score:
-            current_idx, current_score, current_metrics = candidate_idx, cand_score, cand_metrics
-            if current_score < best_score:
-                best_score = current_score
-                best_idx = list(current_idx)
-                best_metrics = current_metrics
-            convergence.append(current_score)
-
-    return best_idx, best_metrics, evaluated_count, convergence
+    return _preprocess_data(
+        pool_df, test_df_run, active_features, weights, eligible_means_tuple, eligible_stds_tuple
+    )
 
 
 # ------------------------------------------------------------
@@ -3010,13 +2599,6 @@ def standardize_column_order(df, geo_col, active_features):
     return df[ordered]
 
 
-def calculate_experiment_population_coverage(test_regions, agg_df, geo_col, total_market_pop):
-    if total_market_pop <= 0 or not test_regions:
-        return 0.0
-    test_pop = agg_df[agg_df[geo_col].isin(test_regions)][POPULATION_COL].sum()
-    return (test_pop / total_market_pop) * 100
-
-
 def cleanup_session_state():
     if (
         st.session_state.get("final_controls") is not None
@@ -3028,183 +2610,6 @@ def cleanup_session_state():
         other_cols = [c for c in df.columns if c not in must_keep]
         keep = must_keep + list(other_cols[: CONFIG["max_display_features"]])
         st.session_state.final_controls = df[keep]
-
-
-# ------------------------------------------------------------
-# Guided experiment group search
-# ------------------------------------------------------------
-@dataclass(frozen=True)
-class GuidedSearchConfig:
-    """Typed configuration for the guided 'Set Rules & Auto-Build Groups' search.
-
-    ``seed`` makes the stochastic guided search reproducible: the caller builds
-    a ``numpy.random.Generator`` from it and injects it into
-    ``find_guided_test_group()``.  The seed is recorded in run snapshots,
-    exports, input fingerprints, and the numerical golden settings.
-    """
-
-    seed: int = 42
-    search_iterations_default: int = 2000
-    target_share_default: int = 25
-    tolerance_pp_default: int = 5
-
-
-GUIDED_SEARCH_CONFIG = GuidedSearchConfig()
-
-
-@dataclass(frozen=True)
-class MatchConstraints:
-    """One explicit, typed constraint model for 'Set Rules & Auto-Build Groups'.
-
-    A region may be assigned to at most ONE field.  ``validate_constraints()``
-    is the single authority for detecting overlaps — widget option subtraction
-    is a convenience, never the only conflict-prevention mechanism.
-    """
-
-    exclude_from_both: tuple[str, ...] = ()
-    force_test_include: tuple[str, ...] = ()
-    test_only_exclude: tuple[str, ...] = ()
-    force_control_include: tuple[str, ...] = ()
-    control_only_exclude: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class ConstraintConflict:
-    """Structured overlap error: a region assigned to more than one field."""
-
-    region: str
-    fields: tuple[str, ...]
-
-
-def validate_constraints(constraints: MatchConstraints) -> tuple[ConstraintConflict, ...]:
-    """Return one structured ConstraintConflict per region with a CONTRADICTORY
-    assignment.
-
-    The one-sided exclusion semantics remain valid: a region assigned to
-    ``test_only_exclude`` AND ``force_control_include`` is simply
-    'control-only' (consistent), and ``force_test_include`` +
-    ``control_only_exclude`` is 'test-only' (consistent).  Only contradictory
-    assignments are conflicts:
-    - ``exclude_from_both`` combined with any other field;
-    - ``force_test_include`` with ``test_only_exclude``;
-    - ``force_test_include`` with ``force_control_include``;
-    - ``force_control_include`` with ``control_only_exclude``.
-
-    Pure function — no Streamlit dependency.
-    """
-    field_regions: dict[str, tuple[str, ...]] = {
-        "exclude_from_both": constraints.exclude_from_both,
-        "force_test_include": constraints.force_test_include,
-        "test_only_exclude": constraints.test_only_exclude,
-        "force_control_include": constraints.force_control_include,
-        "control_only_exclude": constraints.control_only_exclude,
-    }
-    region_to_fields: dict[str, list[str]] = {}
-    for field, regions in field_regions.items():
-        for region in regions:
-            region_to_fields.setdefault(region, []).append(field)
-
-    def _is_conflicting(fields: list[str]) -> bool:
-        field_set = set(fields)
-        if "exclude_from_both" in field_set and len(field_set) > 1:
-            return True
-        if {"force_test_include", "force_control_include"} <= field_set:
-            return True
-        if {"force_test_include", "test_only_exclude"} <= field_set:
-            return True
-        if {"force_control_include", "control_only_exclude"} <= field_set:
-            return True
-        return False
-
-    return tuple(
-        ConstraintConflict(region=region, fields=tuple(fields))
-        for region, fields in sorted(region_to_fields.items())
-        if _is_conflicting(fields)
-    )
-
-
-def find_guided_test_group(
-    agg_df,
-    geo_col,
-    total_market_pop,
-    force_exp_include,
-    force_exp_exclude,
-    force_ctrl_include,
-    force_ctrl_exclude,
-    target_share,
-    tolerance_pp,
-    search_iterations=2000,
-    rng=None,
-):
-    """Search for a test group satisfying the guided-share constraints.
-
-    ``rng`` is an injected ``numpy.random.Generator`` — the caller controls
-    reproducibility (see ``GuidedSearchConfig.seed``).  No module-global
-    ``random`` state is used.  Returns (best_set, best_share, met).
-    """
-    if rng is None:
-        rng = np.random.default_rng(GUIDED_SEARCH_CONFIG.seed)
-    all_geos = set(agg_df[geo_col].unique())
-    forced_test = set(force_exp_include)
-    # Exclusions are one-sided: force_ctrl_exclude removes a region from the
-    # CONTROL pool only — it remains a valid TEST candidate (and vice versa for
-    # force_exp_exclude, which is handled in the control-pool construction).
-    # To drop a region from the analysis entirely, it must be excluded from
-    # BOTH lists. Control-side INCLUDES are barred from test because a region
-    # can belong to only one group.
-    forbidden_test = set(force_exp_exclude) | set(force_ctrl_include)
-    # sorted() keeps the candidate list order deterministic across processes —
-    # Python string-set iteration order is randomized per process, and the rng
-    # picks candidates by index.
-    candidate = sorted(all_geos - forced_test - forbidden_test)
-    pop_map = agg_df.set_index(geo_col)[POPULATION_COL].to_dict()
-    if any(g not in all_geos for g in forced_test):
-        return [], 0, False
-    forced_pop = sum(pop_map.get(g, 0) for g in forced_test)
-    low = max(0, target_share - tolerance_pp) / 100
-    high = min(100, target_share + tolerance_pp) / 100
-    best_set = sorted(forced_test)
-    best_share = (forced_pop / total_market_pop) if total_market_pop > 0 else 0
-    best_dist = (
-        min(abs(best_share - low), abs(best_share - high)) if not (low <= best_share <= high) else 0
-    )
-    met = low <= best_share <= high
-    if len(candidate) <= 16:
-        from itertools import combinations
-
-        for r in range(len(candidate) + 1):
-            for comb in combinations(candidate, r):
-                trial = sorted(forced_test | set(comb))
-                share = (
-                    agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop
-                    if total_market_pop > 0
-                    else 0
-                )
-                d = 0 if (low <= share <= high) else min(abs(share - low), abs(share - high))
-                if (d < best_dist) or (
-                    d == best_dist
-                    and abs(share - (target_share / 100)) < abs(best_share - (target_share / 100))
-                ):
-                    best_set, best_share, best_dist = trial, share, d
-                    met = low <= share <= high
-    else:
-        for _ in range(search_iterations):
-            k = int(rng.integers(0, len(candidate) + 1))
-            sampled = [candidate[i] for i in rng.choice(len(candidate), size=k, replace=False)]
-            trial = sorted(forced_test | set(sampled))
-            share = (
-                agg_df[agg_df[geo_col].isin(trial)][POPULATION_COL].sum() / total_market_pop
-                if total_market_pop > 0
-                else 0
-            )
-            d = 0 if (low <= share <= high) else min(abs(share - low), abs(share - high))
-            if (d < best_dist) or (
-                d == best_dist
-                and abs(share - (target_share / 100)) < abs(best_share - (target_share / 100))
-            ):
-                best_set, best_share, best_dist = trial, share, d
-                met = low <= share <= high
-    return best_set, best_share, met
 
 
 # ------------------------------------------------------------
@@ -3456,13 +2861,9 @@ else:
         st.error("Select a wider date range in the sidebar — at least 2 dates are needed.")
         st.stop()
 
-    _kp_filtered = _kp_full[_kp_full[_kp_metric_col_full] == kpi_pattern_metric_value].copy()
-    _kp_n_before_drop = len(_kp_filtered)
-    # ---- Drop rows with a blank aggregation-level cell BEFORE aggregating, so
-    # unmapped/unclassified raw keys never silently inflate another region's total. ----
-    _kp_filtered = _kp_filtered.dropna(subset=[kpi_pattern_agg_col])
-    _kp_filtered = _kp_filtered[_kp_filtered[kpi_pattern_agg_col].astype(str).str.strip() != ""]
-    _kp_n_dropped = _kp_n_before_drop - len(_kp_filtered)
+    _kp_filtered, _kp_n_dropped = filter_kpi_rows(
+        _kp_full, _kp_metric_col_full, kpi_pattern_metric_value, kpi_pattern_agg_col
+    )
 
     if _kp_filtered.empty:
         st.error(
@@ -3472,17 +2873,12 @@ else:
 
     # Coerce to numeric BEFORE aggregating, so a non-numeric cell becomes missing (and is
     # reported) rather than silently raising or being dropped by groupby/sum.
-    _kp_raw_date_values = _kp_filtered[_kp_dates_in_range]
-    _kp_numeric_date_values = _kp_raw_date_values.apply(pd.to_numeric, errors="coerce")
-    _kp_non_numeric_cells = int(
-        _kp_numeric_date_values.isna().sum().sum() - _kp_raw_date_values.isna().sum().sum()
-    )
-    _kp_filtered[_kp_dates_in_range] = _kp_numeric_date_values
+    _kp_filtered, _kp_non_numeric_cells = coerce_kpi_date_values(_kp_filtered, _kp_dates_in_range)
 
     # sum(min_count=1): an aggregation-level/date group where every contributing row is
     # missing stays missing, instead of silently becoming a real-looking 0.
-    _kp_wide_raw_full = _kp_filtered.groupby(kpi_pattern_agg_col)[_kp_dates_in_range].sum(
-        min_count=1
+    _kp_wide_raw_full = build_kpi_pattern_wide(
+        _kp_filtered, kpi_pattern_agg_col, _kp_dates_in_range
     )
 
     _kp_quality_report = compute_period_quality(_kp_wide_raw_full)
@@ -3534,32 +2930,23 @@ else:
             f"({len(_kp_auto_flagged_dates)} auto-flagged)."
         )
 
-    _kp_wide_raw = _kp_wide_raw_full[_kp_dates_retained]
-    _kp_wide_raw = _kp_wide_raw.dropna(how="all")
-    _kp_incomplete_regions = sorted(_kp_wide_raw[_kp_wide_raw.isna().any(axis=1)].index)
-    _kp_wide_raw = _kp_wide_raw[
-        _kp_wide_raw.sum(axis=1, min_count=1) > 0
-    ]  # drop all-zero regions (can't index)
+    _kp_wide_raw, _kp_incomplete_regions = retain_kpi_dates(_kp_wide_raw_full, _kp_dates_retained)
     if _kp_wide_raw.empty:
         st.error("No regions with non-zero data in this range.")
         st.stop()
 
     # Index each region to its own mean over the selected range = 100, for pattern matching —
     # this is what makes "distance" comparable across regions of very different raw KPI volume.
-    _kp_row_means = _kp_wide_raw.mean(axis=1)
-    _kp_wide_indexed = _kp_wide_raw.div(_kp_row_means, axis=0) * 100
-    _kp_wide_indexed = _kp_wide_indexed.dropna(how="any")
+    _kp_wide_indexed = index_kpi_series_to_100(_kp_wide_raw)
 
     geography_level = kpi_pattern_agg_col
     geo_col = geography_level
     active_features = [f"wk_{d.strftime('%Y%m%d')}" for d in _kp_dates_retained]
-    agg_df = _kp_wide_indexed.reset_index().rename(columns={kpi_pattern_agg_col: geo_col})
-    agg_df.columns = [geo_col] + active_features
     # POPULATION_COL is aliased here to mean "total KPI volume over the selected range" rather
     # than population — this is what "Test/Control Population Share" measures throughout the
     # matching UI below; user-facing labels for this are adjusted where they'd otherwise say
     # "population" (see kpi_share_label() and its call sites).
-    agg_df[POPULATION_COL] = [_kp_wide_raw.loc[r].sum() for r in _kp_wide_indexed.index]
+    agg_df = build_kpi_pattern_agg_df(_kp_wide_indexed, _kp_wide_raw, geo_col, active_features)
     total_market_pop = agg_df[POPULATION_COL].sum()
 
     st.session_state["kpi_pattern_wide_raw"] = _kp_wide_raw
@@ -4396,10 +3783,7 @@ def render_structural_matching_tab():
                     f"Testing {n} controls..." if not force_1to1 else "Finding best 1-to-1 match..."
                 )
                 if match_mode == "Greedy (Nearest Neighbor)":
-                    nn = NearestNeighbors(n_neighbors=min(n, len(pool_df))).fit(p_scaled)
-                    _, ind = nn.kneighbors(t_cent)
-                    c_idx = [pool_df.index[j] for j in ind[0][:n]]
-                    metrics = fast_metrics(c_idx)
+                    c_idx, metrics = basic_strategy(pool_df, p_scaled, t_cent, n, fast_metrics)
                     mean_abs_smd = metrics["mean_abs_smd"]
                     # Use weighted structural distance as the optimisation objective so slider weights affect control selection.
                     # Mean Abs SMD is retained as an unweighted diagnostic balance metric.
@@ -4416,54 +3800,16 @@ def render_structural_matching_tab():
                     if optimisation_score < best_score:
                         best_score, best_idx = optimisation_score, c_idx
                 elif match_mode == "Refined Greedy (Hill Climbing)":
-                    # Fetch n + max_hill_climbing_swaps ranked neighbours so that, after the
-                    # first n seed the group, pot_swaps can actually contain up to
-                    # CONFIG["max_hill_climbing_swaps"] swap candidates. (Previously n + 5
-                    # left only ever 5 candidates, regardless of the config value, which
-                    # starved the search and made this strategy finish almost instantly.)
-                    nn_w = NearestNeighbors(
-                        n_neighbors=min(len(pool_df), n + CONFIG["max_hill_climbing_swaps"])
-                    ).fit(p_scaled)
-                    _, ind_w = nn_w.kneighbors(t_cent)
-                    curr_idx = [pool_df.index[j] for j in ind_w[0][:n]]
-                    pot_swaps = [
-                        pool_df.index[j] for j in ind_w[0] if pool_df.index[j] not in curr_idx
-                    ][: CONFIG["max_hill_climbing_swaps"]]
-                    curr_metrics = fast_metrics(curr_idx)
-                    curr_score = curr_metrics["weighted_structural_distance"]
-                    curr_mean_abs_smd = curr_metrics["mean_abs_smd"]
-                    conv = [curr_score]
-                    improved = True
-                    while improved:
-                        improved = False
-                        best_improvement = 0
-                        best_swap_tuple = None
-                        # Consider every selected position and every available swap
-                        # candidate. (Previously only the first 5 positions and first 10
-                        # candidates were tested, freezing most of the group at its
-                        # initial nearest-neighbour pick.)
-                        for j in range(len(curr_idx)):
-                            for swap_in in pot_swaps:
-                                temp = curr_idx.copy()
-                                temp[j] = swap_in
-                                new_metrics = fast_metrics(temp)
-                                new_score = new_metrics["weighted_structural_distance"]
-                                # Accept/reject swaps based on Weighted Structural Distance, not Mean Abs SMD.
-                                improvement = curr_score - new_score
-                                if improvement > best_improvement:
-                                    best_improvement = improvement
-                                    best_swap_tuple = (
-                                        temp,
-                                        swap_in,
-                                        new_score,
-                                        new_metrics["mean_abs_smd"],
-                                    )
-                        if best_improvement > 0 and best_swap_tuple:
-                            curr_idx, swap_in, curr_score, curr_mean_abs_smd = best_swap_tuple
-                            if swap_in in pot_swaps:
-                                pot_swaps.remove(swap_in)
-                            conv.append(curr_score)
-                            improved = True
+                    curr_idx, metrics, conv = intermediate_strategy(
+                        pool_df,
+                        p_scaled,
+                        t_cent,
+                        n,
+                        fast_metrics,
+                        CONFIG["max_hill_climbing_swaps"],
+                    )
+                    curr_score = metrics["weighted_structural_distance"]
+                    curr_mean_abs_smd = metrics["mean_abs_smd"]
                     optimisation_score = curr_score
                     opt_data.append(
                         {
@@ -4480,9 +3826,7 @@ def render_structural_matching_tab():
                     # Start from a good nearest-neighbour candidate group, then randomly swap one
                     # selected control for one unselected control, keeping improving swaps.
                     # Weighted Structural Distance is the optimisation objective; Mean Abs SMD is diagnostic only.
-                    nn_start = NearestNeighbors(n_neighbors=min(n, len(pool_df))).fit(p_scaled)
-                    _, ind_start = nn_start.kneighbors(t_cent)
-                    nn_start_idx = [pool_df.index[j] for j in ind_start[0][:n]]
+                    nn_start_idx = nearest_neighbor_start(pool_df, p_scaled, t_cent, n)
                     best_idx_for_n, best_metrics_for_n, evaluated_count, conv = (
                         stochastic_genetic_search(
                             pool_df,
