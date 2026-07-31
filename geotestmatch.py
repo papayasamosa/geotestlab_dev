@@ -29,6 +29,7 @@ from geotestlab.data.exceptions import (
 )
 from geotestlab.data.ingestion import detect_date_columns, detect_metric_column
 from geotestlab.data.ingestion import load_and_reshape_kpi as _load_and_reshape_kpi
+from geotestlab.data.models import compute_mapping_report
 from geotestlab.data.period_quality import compute_period_quality
 
 # ------------------------------------------------------------
@@ -133,8 +134,9 @@ def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None):
     """Streamlit adapter over geotestlab.data.ingestion.load_and_reshape_kpi.
 
     Translates the pure module's domain exceptions into this app's existing
-    user-facing st.error()/st.stop() behaviour, and unwraps ParsedKPIData to
-    the bare long-format DataFrame callers already expect.
+    user-facing st.error()/st.stop() behaviour, and returns the typed
+    ParsedKPIData so callers retain both the long-format DataFrame and the
+    data-quality report.
     """
     try:
         parsed = _load_and_reshape_kpi(uploaded_file, agg_col=agg_col, metric_col=metric_col)
@@ -165,7 +167,129 @@ def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None):
             "non-numeric KPI values. Please check the uploaded file."
         )
         st.stop()
-    return parsed.data
+    return parsed
+
+
+def _quality_blocking_errors():
+    """Collect blocking errors from the stored parse and region-mapping reports.
+
+    The app refuses to run validation/evaluation/KPI-pattern/Bayesian modelling
+    while any blocker is present — warnings never block; only explicit
+    blocking errors do.
+    """
+    errors: list[str] = []
+    report = st.session_state.get("kpi_quality_report")
+    if report is not None:
+        errors.extend(report.blocking_errors)
+    mapping = st.session_state.get("kpi_mapping_report")
+    if mapping is not None and mapping.unmapped_regions:
+        required = set(st.session_state.get("selected_experiment_regions", []) or [])
+        blocking_unmapped = [r for r in mapping.unmapped_regions if r in required]
+        if blocking_unmapped:
+            errors.append(
+                "The following selected region(s) could not be mapped to the KPI data: "
+                + ", ".join(blocking_unmapped)
+            )
+    return errors
+
+
+def render_kpi_quality_report(report, rejected_rows=None, mapping_report=None):
+    """Render the parse-time data-quality report.
+
+    Distinguishes:
+    - blocking errors (red — modelling must not proceed);
+    - warnings (amber — do not block valid data);
+    - retained usable data (green summary);
+    - excluded/rejected data (with a CSV download when available).
+    Optionally includes the region-mapping report when it has been computed.
+    """
+    if report is None:
+        return
+
+    has_blockers = bool(report.blocking_errors)
+    with st.expander("📋 Data Quality Report", expanded=has_blockers):
+        if has_blockers:
+            for err in report.blocking_errors:
+                st.error(f"🚫 {err}")
+        else:
+            st.success(
+                f"✅ Parsed **{report.source_rows_read:,}** source row(s) into "
+                f"**{report.observations_retained:,}** usable observation(s)."
+            )
+
+        for w in report.warnings:
+            st.warning(f"⚠️ {w}")
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Source rows read", f"{report.source_rows_read:,}")
+        m1.metric("Source rows removed", f"{report.source_rows_removed:,}")
+        m2.metric("Observations retained", f"{report.observations_retained:,}")
+        m2.metric("Observations removed", f"{report.observations_removed:,}")
+        m3.metric("Regions detected", f"{len(report.raw_regions):,}")
+        m3.metric("Duplicate key rows", f"{report.duplicate_key_rows:,}")
+        m4.metric("Frequency", report.inferred_frequency)
+        if report.date_range is not None:
+            m4.metric(
+                "Date range",
+                f"{report.date_range[0].date()} → {report.date_range[1].date()}",
+            )
+
+        with st.expander("Excluded / rejected data", expanded=has_blockers):
+            st.markdown(
+                f"- **{report.observations_dropped_missing_kpi:,}** observation(s) dropped for a "
+                "missing KPI value.\n"
+                f"- **{report.observations_dropped_non_numeric_kpi:,}** observation(s) dropped "
+                "for a non-numeric KPI value.\n"
+                f"- **{report.observations_dropped_invalid_date:,}** observation(s) dropped for "
+                "an invalid date.\n"
+                f"- **{report.source_rows_dropped_blank_region:,}** source row(s) dropped for a "
+                "blank region."
+            )
+            if report.missing_dates:
+                shown = ", ".join(d.strftime("%d %b %y") for d in report.missing_dates[:10])
+                more = (
+                    f" (+{len(report.missing_dates) - 10} more)"
+                    if len(report.missing_dates) > 10
+                    else ""
+                )
+                st.markdown(
+                    f"- **{len(report.missing_dates):,}** expected date(s) missing "
+                    f"({report.expected_date_count:,} expected at "
+                    f"{report.inferred_frequency} frequency): {shown}{more}"
+                )
+            if rejected_rows is not None and len(rejected_rows):
+                st.download_button(
+                    "⬇️ Download rejected rows (CSV)",
+                    data=rejected_rows.to_csv(index=False).encode("utf-8"),
+                    file_name="kpi_rejected_rows.csv",
+                    mime="text/csv",
+                    key="kpi_rejected_rows_download",
+                )
+
+        if mapping_report is not None:
+            _render_mapping_quality(mapping_report)
+
+
+def _render_mapping_quality(mapping_report):
+    """Render the region-mapping quality block (mapped/unmapped + download)."""
+    st.markdown("**Region mapping**")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Raw regions", f"{len(mapping_report.raw_regions):,}")
+    m2.metric("Mapped regions", f"{len(mapping_report.mapped_regions):,}")
+    m3.metric("Unmapped regions", f"{len(mapping_report.unmapped_regions):,}")
+    if mapping_report.unmapped_regions:
+        shown = ", ".join(mapping_report.unmapped_regions[:20])
+        if len(mapping_report.unmapped_regions) > 20:
+            shown += ", …"
+        st.warning(f"⚠️ Unmapped regions: {shown}")
+        if mapping_report.unmapped_rows is not None and len(mapping_report.unmapped_rows):
+            st.download_button(
+                "⬇️ Download unmapped rows (CSV)",
+                data=mapping_report.unmapped_rows.to_csv(index=False).encode("utf-8"),
+                file_name="kpi_unmapped_rows.csv",
+                mime="text/csv",
+                key="kpi_unmapped_rows_download",
+            )
 
 
 def build_region_mapping(df_long, valid_regions, adobe_to_geo):
@@ -5243,6 +5367,12 @@ def render_time_series_validation(mode: str):
         st.session_state.validation_triggered = False
     if "kpi_long_df" not in st.session_state:
         st.session_state.kpi_long_df = None
+    if "kpi_quality_report" not in st.session_state:
+        st.session_state.kpi_quality_report = None
+    if "kpi_rejected_rows" not in st.session_state:
+        st.session_state.kpi_rejected_rows = None
+    if "kpi_mapping_report" not in st.session_state:
+        st.session_state.kpi_mapping_report = None
     if "kpi_available_dates" not in st.session_state:
         st.session_state.kpi_available_dates = []
     if "kpi_metric_options" not in st.session_state:
@@ -5268,6 +5398,9 @@ def render_time_series_validation(mode: str):
         uploaded file can't leave stale parsed data (dates, metric list, long-format df) behind."""
         clear_validation_state()
         st.session_state.kpi_long_df = None
+        st.session_state.kpi_quality_report = None
+        st.session_state.kpi_rejected_rows = None
+        st.session_state.kpi_mapping_report = None
         st.session_state.kpi_available_dates = []
         st.session_state.kpi_metric_options = []
 
@@ -5364,10 +5497,13 @@ def render_time_series_validation(mode: str):
 
     if st.session_state.kpi_long_df is None:
         with st.spinner("Reading KPI file..."):
-            df_long = load_and_reshape_kpi(
+            parsed = load_and_reshape_kpi(
                 uploaded_file, agg_col=_kpi_agg_col, metric_col=_kpi_metric_col
             )
+            df_long = parsed.data
             st.session_state.kpi_long_df = df_long
+            st.session_state.kpi_quality_report = parsed.quality
+            st.session_state.kpi_rejected_rows = parsed.rejected_rows
             st.session_state.kpi_available_dates = sorted(df_long["date"].dt.date.unique())
             st.session_state.kpi_metric_options = sorted(df_long["metric_name"].unique())
 
@@ -5382,6 +5518,15 @@ def render_time_series_validation(mode: str):
     if not metric_options:
         st.error("No metric names found in second column of the KPI file.")
         st.stop()
+
+    # ---- Data-quality report: shown immediately after parsing, before any
+    # validation / evaluation / KPI-pattern / Bayesian run. Blocking errors
+    # (when present) prevent modelling; warnings never silently block. ----
+    render_kpi_quality_report(
+        st.session_state.get("kpi_quality_report"),
+        rejected_rows=st.session_state.get("kpi_rejected_rows"),
+        mapping_report=st.session_state.get("kpi_mapping_report"),
+    )
 
     with st.expander("Summary of Uploaded Data", expanded=False):
         col1, col2, col3, col4 = st.columns(4)
@@ -6011,6 +6156,14 @@ def render_time_series_validation(mode: str):
     # Process validation if triggered — IDENTICAL to working file
     # -------------------------------------------------------------------------
     if st.session_state.validation_triggered:
+        # ---- Data-quality gate: blocking errors prevent modelling; warnings
+        # (which never populate blocking_errors) do not. ----
+        _quality_blockers = _quality_blocking_errors()
+        if _quality_blockers:
+            for _qb in _quality_blockers:
+                st.error(f"🚫 {_qb}")
+            st.session_state.validation_triggered = False
+            st.stop()
         if uploaded_file is None or st.session_state.kpi_long_df is None:
             st.error("KPI file not available. Please upload a file first.")
             st.session_state.validation_triggered = False
@@ -6088,6 +6241,9 @@ def render_time_series_validation(mode: str):
             df_long_mapped = build_region_mapping(
                 df_long_raw, valid_regions_for_mapping, adobe_to_geo
             )
+            # Persist the mapping-quality report (raw/mapped/unmapped regions +
+            # unmapped rows for download) so the data-quality UI can show it.
+            st.session_state.kpi_mapping_report = compute_mapping_report(df_long_mapped)
             matched = df_long_mapped[df_long_mapped["region"].notna()]
             if matched.empty:
                 st.error("No regions matched. Check mapping table.")

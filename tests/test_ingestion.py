@@ -95,10 +95,10 @@ class TestSimpleKPIParsing:
         assert "date" in df.columns
         assert "kpi" in df.columns
         assert df["metric_name"].iloc[0] == "Sales"
-        assert parsed.quality.parsed_layout == "simple"
-        assert parsed.quality.rows_read == 2
-        assert parsed.quality.rows_retained == len(df)
-        assert parsed.quality.metric_names == ("Sales",)
+        assert parsed.quality.selected_layout == "simple"
+        assert parsed.quality.source_rows_read == 2
+        assert parsed.quality.observations_retained == len(df)
+        assert parsed.quality.metrics_found == ("Sales",)
         assert parsed.quality.blocking_errors == ()
 
     @pytest.mark.smoke
@@ -115,8 +115,8 @@ class TestSimpleKPIParsing:
         df = parsed.data
         assert len(df) == 13
         assert df["date"].nunique() == 13
-        assert parsed.quality.date_count == 13
-        assert parsed.quality.invalid_date_values == 0
+        assert parsed.quality.source_date_columns == 13
+        assert parsed.quality.observations_dropped_invalid_date == 0
 
     @pytest.mark.smoke
     def test_simple_kpi_region_count(self, tmp_path):
@@ -142,7 +142,7 @@ class TestSimpleKPIParsing:
         )
         parsed = _load(path)
         assert "" not in parsed.data["region_raw"].values
-        assert parsed.quality.blank_region_rows > 0
+        assert parsed.quality.source_rows_dropped_blank_region > 0
         assert any("blank region" in w for w in parsed.quality.warnings)
 
     @pytest.mark.smoke
@@ -167,9 +167,9 @@ class TestSimpleKPIParsing:
         )
         parsed = _load(path)
         assert parsed.data["kpi"].isna().sum() == 0, "Missing KPI rows must not be retained"
-        assert parsed.quality.missing_kpi_values > 0
-        assert parsed.quality.rows_retained == len(parsed.data)
-        assert parsed.quality.rows_retained < parsed.quality.rows_read * 20
+        assert parsed.quality.observations_dropped_missing_kpi > 0
+        assert parsed.quality.observations_retained == len(parsed.data)
+        assert parsed.quality.observations_retained < parsed.quality.source_rows_read * 20
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ class TestAggregatedKPIParsing:
         assert len(parsed.data) > 0
         assert "region_raw" in parsed.data.columns
         assert parsed.data["region_raw"].iloc[0] == "Hartlepool"
-        assert parsed.quality.parsed_layout == "aggregated"
+        assert parsed.quality.selected_layout == "aggregated"
 
     @pytest.mark.smoke
     def test_aggregated_kpi_blank_rows_dropped(self, tmp_path):
@@ -216,7 +216,7 @@ class TestAggregatedKPIParsing:
         df = parsed.data
         blank = df[df["region_raw"].isna() | (df["region_raw"].astype(str).str.strip() == "")]
         assert len(blank) == 0, "Blank aggregation rows were not dropped"
-        assert parsed.quality.blank_region_rows > 0
+        assert parsed.quality.source_rows_dropped_blank_region > 0
 
     @pytest.mark.smoke
     def test_aggregated_kpi_metric_name(self, tmp_path):
@@ -233,7 +233,7 @@ class TestAggregatedKPIParsing:
         )
         parsed = _load(path, agg_col="TV Region", metric_col="Metric")
         assert parsed.data["metric_name"].iloc[0] == "Sales"
-        assert parsed.quality.metric_names == ("Sales",)
+        assert parsed.quality.metrics_found == ("Sales",)
 
     @pytest.mark.smoke
     def test_aggregated_kpi_duplicate_keys_counted(self, tmp_path):
@@ -249,7 +249,8 @@ class TestAggregatedKPIParsing:
         parsed = _load(path, agg_col="TV Region", metric_col="Metric")
         key_counts = parsed.data.groupby(["region_raw", "metric_name", "date"]).size()
         assert key_counts.max() > 1, "Expected a duplicate (region, metric, date) key"
-        assert parsed.quality.duplicate_keys > 0
+        assert parsed.quality.duplicate_key_rows > 0
+        assert parsed.quality.duplicate_key_groups > 0
         assert any("duplicate" in w for w in parsed.quality.warnings)
 
 
