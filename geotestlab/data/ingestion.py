@@ -8,6 +8,7 @@ messages and any st.stop() calls.
 
 from __future__ import annotations
 
+import statistics
 from datetime import datetime as _dt
 
 import pandas as pd
@@ -41,6 +42,57 @@ def detect_metric_column(non_date_cols) -> str | None:
         if isinstance(c, str) and c.strip().lower() == "metric":
             return c
     return None
+
+
+def infer_frequency(dates) -> str:
+    """Infer the dominant cadence of a date series: "daily", "weekly", or "unknown".
+
+    Uses the median gap between sorted unique dates, matching the app's
+    ``infer_time_series_frequency()`` semantics.  Pure helper — no Streamlit
+    dependency.
+    """
+    try:
+        unique_dates = sorted(
+            pd.to_datetime(pd.Series(list(dates))).dropna().dt.normalize().unique()
+        )
+    except Exception:
+        return "unknown"
+    if len(unique_dates) < 2:
+        return "unknown"
+    diffs = [(b - a).days for a, b in zip(unique_dates, unique_dates[1:])]
+    median_diff = statistics.median(diffs)
+    if 0.5 <= median_diff <= 1.5:
+        return "daily"
+    if 5.5 <= median_diff <= 8.5:
+        return "weekly"
+    return "unknown"
+
+
+def _expected_and_missing_dates(dates, frequency: str) -> tuple[int, tuple[pd.Timestamp, ...]]:
+    """Return (expected_date_count, missing_dates) over the observed date range.
+
+    For "daily" the expected grid is every calendar day in range; for "weekly"
+    it is every period anchored on the weekday of the first observed date.  For
+    an unknown frequency the observed dates are treated as the expected grid.
+    """
+    observed = pd.to_datetime(pd.Series(list(dates))).dropna().dt.normalize()
+    observed_unique = observed.sort_values().unique()
+    if len(observed_unique) == 0:
+        return 0, ()
+    first, last = observed_unique[0], observed_unique[-1]
+    observed_set = set(observed_unique)
+
+    if frequency == "daily":
+        expected = pd.date_range(first, last, freq="D")
+    elif frequency == "weekly":
+        anchor = first.strftime("%a").upper()
+        expected = pd.date_range(first, last, freq=f"W-{anchor}")
+    else:
+        expected = observed_unique
+
+    expected_idx = pd.DatetimeIndex(expected)
+    missing = tuple(d for d in expected_idx if d not in observed_set)
+    return int(len(expected_idx)), missing
 
 
 def _read_workbook(uploaded_file) -> pd.DataFrame:
@@ -133,13 +185,22 @@ def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None) -> Parsed
     invalid_date_values = int(df_long["date"].isna().sum())
     missing_kpi_blank = int(df_long["kpi"].isna().sum())
 
-    # Drop rows with invalid date or missing KPI (do NOT fill with 0)
+    # Drop rows with invalid date or missing KPI (do NOT fill with 0) — capture
+    # the rejected rows first so they can be offered for download.
+    _rejected_blank_or_invalid = df_long[df_long["date"].isna() | df_long["kpi"].isna()].copy()
     df_long = df_long.dropna(subset=["date", "kpi"])
 
     # Convert KPI to numeric, coercing errors -> NaN, then drop those rows
     df_long["kpi"] = pd.to_numeric(df_long["kpi"], errors="coerce")
     missing_kpi_non_numeric = int(df_long["kpi"].isna().sum())
+    _rejected_non_numeric = df_long[df_long["kpi"].isna()].copy()
     df_long = df_long.dropna(subset=["kpi"])
+
+    rejected_rows = (
+        pd.concat([_rejected_blank_or_invalid, _rejected_non_numeric], ignore_index=True)
+        if (len(_rejected_blank_or_invalid) or len(_rejected_non_numeric))
+        else None
+    )
 
     rows_retained = len(df_long)
     if rows_retained == 0:
@@ -148,29 +209,62 @@ def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None) -> Parsed
             "non-numeric KPI values."
         )
 
-    duplicate_keys = int(
-        df_long.duplicated(subset=["region_raw", "metric_name", "date"], keep=False).sum()
+    _dup_mask = df_long.duplicated(subset=["region_raw", "metric_name", "date"], keep=False)
+    duplicate_key_rows = int(_dup_mask.sum())
+    duplicate_key_groups = int(
+        df_long.loc[_dup_mask]
+        .drop_duplicates(subset=["region_raw", "metric_name", "date"])
+        .shape[0]
     )
-    metric_names = tuple(sorted(df_long["metric_name"].astype(str).unique().tolist()))
+    metrics_found = tuple(sorted(df_long["metric_name"].astype(str).unique().tolist()))
+
+    # ---- Date coverage over the retained observations ----
+    _retained_dates = pd.to_datetime(df_long["date"]).dropna().dt.normalize().sort_values()
+    if len(_retained_dates):
+        date_range = (_retained_dates.iloc[0], _retained_dates.iloc[-1])
+    else:
+        date_range = None
+    inferred_frequency = infer_frequency(_retained_dates)
+    expected_date_count, missing_dates = _expected_and_missing_dates(
+        _retained_dates, inferred_frequency
+    )
+
+    # ---- Explicit, unambiguous counts ----
+    observations_expected = len(df_raw) * len(date_cols)
+    observations_removed = observations_expected - rows_retained
+    source_rows_removed = blank_region_rows
 
     warnings: list[str] = []
     if blank_region_rows:
         warnings.append(f"{blank_region_rows} row(s) had a blank region and were dropped.")
-    if duplicate_keys:
-        warnings.append(f"{duplicate_keys} row(s) share a duplicate (region, metric, date) key.")
+    if duplicate_key_rows:
+        warnings.append(
+            f"{duplicate_key_rows} row(s) share a duplicate (region, metric, date) key."
+        )
 
     quality = DataQualityReport(
-        rows_read=rows_read,
-        rows_retained=rows_retained,
-        parsed_layout=parsed_layout,
-        date_count=len(date_cols),
-        metric_names=metric_names,
+        source_rows_read=rows_read,
+        source_rows_dropped_blank_region=blank_region_rows,
+        source_rows_removed=source_rows_removed,
+        source_date_columns=len(date_cols),
+        observations_expected=observations_expected,
+        observations_retained=rows_retained,
+        observations_dropped_missing_kpi=missing_kpi_blank,
+        observations_dropped_non_numeric_kpi=missing_kpi_non_numeric,
+        observations_dropped_invalid_date=invalid_date_values,
+        observations_removed=observations_removed,
+        duplicate_key_rows=duplicate_key_rows,
+        duplicate_key_groups=duplicate_key_groups,
+        selected_layout=parsed_layout,
+        selected_aggregation_column=(str(agg_col) if agg_col is not None else None),
+        selected_metric_column=str(metric_col_resolved),
+        metrics_found=metrics_found,
+        date_range=date_range,
+        inferred_frequency=inferred_frequency,
+        expected_date_count=expected_date_count,
+        missing_dates=missing_dates,
         raw_regions=raw_regions,
-        blank_region_rows=blank_region_rows,
-        missing_kpi_values=missing_kpi_blank + missing_kpi_non_numeric,
-        invalid_date_values=invalid_date_values,
-        duplicate_keys=duplicate_keys,
         warnings=tuple(warnings),
         blocking_errors=(),
     )
-    return ParsedKPIData(data=df_long, quality=quality)
+    return ParsedKPIData(data=df_long, quality=quality, rejected_rows=rejected_rows)
