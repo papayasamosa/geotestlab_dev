@@ -134,32 +134,25 @@ def update_constraints():
     result = drive_constraints()
     payload = _payload(
         scenario="numerical_constraints",
-        settings={"setup_mode": "Set Rules & Auto-Build Groups", "market": "UK"},
+        settings={
+            "setup_mode": "Set Rules & Auto-Build Groups",
+            "market": "UK",
+            "guided_seed": 42,
+        },
         expected=result,
         tolerances={},
         known_limitations=[
-            "The include/exclude conflict check (st.error + st.stop for regions "
-            "assigned to overlapping constraint sets) is currently unreachable "
-            "through sequential live-widget interaction: each multiselect's "
-            "options list reactively excludes selections already made in the "
-            "other constraint fields within the same script run, and Streamlit "
-            "silently drops a persisted widget value once it falls outside its "
-            "own options list on a later rerun, rather than raising. The "
-            "'conflict' sub-result captures this actual behaviour, not the "
-            "code's dead st.error branch.",
             "force_ctrl_include guarantees pool ELIGIBILITY for the guided "
             "search / matching strategy, not guaranteed presence in the final "
             "selected control group — the matching strategy can still leave it "
-            "unselected if it doesn't improve Weighted Structural Distance.",
-            "find_guided_test_group() is not seeded — n_test_regions, "
-            "n_control_regions, and guided_share_info.achieved vary between "
-            "identical runs (confirmed directly: two consecutive captures with "
-            "unchanged inputs produced different group sizes and achieved "
-            "shares). Only the constraint-satisfaction booleans "
-            "(forced/excluded region membership) are deterministic and are "
-            "what tests/test_numerical_characterisation.py actually asserts; "
-            "the counts and achieved share recorded here are illustrative, "
-            "not a reproducible golden value.",
+            "unselected if it doesn't improve Weighted Structural Distance. "
+            "The golden records forced_control_region_in_candidate_pool (True, "
+            "by definition) separately from "
+            "forced_control_region_in_control_group (strategy-dependent).",
+            "The guided search is seeded (GuidedSearchConfig.seed = 42, an "
+            "injected numpy Generator). Group sizes and the achieved share are "
+            "now reproducible and compared exactly; a different seed can "
+            "produce a different (still valid) group.",
         ],
     )
     _write_safe(GOLDEN_DIR / "numerical_constraints.json", payload)

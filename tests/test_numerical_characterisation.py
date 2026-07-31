@@ -125,36 +125,45 @@ class TestConstraints:
     def test_excluded_control_region_is_absent_from_controls(self, result):
         assert result["constraints"]["excluded_control_region_in_control_group"] is False
 
-    def test_conflict_is_silently_resolved_not_hard_stopped(self, result):
-        """Documents the real, current behaviour: the app's own conflict
-        check (st.error + st.stop) is unreachable via sequential live-widget
-        interaction, because Streamlit drops the now-stale ctrl_include
-        selection once exp_include claims the same region. See the golden's
-        known_limitations for the full explanation."""
+    def test_conflict_produces_visible_structured_blocker(self, result):
+        """A region force-included in both test and control must produce a
+        visible structured blocker (st.error + stop), not a silent widget-state
+        reset: the previously-selected ctrl_include value is retained and the
+        run reports the conflict."""
         conflict = result["conflict"]
         assert conflict["exception"] is False
-        assert conflict["errors"] == []
-        assert conflict["ctrl_include_value_after_conflict_attempt"] == []
+        assert conflict["errors"], "Expected a visible conflict error"
+        assert any("Invalid constraints" in e for e in conflict["errors"])
+        assert len(conflict["ctrl_include_value_after_conflict_attempt"]) == 1
         assert len(conflict["exp_include_value_after_conflict_attempt"]) == 1
 
     def test_forced_control_region_selection_matches_golden(self, result):
-        """The one part of the guided-search output that IS stable across
-        runs despite find_guided_test_group() being unseeded (see golden's
-        known_limitations): whether the force-included control region
-        actually got selected by the (deterministic, Greedy/NearestNeighbor)
-        matching strategy from whatever pool the search happened to build."""
+        """force_ctrl_include guarantees pool ELIGIBILITY (not guaranteed final
+        selection) — the deterministic Greedy/NearestNeighbor strategy decides
+        whether the eligible region is actually selected. Compared exactly
+        against the golden because the guided search is now seeded."""
         golden = _load_golden("numerical_constraints")
         expected = golden["expected"]["constraints"]
         assert (
             result["constraints"]["forced_control_region_in_control_group"]
             == expected["forced_control_region_in_control_group"]
         )
+        assert (
+            result["constraints"]["forced_control_region_in_candidate_pool"]
+            == expected["forced_control_region_in_candidate_pool"]
+        )
 
     def test_target_share_met(self, result):
-        """find_guided_test_group() is unseeded (exact group sizes vary run
-        to run — see golden's known_limitations), but it should still reach
-        the target population share within tolerance on every run."""
+        """The seeded guided search must still reach the target population
+        share within tolerance on every run."""
         assert result["constraints"]["guided_share_info"]["met"] is True
+
+    def test_constraints_match_golden_exactly(self, result):
+        """With the guided search seeded, the whole constraints + conflict
+        result (group sizes, achieved share, conflict blocker) is reproducible
+        and must match the golden exactly (no tolerance)."""
+        golden = _load_golden("numerical_constraints")
+        _assert_matches_golden(result, golden)
 
 
 # ---------------------------------------------------------------------------

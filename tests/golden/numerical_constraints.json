@@ -1,9 +1,13 @@
 {
-  "app_baseline_commit": "281063d2e59213dbab5781addd07cf4413550e69",
+  "app_baseline_commit": "f11018a2cf6a6b1a57cf267d97da565eaf681ac5",
   "expected": {
     "conflict": {
-      "ctrl_include_value_after_conflict_attempt": [],
-      "errors": [],
+      "ctrl_include_value_after_conflict_attempt": [
+        "Aberdeen City (0.3%)"
+      ],
+      "errors": [
+        "Invalid constraints: **Aberdeen City** is assigned to multiple constraint fields: force_test_include, force_control_include. A region can only be assigned to one rule \u2014 remove the overlapping assignment before running."
+      ],
       "exception": false,
       "exp_include_value_after_conflict_attempt": [
         "Aberdeen City (0.3%)"
@@ -19,30 +23,32 @@
       "excluded_test_region": "Aberdeenshire",
       "excluded_test_region_in_test_group": false,
       "forced_control_region": "Aberdeenshire",
+      "forced_control_region_in_candidate_pool": true,
       "forced_control_region_in_control_group": false,
       "forced_test_region": "Aberdeen City",
       "forced_test_region_in_test_group": true,
+      "guided_seed": 42,
       "guided_share_info": {
-        "achieved": 25.005672549529194,
+        "achieved": 24.99030172196447,
         "met": true,
         "target": 25,
         "tolerance": 5
       },
-      "n_control_regions": 34,
-      "n_test_regions": 55,
+      "n_control_regions": 35,
+      "n_test_regions": 53,
       "warnings": []
     }
   },
   "fixture_version": 1,
-  "golden_created_by_commit": "66268a7da2fc3b04288dd969fef139bdf1d85b2c",
+  "golden_created_by_commit": "1fc7e61273e90e46e69452bcda4fb751109cf359",
   "known_limitations": [
-    "The include/exclude conflict check (st.error + st.stop for regions assigned to overlapping constraint sets) is currently unreachable through sequential live-widget interaction: each multiselect's options list reactively excludes selections already made in the other constraint fields within the same script run, and Streamlit silently drops a persisted widget value once it falls outside its own options list on a later rerun, rather than raising. The 'conflict' sub-result captures this actual behaviour, not the code's dead st.error branch.",
-    "force_ctrl_include guarantees pool ELIGIBILITY for the guided search / matching strategy, not guaranteed presence in the final selected control group \u2014 the matching strategy can still leave it unselected if it doesn't improve Weighted Structural Distance.",
-    "find_guided_test_group() is not seeded \u2014 n_test_regions, n_control_regions, and guided_share_info.achieved vary between identical runs (confirmed directly: two consecutive captures with unchanged inputs produced different group sizes and achieved shares). Only the constraint-satisfaction booleans (forced/excluded region membership) are deterministic and are what tests/test_numerical_characterisation.py actually asserts; the counts and achieved share recorded here are illustrative, not a reproducible golden value."
+    "force_ctrl_include guarantees pool ELIGIBILITY for the guided search / matching strategy, not guaranteed presence in the final selected control group \u2014 the matching strategy can still leave it unselected if it doesn't improve Weighted Structural Distance. The golden records forced_control_region_in_candidate_pool (True, by definition) separately from forced_control_region_in_control_group (strategy-dependent).",
+    "The guided search is seeded (GuidedSearchConfig.seed = 42, an injected numpy Generator). Group sizes and the achieved share are now reproducible and compared exactly; a different seed can produce a different (still valid) group."
   ],
   "scenario": "numerical_constraints",
   "schema_version": 1,
   "settings": {
+    "guided_seed": 42,
     "market": "UK",
     "setup_mode": "Set Rules & Auto-Build Groups"
   },
