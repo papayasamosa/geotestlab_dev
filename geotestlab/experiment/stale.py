@@ -40,13 +40,16 @@ def compute_stale_flags(record: ExperimentRecord, current) -> dict:
 
 
 def propagate_staleness(record: ExperimentRecord, current) -> list:
-    """Mark newly-stale completed stages as ``stale`` in the record.
+    """Mark newly-stale completed stages as ``stale`` in the record, and RESTORE
+    a stale stage to ``completed`` when the current fingerprint again matches
+    the stored result fingerprint (``completed -> input change -> stale ->
+    original inputs -> completed``).
 
     ``current`` may be a single fingerprint string or a {stage: fingerprint}
     dict for stage-scoped comparison (a stage with no current fingerprint is
-    skipped here). Returns the list of stage keys whose status changed to
-    ``stale`` (or that were already stale). Planned/future stages are never
-    marked stale.
+    skipped here). Returns the list of stage keys whose status changed (to
+    ``stale`` or back to ``completed``). Planned/future stages are never marked
+    stale.
     """
     changed = []
     for stage in STAGE_KEYS:
@@ -62,4 +65,7 @@ def propagate_staleness(record: ExperimentRecord, current) -> list:
                 changed.append(stage)
         else:
             record.stage_stale[stage] = False
+            if record.stage_status.get(stage) == "stale" and stage_has_result(record, stage):
+                record.stage_status[stage] = "completed"
+                changed.append(stage)
     return changed

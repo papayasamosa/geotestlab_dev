@@ -24,16 +24,23 @@ from geotestlab.experiment import (
     STAGE_KEYS,
     ExperimentRecord,
     active_frozen_version,
+    analytical_data_digest,
+    build_content_digests,
     build_experiment_export,
+    candidate_universe_digest,
     compute_input_fingerprint,
     create_experiment_record,
     default_stage_status,
     freeze_design,
     is_frozen,
+    load_experiment_record,
+    load_experiment_record_from_export,
     new_experiment_id,
     planned_vs_analysed,
     propagate_staleness,
+    record_stage_method_result,
     record_stage_result,
+    sha256_bytes,
     stage_is_stale,
     update_inputs,
     utc_now_iso,
@@ -303,7 +310,11 @@ class TestExport:
         freeze_design(rec, planned, fp)
         rec.analysed = dict(planned)
         export = build_experiment_export(rec, result_summaries={"match_quality": {"corr": 0.9}})
-        assert export["schema_version"] == "experiment-record/v1"
+        assert export["schema_version"] == "experiment-record/v2"
+        assert export["record_schema_version"] == "experiment-record/v2"
+        assert export["content_digests"] == {}
+        assert export["stage_method_results"] == {}
+        assert export["frozen_versions"][0]["schema_version"] == "frozen-design/v1"
         assert export["experiment_id"] == rec.experiment_id
         assert export["input_fingerprint"] == fp
         assert len(export["stages"]) == len(STAGE_KEYS)
@@ -327,3 +338,364 @@ class TestExport:
         stage = next(s for s in export["stages"] if s["key"] == "match_quality")
         assert stage["status"] == "stale"
         assert stage["stale"] is True
+
+
+# ---------------------------------------------------------------------------
+# Content digests (Stage 2: SHA-256 identities, digests only)
+# ---------------------------------------------------------------------------
+class TestContentDigests:
+    def test_bytes_digest_deterministic(self):
+        assert sha256_bytes(b"hello") == sha256_bytes(b"hello")
+        assert sha256_bytes(b"hello").startswith("sha256:")
+        assert sha256_bytes(b"world") != sha256_bytes(b"hello")
+
+    def test_frame_digest_row_order_independent(self):
+        df = pd.DataFrame(
+            {
+                "date": ["2025-01-06", "2025-01-13"],
+                "region": ["T", "C1"],
+                "kpi": [1.0, 2.0],
+            }
+        )
+        shuffled = df.iloc[[1, 0]].reset_index(drop=True)
+        assert analytical_data_digest(df) == analytical_data_digest(shuffled)
+
+    def test_universe_digest_sorted_deduped(self):
+        assert candidate_universe_digest(["B", "A", "B"]) == candidate_universe_digest(["A", "B"])
+
+    def test_build_content_digests_json_safe_and_digests_only(self):
+        out = build_content_digests(
+            source_bytes=b"RAW-SOURCE-BYTES",
+            analytical_data=pd.DataFrame({"x": [1, 2]}),
+            workbook_bytes=b"RAW-WORKBOOK-BYTES",
+            market_sheet=pd.DataFrame({"region": ["A"]}),
+            candidate_universe=["A", "B"],
+        )
+        json.dumps(out)  # JSON-safe
+        joined = json.dumps(out)
+        assert "RAW-SOURCE-BYTES" not in joined
+        assert "RAW-WORKBOOK-BYTES" not in joined
+        for key in (
+            "source_bytes",
+            "analytical_data",
+            "geography_workbook",
+            "market_sheet",
+            "candidate_universe",
+        ):
+            assert out[key].startswith("sha256:")
+
+    def test_missing_content_reports_none(self):
+        out = build_content_digests()
+        assert out["source_bytes"] is None
+        assert out["analytical_data"] is None
+        assert out["geography_workbook"] is None
+        assert out["market_sheet"] is None
+        assert out["candidate_universe"] is None
+
+
+# ---------------------------------------------------------------------------
+# Restore completed status (completed -> change -> stale -> original -> completed)
+# ---------------------------------------------------------------------------
+class TestRestoreCompleted:
+    def test_completed_change_stale_restore_completed(self):
+        rec = create_experiment_record(NOW)
+        fp1 = compute_input_fingerprint({"a": 1})
+        fp2 = compute_input_fingerprint({"a": 2})
+        record_stage_result(rec, "match_quality", fp1)
+        record_stage_result(rec, "counterfactual_validation", fp1)
+
+        # inputs change -> stale
+        changed = propagate_staleness(rec, fp2)
+        assert set(changed) == {"match_quality", "counterfactual_validation"}
+        assert rec.stage_status["match_quality"] == "stale"
+        assert rec.stage_stale["match_quality"] is True
+
+        # original inputs restored -> completed restored WITHOUT re-running
+        changed2 = propagate_staleness(rec, fp1)
+        assert "match_quality" in changed2
+        assert rec.stage_status["match_quality"] == "completed"
+        assert rec.stage_stale["match_quality"] is False
+        assert rec.stage_status["counterfactual_validation"] == "completed"
+
+    def test_stage_without_result_never_restored(self):
+        rec = create_experiment_record(NOW)
+        fp1 = compute_input_fingerprint({"a": 1})
+        fp2 = compute_input_fingerprint({"a": 2})
+        # no result -> not stale, stays not_started
+        propagate_staleness(rec, fp2)
+        assert rec.stage_status["match_quality"] == "not_started"
+        propagate_staleness(rec, fp1)
+        assert rec.stage_status["match_quality"] == "not_started"
+
+
+# ---------------------------------------------------------------------------
+# Immutable frozen versions (deep copies on store/return/export)
+# ---------------------------------------------------------------------------
+class TestFrozenImmutability:
+    def _setup(self):
+        rec = create_experiment_record(NOW)
+        fp = compute_input_fingerprint({"a": 1})
+        return rec, fp
+
+    def test_input_mutation_after_freeze_does_not_affect_stored(self):
+        rec, fp = self._setup()
+        planned = {"test_start": "2025-03-31", "planned_test_periods": 4}
+        design = {"test_regions": ["T"], "weights": {"x": 1.0}}
+        freeze_design(rec, planned, fp, design=design)
+        planned["planned_test_periods"] = 999
+        design["test_regions"].append("HACKED")
+        stored = rec.frozen_versions[0]
+        assert stored.planned["planned_test_periods"] == 4
+        assert stored.design["test_regions"] == ["T"]
+
+    def test_returned_frozen_dict_mutation_does_not_affect_stored(self):
+        rec, fp = self._setup()
+        frozen = freeze_design(rec, {"planned_test_periods": 4}, fp, design={"weights": {}})
+        frozen["planned"]["planned_test_periods"] = 999
+        frozen["design"]["weights"]["x"] = 9.0
+        stored = rec.frozen_versions[0]
+        assert stored.planned["planned_test_periods"] == 4
+        assert stored.design["weights"] == {}
+
+    def test_active_frozen_version_mutation_does_not_affect_stored(self):
+        rec, fp = self._setup()
+        freeze_design(rec, {"planned_test_periods": 4}, fp)
+        active = active_frozen_version(rec)
+        active["planned"]["planned_test_periods"] = 999
+        assert rec.frozen_versions[0].planned["planned_test_periods"] == 4
+
+    def test_export_dict_mutation_does_not_affect_record(self):
+        rec, fp = self._setup()
+        freeze_design(rec, {"planned_test_periods": 4}, fp, design={"weights": {"x": 1.0}})
+        export = build_experiment_export(rec)
+        export["frozen_versions"][0]["planned"]["planned_test_periods"] = 999
+        export["frozen_versions"][0]["design"]["weights"]["x"] = 9.0
+        assert rec.frozen_versions[0].planned["planned_test_periods"] == 4
+        assert rec.frozen_versions[0].design["weights"] == {"x": 1.0}
+
+    def test_record_mutation_after_export_does_not_affect_export(self):
+        rec, fp = self._setup()
+        freeze_design(rec, {"planned_test_periods": 4}, fp, design={"weights": {"x": 1.0}})
+        export = build_experiment_export(rec)
+        rec.frozen_versions[0].planned["planned_test_periods"] = 999
+        rec.frozen_versions[0].design["weights"]["x"] = 9.0
+        assert export["frozen_versions"][0]["planned"]["planned_test_periods"] == 4
+        assert export["frozen_versions"][0]["design"]["weights"] == {"x": 1.0}
+
+
+# ---------------------------------------------------------------------------
+# Complete frozen snapshot (not just fingerprint + period dict)
+# ---------------------------------------------------------------------------
+class TestCompleteSnapshot:
+    def test_freeze_stores_complete_design_snapshot(self):
+        rec = create_experiment_record(NOW)
+        fp = compute_input_fingerprint({"a": 1})
+        design = {
+            "test_regions": ["T1", "T2"],
+            "control_regions": ["C1"],
+            "exclusions": ["2025-02-03"],
+            "kpi": {
+                "file_name": "weekly.xlsx",
+                "selected_metric": "Sales",
+                "time_series_frequency": "weekly",
+            },
+            "historical_period": {"pre_start": "2025-01-06", "pre_end": "2025-03-24"},
+            "planned_test_period": {
+                "test_start": "2025-03-31",
+                "test_end": "2025-04-21",
+                "planned_test_periods": 4,
+            },
+            "matching": {"method": "guided", "strategy": "deterministic", "weights": {"w1": 0.5}},
+            "seeds": {"matching_seed": 42},
+            "validation_settings": {"include_lagged_controls": True},
+            "data_quality_summary": {"covered_regions": ["T1", "T2"], "rejected_rows": 0},
+            "source_data_digests": {"source_bytes": "sha256:abc"},
+            "tracking_outage_exclusions": ["2025-02-10"],
+            "tool_version": "0.3.0",
+            "methodology_version": "0.2.0",
+            "analyst": {"label": "owner", "notes": ["approved"]},
+            "approved_power_result": None,
+        }
+        frozen = freeze_design(rec, {"planned_test_periods": 4}, fp, label="v1", design=design)
+        assert frozen["design"]["test_regions"] == ["T1", "T2"]
+        assert frozen["design"]["tool_version"] == "0.3.0"
+        assert frozen["design"]["methodology_version"] == "0.2.0"
+        assert frozen["design"]["source_data_digests"] == {"source_bytes": "sha256:abc"}
+        assert frozen["schema_version"] == "frozen-design/v1"
+        assert frozen["planned"]["planned_test_periods"] == 4
+        # deep-copied: mutating the caller's design dict never affects stored history
+        design["test_regions"].append("HACKED")
+        assert rec.frozen_versions[0].design["test_regions"] == ["T1", "T2"]
+
+
+# ---------------------------------------------------------------------------
+# Observed impact status (no Bayesian requirement; TBR as additional method)
+# ---------------------------------------------------------------------------
+class TestObservedImpact:
+    def test_observed_impact_complete_without_bayesian(self):
+        rec = create_experiment_record(NOW)
+        fp = compute_input_fingerprint({"a": 1})
+        record_stage_result(rec, "counterfactual_validation", fp)
+        record_stage_result(rec, "observed_impact", fp)
+        assert rec.stage_status["observed_impact"] == "completed"
+        assert rec.stage_fingerprints["observed_impact"] == fp
+        assert rec.stage_stale["observed_impact"] is False
+
+    def test_bayesian_tbr_stored_as_additional_method_result(self):
+        rec = create_experiment_record(NOW)
+        fp = compute_input_fingerprint({"a": 1})
+        fp_bayes = compute_input_fingerprint({"a": 1, "method": "bayesian"})
+        record_stage_result(rec, "observed_impact", fp)
+        record_stage_method_result(rec, "observed_impact", "bayesian_tbr", fp_bayes)
+        assert rec.stage_fingerprints["observed_impact"] == fp  # primary unchanged
+        assert rec.stage_method_results["observed_impact"] == {"bayesian_tbr": fp_bayes}
+        assert rec.stage_status["observed_impact"] == "completed"
+        assert rec.stage_stale["observed_impact"] is False
+
+    def test_bayesian_tbr_completes_stage_if_no_primary(self):
+        rec = create_experiment_record(NOW)
+        fp = compute_input_fingerprint({"method": "bayesian"})
+        record_stage_method_result(rec, "observed_impact", "bayesian_tbr", fp)
+        assert rec.stage_status["observed_impact"] == "completed"
+        assert rec.stage_fingerprints["observed_impact"] == fp
+
+    def test_unknown_stage_rejected(self):
+        rec = create_experiment_record(NOW)
+        with pytest.raises(ValueError):
+            record_stage_method_result(rec, "bogus", "bayesian_tbr", "fp1:x")
+
+
+# ---------------------------------------------------------------------------
+# Schema versioning and migration (v1 -> v2)
+# ---------------------------------------------------------------------------
+class TestVersioning:
+    def test_v1_record_dict_loads_with_defaults(self):
+        v1 = {
+            "experiment_id": "EXP-20260804-ABCD",
+            "created_at": "2026-08-04T10:30:00Z",
+            "updated_at": "2026-08-04T10:30:00Z",
+            "input_fingerprint": "fp1:abc",
+            "stage_status": {"match_quality": "completed", "observed_impact": "completed"},
+            "stage_fingerprints": {"match_quality": "fp1:abc"},
+            "stage_stale": {},
+            "frozen_versions": [
+                {
+                    "version": 1,
+                    "frozen_at": "2026-08-04T10:30:00Z",
+                    "input_fingerprint": "fp1:abc",
+                    "label": "",
+                    "planned": {"planned_test_periods": 4},
+                }
+            ],
+            "analysed": {"planned_test_periods": 4},
+            "notes": [],
+        }
+        rec = load_experiment_record(v1)
+        assert rec.schema_version == "experiment-record/v1"
+        assert rec.content_digests == {}
+        assert rec.stage_method_results == {}
+        assert rec.stage_status["match_quality"] == "completed"
+        assert rec.frozen_versions[0].design == {}
+        assert rec.frozen_versions[0].schema_version == "frozen-design/v1"
+        assert rec.frozen_versions[0].planned["planned_test_periods"] == 4
+
+    def test_round_trip_preserves_v2(self):
+        rec = create_experiment_record(NOW)
+        fp = compute_input_fingerprint({"a": 1})
+        rec.content_digests = {"source_bytes": "sha256:abc"}
+        record_stage_result(rec, "observed_impact", fp)
+        record_stage_method_result(rec, "observed_impact", "bayesian_tbr", fp)
+        freeze_design(rec, {"planned_test_periods": 4}, fp, design={"test_regions": ["T"]})
+        rec2 = load_experiment_record(rec.to_dict())
+        assert rec2.schema_version == "experiment-record/v2"
+        assert rec2.content_digests == {"source_bytes": "sha256:abc"}
+        assert rec2.stage_method_results["observed_impact"] == {"bayesian_tbr": fp}
+        assert rec2.frozen_versions[0].design == {"test_regions": ["T"]}
+        assert rec2.to_dict() == rec.to_dict()
+
+    def test_v1_export_loads(self):
+        v1_export = {
+            "schema_version": "experiment-record/v1",
+            "experiment_id": "EXP-20260804-ABCD",
+            "created_at": "2026-08-04T10:30:00Z",
+            "updated_at": "2026-08-04T10:30:00Z",
+            "input_fingerprint": "fp1:abc",
+            "input_summary": {},
+            "stages": [
+                {
+                    "key": "match_quality",
+                    "label": "Match quality",
+                    "status": "completed",
+                    "stale": False,
+                    "result_fingerprint": "fp1:abc",
+                },
+                {
+                    "key": "counterfactual_validation",
+                    "label": "Counterfactual validation",
+                    "status": "not_started",
+                    "stale": False,
+                    "result_fingerprint": None,
+                },
+                {
+                    "key": "observed_impact",
+                    "label": "Observed impact",
+                    "status": "completed",
+                    "stale": True,
+                    "result_fingerprint": "fp1:abc",
+                },
+                {
+                    "key": "statistical_power",
+                    "label": "Statistical power",
+                    "status": "planned",
+                    "stale": False,
+                    "result_fingerprint": None,
+                },
+                {
+                    "key": "media_delivery",
+                    "label": "Media delivery",
+                    "status": "planned",
+                    "stale": False,
+                    "result_fingerprint": None,
+                },
+                {
+                    "key": "effect_plausibility",
+                    "label": "Effect plausibility",
+                    "status": "planned",
+                    "stale": False,
+                    "result_fingerprint": None,
+                },
+            ],
+            "frozen_versions": [
+                {
+                    "version": 1,
+                    "frozen_at": "2026-08-04T10:30:00Z",
+                    "input_fingerprint": "fp1:abc",
+                    "label": "",
+                    "planned": {"planned_test_periods": 4},
+                }
+            ],
+            "planned_vs_analysed": {},
+            "analysed": {"planned_test_periods": 4},
+            "notes": [],
+            "result_summaries": {"match_quality": {"corr": 0.9}},
+        }
+        rec = load_experiment_record_from_export(v1_export)
+        assert rec.schema_version == "experiment-record/v1"
+        assert rec.stage_status["match_quality"] == "completed"
+        assert rec.stage_status["observed_impact"] == "completed"
+        assert rec.stage_stale["observed_impact"] is True
+        assert rec.stage_fingerprints["observed_impact"] == "fp1:abc"
+        assert rec.frozen_versions[0].planned["planned_test_periods"] == 4
+        assert rec.content_digests == {}
+
+    def test_v2_export_round_trip(self):
+        rec = create_experiment_record(NOW)
+        fp = compute_input_fingerprint({"a": 1})
+        record_stage_result(rec, "match_quality", fp)
+        freeze_design(rec, {"planned_test_periods": 4}, fp)
+        export = build_experiment_export(rec)
+        rec2 = load_experiment_record_from_export(export)
+        assert rec2.experiment_id == rec.experiment_id
+        assert rec2.stage_status == rec.stage_status
+        assert rec2.schema_version == "experiment-record/v2"
+        assert rec2.frozen_versions[0].planned["planned_test_periods"] == 4
