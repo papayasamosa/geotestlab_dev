@@ -1,6 +1,6 @@
 # GeoTestLab — Project Documentation
 
-> *Reviewed baseline: `c532625b3d7356e344138fcd9211f8ad25c71d3c`.*
+> *Reviewed baseline: `147a4d6fec5698346d0c8f985bd9154c7e280f9a`.*
 >
 > **Documentation map**
 > - `PROJECT_DOCUMENTATION.md` documents the **current implementation** as reviewed at the baseline commit above.
@@ -349,7 +349,7 @@ Tab 4. Builds a Bayesian linear regression of the test-region aggregate KPI on t
 - **Prerequisite**: the tab requires a completed **Evaluate-mode** validation run (from the Measure Test Impact tab) — if `validation_results` is missing or was produced in Design mode, the tab shows an info message and stops. It also stays disabled while an unacknowledged frequency mismatch warning is active in the validation setup (`frequency_mismatch_blocked`, §F2).
 - **Controls used**: Bayesian TBR uses **the selected controls from whichever validation method the user picks in the tab's method selector** (Structurally Matched, Data-Optimised, Data-Optimised excluding force-excluded regions, or User Selected) — not automatically "all non-test regions." For `METHOD_STRUCTURAL` / `METHOD_USER_SELECTED`, this is the raw matched/manually-picked group (with a warning + stop if it's empty). For the data-optimised methods, it's `selected_regions` from the LASSO/Elastic Net fit — and if the model retained **zero** controls, the tab deliberately warns and stops rather than falling back to the full candidate pool, since a silent fallback would change what Bayesian TBR is actually testing. An expander lists the exact base control regions (and, when lagging is enabled, the full model feature terms including lagged terms) before running.
 - **Frequency and lag setup are inherited**: Bayesian TBR always uses the same time-series frequency and lagged-controls setting as the validation run it's built on (stored inside `validation_results`), keeping the lag length (1-week vs. 7-day) consistent rather than offering an independent toggle.
-- **Sampling settings**: fixed in code at `pm.sample(draws=2000, tune=1000, chains=4, target_accept=0.95, random_seed=42)` — `target_accept` is set high specifically to suppress divergent transitions (see §M).
+- **Sampling settings**: production defaults are `pm.sample(draws=2000, tune=1000, chains=4, target_accept=0.95, random_seed=42)` — `target_accept` is set high specifically to suppress divergent transitions (see §M). The profile is session-configurable (`bayes_mcmc_draws` / `bayes_mcmc_tune` / `bayes_mcmc_chains` / `bayes_mcmc_target_accept` / `bayes_mcmc_random_seed`), which lets tests and power users run a reduced sampling profile without changing the production defaults.
 - **The model** estimates, for the test period (and optional post period), what the test region's KPI *would have been* absent the treatment — the **counterfactual** — using the fitted relationship to the control regions.
 - **Uplift = actual − counterfactual**, summed over the test period.
 - **Posterior uncertainty**: because this is a Bayesian model, every quantity (coefficients, counterfactual predictions, uplift) is represented as a distribution of posterior samples, not a single point estimate — this is what lets the app report credible/predictive intervals rather than just a single uplift figure.
@@ -521,24 +521,46 @@ includes:
 - **Matching-core extraction** — `geotestlab/matching/` is a Streamlit-free,
   typed package (`models`, `structural`, `metrics`, `kpi_pattern`,
   `constraints`, `strategies`) unit-tested directly.
-- **CI** — GitHub Actions runs test, lock-verification and numerical-regression
-  jobs on every pull request to `main`.
+- **Validation-core extraction** — `geotestlab/validation/` is a Streamlit-free,
+  typed package (typed configs and results, model-matrix service, regularised
+  models, rolling-origin, placebo, Counterfactual Confidence, `run_validation`);
+  `geotestmatch.py` keeps a thin `run_validation_method` adapter.
+- **Bayesian-core extraction** — `geotestlab/bayesian/` is a Streamlit-free,
+  typed package (AR(1), priors, features, model construction, prediction,
+  diagnostics, `run_bayesian`); the PyMC trace is stored separately from the
+  serialisable `BayesianResult` summary and rendered from session state, with
+  MCMC diagnostics rendering guarded when the trace is unavailable.
+- **Experiment foundations** — `geotestlab/experiment/` provides experiment
+  identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints,
+  stage-scoped staleness, immutable frozen design versions and a local JSON
+  experiment-record export. These are foundations of FR-16 (approved design
+  freeze) and FR-22 (reproducible export), **not** the complete contracts.
+- **Power methodology spike** — `geotestlab/power/` is an **unapproved
+  methodology prototype** (synthetic cases, model-based counterfactual
+  simulation, placebo/residual methods, MDE search, fit-method comparison
+  evidence). It is not the production power engine; production FR-10/FR-11 work
+  is gated on explicit methodology approval.
+- **CI** — GitHub Actions runs test, lock-verification, numerical-regression
+  and Bayesian reduced-sampling smoke jobs on every pull request to `main`.
 - **Numerical regression gates** — `tests/test_numerical_characterisation.py`
   guards extracted behaviour; CI blocks merge on failure. The package coverage
   gate requires at least 90 percent coverage of `geotestlab/`.
 - **Locked dependencies** — Python 3.11 runtime and dev locks generated on
   Linux; `scripts/compile_requirements.py --check` verifies reproducibility.
 
-Validation, placebo, Counterfactual Confidence and Bayesian logic remain
-substantially in `geotestmatch.py` and are scheduled for later
-behaviour-preserving extraction; see `docs/product/roadmap-and-traceability.md`
-for the reconciliation of current and planned work.
+Validation, placebo, Counterfactual Confidence and Bayesian logic are therefore
+no longer substantially in `geotestmatch.py`; the app script keeps thin
+adapters and the UI. The reduced-sampling Bayesian CI job is an execution-path
+smoke test, not evidence of production MCMC convergence. See
+`docs/product/roadmap-and-traceability.md` for the reconciliation of current
+and planned work.
 
 ### 5.1 Code structure (top-to-bottom)
 
 The application is a Streamlit script that calls into the extracted
-`geotestlab/` package for data ingestion and matching, while retaining
-validation, reporting and Bayesian logic. It is organised roughly as:
+`geotestlab/` packages through thin adapters (for example
+`run_validation_method` and the Bayesian run handler), while retaining the UI
+and session-state wiring. It is organised roughly as:
 
 1. **Imports & app config** — imports from the extracted `geotestlab.data`
    (ingestion, models, exceptions, period quality) and `geotestlab.matching`
@@ -582,7 +604,7 @@ validation, reporting and Bayesian logic. It is organised roughly as:
 - **`_run_placebo_windows(model_pre, model_feature_cols, dates_pre, min_training_periods, placebo_len, method_name, max_windows=40)`** — runs the placebo loop on the already-lagged pre-period matrix (preserving lag features across window boundaries), subsampling to at most 40 evenly-spaced windows; returns parallel lists of placebo uplifts, uplift %s, sMAPEs, and RMSEs. **`_summarize_placebo_results(...)`** turns those lists (plus the real uplift) into the median, 95% range, percentile rank, one-/two-sided p-values, z-score, and placebo error metrics shown in the table. (The previous standalone `placebo_analysis()` function no longer exists — these two helpers are the single source of truth for placebo statistics.)
 - **Frequency helpers** — `get_frequency_config(time_series_frequency)` (all frequency-dependent settings in one dict) and `infer_time_series_frequency(dates)` (median-gap-based "daily"/"weekly"/"unknown" classification, used only to warn — never to silently override the user's selection). See §F2.
 - **Display/export helpers** — `format_range(lower, upper, suffix, decimals)` (consistent "x to y" range formatting, "N/A" for missing/non-finite values, used throughout the Method Comparison table) and `build_chart_data_xlsx(sheets)` (in-memory .xlsx bytes for `st.download_button` chart-data exports; skips `None` sheets and always emits valid bytes).
-- **`calculate_structural_prior_sigmas(agg_df, test_regions, control_regions, geo_col, feature_cols, weight_dict=None, population_col="Population", min_sigma=0.25, max_sigma=0.70)`** — computes a structural-distance-based prior sigma per control region, min-max scaled between the sigma bounds; the Bayesian tab passes in data-driven bounds derived from the median absolute pre-period correlation (§J). Falls back to a uniform σ=0.5 "Standard weak prior" for the edge cases listed in §J, and returns both the sigma array and a per-control explanation DataFrame shown in the UI.
+- **`calculate_structural_prior_sigmas(agg_df, test_regions, control_regions, geo_col, feature_cols, weight_dict=None, population_col="Population", min_sigma=0.25, max_sigma=0.70)`** — defined in `geotestlab/bayesian/priors.py` and imported into the app; computes a structural-distance-based prior sigma per control region, min-max scaled between the sigma bounds; the Bayesian tab passes in data-driven bounds derived from the median absolute pre-period correlation (§J). Falls back to a uniform σ=0.5 "Standard weak prior" for the edge cases listed in §J, and returns both the sigma array and a per-control explanation DataFrame shown in the UI.
 - **Structural matching functions** — `weighted_profile` (population-weighted feature means), `fit_structural_stats` (fits one mean/std basis per run), `calculate_metrics` (computes Weighted Structural Distance and Mean Abs SMD for a candidate test/control pairing — the authoritative, non-vectorised reference implementation), `preprocess_data` (prepares scaled arrays for `NearestNeighbors`-based candidate search, using the same basis as `calculate_metrics` for consistency).
 - **`make_fast_metrics_fn(pool_df, test_df_run, features, weights_dict, eligible_means, eligible_stds, population_col=POPULATION_COL)`** — builds a vectorised scorer, closed over one run's fixed pool/test data, that all three matching strategies call hundreds to thousands of times to score candidate control groups. Returns a `fast_metrics(idx_list)` function that produces the same result dict as `calculate_metrics()`, but computed with a handful of NumPy array operations on precomputed matrices instead of re-copying dataframes and re-imputing/re-deriving arrays on every call. See §5.6 for why this exists and §5.7 for how to extend it safely.
 - **`stochastic_genetic_search(pool_df, test_df_run, active_features, weights, n, calculate_metrics_fn, eligible_means, eligible_stds, nn_start_idx, n_iterations, random_state, fast_metrics_fn=None)`** — the Advanced matching strategy: starts from a nearest-neighbour candidate group and performs randomised single-region swaps, keeping any that improve Weighted Structural Distance, tracking the best group found; seeded for reproducibility. When `fast_metrics_fn` is supplied (the normal case — see Tab 1's matching loop) it's used in place of `calculate_metrics_fn` for per-swap scoring; the two are numerically equivalent, `fast_metrics_fn` is just faster.
@@ -598,7 +620,8 @@ The app relies heavily on `st.session_state` to persist state across Streamlit r
 - `st.session_state.time_series_frequency` — the Weekly/Daily selection (§F2), plus `st.session_state.frequency_mismatch_blocked` — set while a detected frequency mismatch is unacknowledged; blocks both the validation run button and the Bayesian TBR run button.
 - `st.session_state.include_lagged_controls` — the shared lagged-controls flag, plus the setting is also stored inside the saved `validation_results` dict so Bayesian TBR reads a value consistent with the validation run it's built on.
 - `st.session_state.validation_results` — the dict of per-method results from the last `render_time_series_validation` run, including the mode ("Design"/"Evaluate"), date windows, selected metric, and the frequency/lag setup (`time_series_frequency`, `frequency_config`, `include_lagged_controls`) that Bayesian TBR inherits; cleared (`clear_validation_state`, defined inside `render_time_series_validation`) when settings that would invalidate it change (e.g. toggling the lag checkbox or the frequency radio, or re-uploading the KPI file), forcing a re-run before Bayesian TBR can use stale controls.
-- `st.session_state.bayesian_results` — the dict of Bayesian TBR outputs (posterior samples, intervals, chart data, diagnostics).
+- `st.session_state.bayesian_results` — the dict of Bayesian TBR outputs (posterior samples, intervals, chart data, diagnostics). `st.session_state.bayesian_trace` holds the separate PyMC `InferenceData` trace (removed by `_clear_bayesian_state()` whenever results are reset), and the sampling profile is read from session-configurable `bayes_mcmc_draws` / `bayes_mcmc_tune` / `bayes_mcmc_chains` / `bayes_mcmc_target_accept` / `bayes_mcmc_random_seed` (production defaults 2000 / 1000 / 4 / 0.95 / 42).
+- `st.session_state.experiment_record` — the serialised `ExperimentRecord` (identity, stage fingerprints, frozen design versions, content digests); kept in sync by `_reconcile_experiment_record()` and rendered / exported by `render_experiment_record()` (local JSON export).
 - `st.session_state.eligible_means` / `eligible_stds` — the fixed structural-matching basis for the current run.
 - `st.session_state.force_ctrl_exclude` and related force-include/exclude selections.
 - Various reset callbacks (`reset_results`, `reset_manual_results`, `cleanup_session_state`) fire on relevant widget `on_change` events to invalidate stale downstream state when upstream inputs change.
@@ -639,7 +662,9 @@ Excel reading uses the `calamine` engine primarily, with a fallback to `openpyxl
 - **New diagnostics** (Ljung-Box, ACF plot, etc.): follow the pattern of `durbin_watson_stat` — a small, dependency-light helper function, computed inside `run_validation_method` from `pre_residuals`, added to the returned dict, and surfaced in the Method Comparison table (`comparison_rows` list + the `get_value` lookup logic). If the new diagnostic should have a traffic-light rating, follow the `classify_*` pattern: a small classifier reading its thresholds from `CONFIG["reliability_thresholds"]`, and — if it should influence the overall rating — a deliberate decision about where it sits in `combine_reliability_ratings()`'s priority cascade (§G2), not an automatic worst-of vote.
 - **New reliability thresholds**: change them only in `CONFIG["reliability_thresholds"]` (the single source of truth) — the classifier functions read from it at call time.
 - **New frequencies** (e.g. monthly): extend `get_frequency_config()` and `infer_time_series_frequency()`; everything downstream (lags, defaults, labels) reads from the config dict rather than hardcoding "week".
-- **New Bayesian model features** (e.g. a separate lag-specific prior instead of duplicating the same-period sigma onto lagged terms): modify the PyMC model block and `calculate_structural_prior_sigmas` usage inside the Bayesian TBR tab; keep the HDI-vs-predictive-interval distinction intact when adding new interval types.
+- **New Bayesian model features** (e.g. a separate lag-specific prior instead of duplicating the same-period sigma onto lagged terms): modify the model/prior code in `geotestlab/bayesian/` (`model.py`, `priors.py`) and the run handler in the Bayesian TBR tab; keep the HDI-vs-predictive-interval distinction intact when adding new interval types.
+- **Experiment record and staleness**: change identity / fingerprint / freeze / export logic in `geotestlab/experiment/`; the app only wires session state via `_experiment_record()`, `_save_experiment_record()` and `_reconcile_experiment_record()`.
+- **Power analysis**: `geotestlab/power/` is an unapproved methodology spike — do not build production power UI or treat it as the approved engine until methodology approval.
 - **Data-loading robustness**: `load_and_reshape_kpi` and `build_region_mapping` are the most likely places to need hardening if new client KPI export formats need to be supported.
 - **KPI Pattern mode display formatting**: new tables shown in KPI Pattern mode (§A2) should use `kpi_pattern_display_rename_map()` (renames `wk_YYYYMMDD` columns to `dd mmm yy` and `POPULATION_COL` to the metric label) and/or `kpi_feature_date_label()` (single-value date formatting, e.g. for chart axis labels) rather than reimplementing the same renaming logic inline, so all tables stay consistent if the underlying feature-naming convention (`wk_YYYYMMDD`) ever changes.
 

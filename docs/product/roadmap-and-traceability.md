@@ -36,9 +36,11 @@ The current production code remains the source of truth for existing behaviour u
 
 - Repository: `papayasamosa/geotestlab_dev`
 - Branch: `main`
-- Commit: `c532625b3d7356e344138fcd9211f8ad25c71d3c`
-- Current application source: `geotestmatch.py`
-- Extracted packages: `geotestlab/data/` and `geotestlab/matching/`
+- Commit: `147a4d6fec5698346d0c8f985bd9154c7e280f9a`
+- Current application source: `geotestmatch.py` (thin adapters and UI)
+- Extracted packages: `geotestlab/data/`, `geotestlab/matching/`,
+  `geotestlab/validation/`, `geotestlab/bayesian/`,
+  `geotestlab/experiment/`, and `geotestlab/power/` (methodology spike)
 - Current workflow: four Streamlit tabs
 - Current product documentation: `README.md` and `PROJECT_DOCUMENTATION.md`
 
@@ -53,12 +55,42 @@ The maintainability PRD was accurate as a proposed programme on 27 July 2026, bu
 | Installation not reproducible | Python 3.11, `pyproject.toml`, runtime and dev lock files, lock verification implemented | Record as current baseline |
 | No structured data-quality report | Typed report, UI, blockers and downloads implemented | Record as current baseline |
 | Guided search not deterministic | Explicit seed and deterministic constraints implemented | Record as current baseline |
-| Matching logic concentrated in monolith | Matching core extracted into Streamlit-free package | Mark partially resolved |
-| Results represented through large untyped dictionaries | Still true for substantial validation and Bayesian areas | Retain as planned work |
-| Session-state invalidation distributed | Some staleness handling exists, but no complete workflow state model | Retain as partially implemented |
+| Matching logic concentrated in monolith | Matching core extracted into Streamlit-free package | Resolved |
+| Results represented through large untyped dictionaries | Typed result contracts now cover the matching, validation, Bayesian and experiment cores; untyped dicts remain only at the app adapter boundary | Mostly resolved |
+| Session-state invalidation distributed | Stage fingerprints and stage-scoped staleness exist, but no complete workflow state model | Retain as partially implemented |
 | README insufficient | Substantially improved, but full user and methodology docs remain incomplete | Retain as partial documentation gap |
 | Interface exposes too much at once | Still relevant | Retain as UX requirement |
-| Validation and Bayesian logic tightly coupled to UI | Still relevant | Retain as engineering priority |
+| Validation and Bayesian logic tightly coupled to UI | Validation and Bayesian domain logic extracted into Streamlit-free packages; the app keeps thin adapters | Mostly resolved (the UI itself remains a monolith) |
+
+### 4.1 Delivered foundations versus complete contracts
+
+Several capabilities are delivered as **foundations** but are not yet the
+**complete product contract**. The distinction matters for scope control:
+
+- **Experiment foundations vs the complete FR-16 contract.**
+  `geotestlab/experiment/` delivers experiment identity, stage fingerprints,
+  stage-scoped staleness and immutable frozen design versions. The complete
+  FR-16 "approved design freeze" (approval timestamp, power result and MDE in
+  the frozen record, platform and campaign setup, budget and delivery
+  assumptions, effect-plausibility assumptions, analyst notes) is not yet
+  delivered.
+- **Local JSON export vs the complete FR-22 export.** The app can export a
+  local JSON experiment record containing the current stage results. The
+  complete FR-22 reproducible export (tool and methodology versions, package
+  versions, power and MDE, platform/budget/delivery/effectiveness assumptions,
+  recommendation rationale, etc.) is not yet delivered.
+- **Spike vs production FR-10 and FR-11.** `geotestlab/power/` is an
+  **unapproved methodology prototype**, not the production power engine. The
+  production `feature/power-analysis-core` stage is explicitly gated on
+  methodology approval.
+- **Reduced-sampling smoke vs Bayesian assurance.** The Bayesian CI job runs a
+  reduced-sampling execution-path smoke test (tiny draws/tune/chains) to prove
+  the pipeline runs; it is **not** evidence of production MCMC convergence or
+  assurance.
+- **Extracted domain logic vs complete UI separation.** Domain logic is
+  extracted into Streamlit-free packages behind thin adapters, but the
+  Streamlit application script remains a single monolith; full UI
+  modularisation is a separate, later concern.
 
 ## 5. Requirement traceability matrix
 
@@ -75,25 +107,25 @@ The maintainability PRD was accurate as a proposed programme on 27 July 2026, bu
 | Region constraints | Include/exclude and global exclusion | FR-4 | Current | Reuse typed constraint model in sizing |
 | Match strategies | Greedy, hill climbing, stochastic | FR-5 | Current | Finalise user-facing strategy naming |
 | Match diagnostics | Distance, SMD, feature detail | FR-5 | Current | Add design summary hierarchy |
-| KPI validation | Elastic Net and LASSO methods | FR-6 | Current | Extract pure validation services |
-| Frequency handling | Weekly/daily and mismatch gate | FR-6 | Current | Move into typed config |
+| KPI validation | Elastic Net and LASSO methods via `geotestlab/validation/` | FR-6 | Current | Strengthen adapters and schemas |
+| Frequency handling | Weekly/daily and mismatch gate via typed `FrequencyConfig` | FR-6 | Current | Extend to further frequencies |
 | Lagged controls | Frequency-aware | FR-6, FR-18 | Current | Preserve calendar-continuity rules |
-| Rolling validation | Error, bias, overfitting | FR-7 | Current | Extract and type results |
+| Rolling validation | Error, bias, overfitting with typed `RollingOriginDiagnostics` | FR-7 | Current | Extend typed diagnostics |
 | Residual diagnostics | Durbin-Watson | FR-7 | Current | Decide additional diagnostics |
-| Placebos | Capped historical windows | FR-8 | Current | Approve finite-sample and fallback policy |
+| Placebos | Capped historical windows | FR-8 | Current | Approve finite-sample and fallback policy (recorded in the power-methodology spike) |
 | Counterfactual Confidence | Priority cascade | FR-9 | Current | Review thresholds and driver logic |
-| Prospective power | None | FR-10, FR-11 | Planned | Methodology spike and MVP |
+| Prospective power | Methodology spike only (`geotestlab/power/`, unapproved) | FR-10, FR-11 | Spike | Production power core gated on methodology approval |
 | Platform selector | None | FR-12 | Planned | Define first platform profiles |
 | Delivery feasibility | None | FR-13 | Planned | Build profile-driven inputs and calculations |
 | Effect plausibility | None | FR-14 | Planned | Define evidence hierarchy and scenarios |
 | Integrated recommendation | Matching recommendations only | FR-15 | Planned | Build after power and delivery layers |
-| Design freeze | Run snapshots, no formal approved version | FR-16 | Planned | Create versioned experiment record |
+| Design freeze | Versioned frozen-design foundations (immutable versions, fingerprints) | FR-16 | Partially implemented | Complete the FR-16 approved-design-freeze contract |
 | Impact measurement | Actual/counterfactual and uplift | FR-17 | Current | Link to approved design |
-| Bayesian TBR | PyMC analysis and diagnostics | FR-18 | Current | Extract core and add sampling profiles |
+| Bayesian TBR | Core extracted into `geotestlab/bayesian/`; reduced-sampling smoke CI | FR-18 | Current | Bayesian assurance (production sampling quality) |
 | Result hierarchy | Partial | FR-19 | Partially implemented | Redesign top-level summary |
-| Workflow state | Matching and validation staleness | FR-20 | Partially implemented | Create workflow state model |
+| Workflow state | Stage fingerprints + stage-scoped staleness (experiment foundations) | FR-20 | Partially implemented | Complete workflow state model |
 | Guided UX | Some help and expanders | FR-21 | Partially implemented | Introduce stage-based guidance |
-| Exports | Multiple exports, not one experiment record | FR-22 | Partially implemented | Unified reproducible export |
+| Exports | Local JSON experiment-record export (foundation); no complete FR-22 record | FR-22 | Partially implemented | Complete the FR-22 export contract |
 | Error handling | Some domain errors and technical expanders | FR-23 | Partially implemented | Complete domain exception boundary |
 | Accessibility | Theme and focus improvements | FR-24 | Partially implemented | Full keyboard and zoom review |
 
@@ -133,16 +165,16 @@ The root README should remain a concise installation and orientation document, l
 
 ### P0. Product governance and behaviour safety
 
-- adopt canonical PRD;
-- reconcile current documentation;
+- adopt canonical PRD (delivered);
+- reconcile current documentation (delivered);
 - keep numerical regression gates required;
-- finish validation and Bayesian extraction;
-- add typed result contracts;
-- implement complete fingerprints and stale-state behaviour.
+- finish validation and Bayesian extraction (delivered);
+- add typed result contracts (delivered for the matching, validation, Bayesian and experiment cores);
+- implement complete fingerprints and stale-state behaviour (foundations delivered in `geotestlab/experiment/`).
 
 ### P1. Prospective test design
 
-- power-analysis methodology spike;
+- power-analysis methodology spike (delivered; awaiting methodology approval);
 - selected-design power and MDE;
 - market-share and duration scenarios;
 - design-level export;
@@ -169,7 +201,7 @@ The root README should remain a concise installation and orientation document, l
 - stage-based workflow status;
 - result hierarchy;
 - stakeholder summary;
-- complete experiment export;
+- complete experiment export (FR-22; only the local JSON foundation exists so far);
 - accessible narrow-screen behaviour;
 - saved configuration loading.
 
@@ -177,13 +209,15 @@ The root README should remain a concise installation and orientation document, l
 
 - additional residual diagnostics;
 - alternative effect shapes;
-- Bayesian assurance;
+- Bayesian assurance (the reduced-sampling smoke test is not assurance);
 - non-negative outcome models;
 - expanded platform profiles.
 
 ## 8. Proposed implementation milestones
 
 ## Milestone 0. PRD adoption and documentation reconciliation
+
+**Status:** Delivered (PR `docs/canonical-product-prd`).
 
 ### Deliverables
 
@@ -201,6 +235,8 @@ The root README should remain a concise installation and orientation document, l
 - no known outdated architecture claim remains unlabelled.
 
 ## Milestone 1. Validation-core extraction
+
+**Status:** Delivered (PR `refactor/validation-core`).
 
 ### Deliverables
 
@@ -220,6 +256,8 @@ The root README should remain a concise installation and orientation document, l
 
 ## Milestone 2. Bayesian-core extraction
 
+**Status:** Delivered (PR `refactor/bayesian-core`). A reduced-sampling smoke test is part of CI; Bayesian assurance (production sampling quality) remains pending.
+
 ### Deliverables
 
 - typed Bayesian configuration and result;
@@ -236,6 +274,8 @@ The root README should remain a concise installation and orientation document, l
 - no result-only rerun of sampling.
 
 ## Milestone 3. Workflow state and experiment identity
+
+**Status:** Partially delivered — experiment identity, fingerprints, staleness and frozen-design foundations exist (PR `feature/experiment-identity-and-freeze`); the complete workflow state model and experiment summary are pending.
 
 ### Deliverables
 
@@ -254,6 +294,8 @@ The root README should remain a concise installation and orientation document, l
 
 ## Milestone 4. Power-analysis methodology prototype
 
+**Status:** Delivered as an unapproved spike (PR `spike/power-analysis-methodology`); the production power core (`feature/power-analysis-core`) is gated on explicit methodology approval.
+
 ### Deliverables
 
 - methodological decision record;
@@ -270,6 +312,8 @@ The root README should remain a concise installation and orientation document, l
 - product owner approves detection criterion and defaults.
 
 ## Milestone 5. Power-analysis MVP
+
+**Status:** Planned (gated on methodology approval).
 
 ### Deliverables
 
@@ -289,6 +333,8 @@ The root README should remain a concise installation and orientation document, l
 
 ## Milestone 6. Platform-aware media feasibility
 
+**Status:** Planned.
+
 ### Deliverables
 
 - platform profile schema;
@@ -305,6 +351,8 @@ The root README should remain a concise installation and orientation document, l
 - missing forecast inputs are clearly identified.
 
 ## Milestone 7. Effect plausibility and spend recommendation
+
+**Status:** Planned.
 
 ### Deliverables
 
@@ -324,6 +372,8 @@ The root README should remain a concise installation and orientation document, l
 
 ## Milestone 8. Reporting and production readiness
 
+**Status:** Planned.
+
 ### Deliverables
 
 - stakeholder summary;
@@ -342,12 +392,14 @@ The root README should remain a concise installation and orientation document, l
 
 ## 9. Suggested pull-request sequence for the new capability
 
-1. `docs/canonical-product-prd`
-2. `refactor/validation-core`
-3. `refactor/bayesian-core`
-4. `feature/experiment-identity-and-freeze`
-5. `spike/power-analysis-methodology`
-6. `feature/power-analysis-core`
+Items 1–5 below are delivered on `main` as of the reviewed baseline; the remaining items are still pending (items 6–7 are gated on methodology approval).
+
+1. `docs/canonical-product-prd` — delivered
+2. `refactor/validation-core` — delivered
+3. `refactor/bayesian-core` — delivered
+4. `feature/experiment-identity-and-freeze` — delivered (foundations)
+5. `spike/power-analysis-methodology` — delivered (awaiting approval)
+6. `feature/power-analysis-core` — gated on methodology approval
 7. `feature/power-analysis-ui`
 8. `feature/platform-profile-schema`
 9. `feature/media-delivery-feasibility`
@@ -396,10 +448,10 @@ Every PRD change should include:
 
 ## 12. Immediate next actions
 
-1. Review and approve the canonical product framing.
+1. Approve the methodology decisions recorded by the power spike (counterfactual fit method, detection criterion, effect direction convention, effect injection, first-release shape, autocorrelation model, sampling design, power uncertainty interpretation, MDE policy, minimum history, fallback policy, simulation count, candidate market shares and durations) — the production power engine is gated on this.
 2. Decide whether power analysis is a dedicated top-level stage or a section within Validate Test Design.
-3. Approve a methodology spike before committing to a numerical implementation.
-4. Commit the PRD pack to `docs/product/`.
-5. Update `PROJECT_DOCUMENTATION.md` to distinguish current implementation documentation from future product requirements.
-6. Continue the existing behaviour-preserving modularisation before adding the power engine directly to the monolith.
+3. Commit to the production power engine (`feature/power-analysis-core`) only after approval.
+4. Complete the full FR-16 approved-design-freeze and FR-22 export contracts (foundations exist).
+5. Keep distinguishing current implementation documentation from future product requirements.
+6. Continue behaviour-preserving modularisation; full UI modularisation is a separate, later concern.
 
