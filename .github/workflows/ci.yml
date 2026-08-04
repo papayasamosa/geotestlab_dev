@@ -105,3 +105,34 @@ jobs:
 
       - name: Run numerical golden regressions
         run: pytest tests/test_numerical_characterisation.py -q -m slow
+
+  bayesian-smoke:
+    name: bayesian-smoke (3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+
+      # Real reduced-sampling PyMC sampling path (draws=20/tune=10/chains=1).
+      # Treat this as an execution-path smoke test, not evidence of production
+      # MCMC convergence. The app-level trace-creation AppTest exercises the
+      # full UI path (match -> evaluate -> Bayesian run) with the same tiny
+      # sampling profile.
+      - name: Run reduced-sampling Bayesian smoke
+        run: |
+          pytest tests/test_bayesian_core.py::TestReducedSamplingSmoke -q
+          pytest tests/test_bayesian_state_app.py::TestBayesianTraceCreation -q
