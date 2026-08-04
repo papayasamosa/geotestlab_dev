@@ -28,6 +28,25 @@ EFFECT_SHAPES = ("step", "ramp")
 # Test sides.
 SIDES = ("one_sided_positive", "one_sided_negative", "two_sided")
 
+# Methodology version for the corrected spike contract (bumped when the result
+# contract or methodology rule set changes).
+METHODOLOGY_VERSION = "0.2.0"
+
+
+def validate_effect_shape(shape: str) -> None:
+    """Validate the effect shape for the spike service.
+
+    Only ``step`` is implemented in the spike's simulation path. ``ramp`` exists
+    only in the synthetic generator (fixtures) and must be rejected by the
+    service until a real ramp simulation path is implemented.
+    """
+    if shape != "step":
+        raise ValueError(
+            f"effect_shape={shape!r} is not implemented in the spike service; "
+            "only 'step' is supported. 'ramp' exists only in the synthetic "
+            "generator for fixtures until a real ramp simulation path exists."
+        )
+
 
 @dataclass(frozen=True)
 class PowerConfig:
@@ -49,6 +68,15 @@ class PowerConfig:
     min_historical_periods: int = 12
     min_placebo_windows: int = 5
     min_simulations: int = 100
+    # Counterfactual fit method (PA-FR2 evidence): ols | elastic_net | lasso.
+    fit_method: str = "ols"
+    # Explicit selected design (PA-FR2): required. The spike must not assume
+    # one region is test and every other region is control.
+    test_regions: tuple = ()
+    control_regions: tuple = ()
+    # Optional explicit planned test dates. When empty, the test window is the
+    # dates after the pre-period (pre_count).
+    test_dates: tuple = ()
 
 
 @dataclass
@@ -78,6 +106,19 @@ class PowerResult:
     windows_used: int = 0
     failures: int = 0
     warnings: tuple = field(default_factory=tuple)
+    # Structured completion / fit / policy contract (PA-FR5). Critical states
+    # are represented by these fields, not only by warning strings.
+    completed: bool = False
+    fit_status: str = "not_run"  # "ok" | "fallback_constant_mean" | "not_run"
+    fit_method: str = ""  # "ols" | "elastic_net" | "lasso" | "constant_mean" | method
+    matrix_diagnostics: dict = field(default_factory=dict)
+    calibration_simulations: int = 0
+    detection_simulations: int = 0
+    minimum_history_status: str = "not_applicable"  # "ok" | "insufficient"
+    minimum_window_status: str = "not_applicable"  # "ok" | "insufficient"
+    methodology_version: str = METHODOLOGY_VERSION
+    errors: tuple = field(default_factory=tuple)
+    blockers: tuple = field(default_factory=tuple)
 
     def to_dict(self) -> dict:
         """JSON-safe dict for the spike report."""
@@ -105,4 +146,15 @@ class PowerResult:
             "windows_used": int(self.windows_used),
             "failures": int(self.failures),
             "warnings": list(self.warnings),
+            "completed": bool(self.completed),
+            "fit_status": self.fit_status,
+            "fit_method": self.fit_method,
+            "matrix_diagnostics": dict(self.matrix_diagnostics),
+            "calibration_simulations": int(self.calibration_simulations),
+            "detection_simulations": int(self.detection_simulations),
+            "minimum_history_status": self.minimum_history_status,
+            "minimum_window_status": self.minimum_window_status,
+            "methodology_version": self.methodology_version,
+            "errors": list(self.errors),
+            "blockers": list(self.blockers),
         }
