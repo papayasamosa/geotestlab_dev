@@ -10,12 +10,10 @@ into Streamlit-free, typed packages; validation and Bayesian logic remain
 substantially within the application script and are scheduled for later
 behaviour-preserving extraction.
 
-The canonical product requirements live under `docs/product/`:
-`01_GeoTestLab_Core_Product_Requirements_Document.md` defines the target
-product, `02_Power_Analysis_and_Test_Sizing_Specification.md` defines the
-planned prospective power capability, and
-`03_PRD_Traceability_and_Delivery_Roadmap.md` reconciles current, partially
-implemented and planned work.
+The canonical product requirements live under `docs/product/`: `PRD.md`
+defines the target product, `power-analysis-and-test-sizing.md` defines the
+planned prospective power capability, and `roadmap-and-traceability.md`
+reconciles current, partially implemented and planned work.
 
 ## Requirements
 
@@ -67,9 +65,7 @@ The current UI has four tabs:
 3. **📊 Measure Test Impact** — Evaluate a completed test and estimate uplift.
 4. **🧠 Bayesian TBR** — Estimate impact using Bayesian Time-Based Regression with MCMC diagnostics.
 
-The target product model (see
-`docs/product/01_GeoTestLab_Core_Product_Requirements_Document.md`) defines
-**five stages**:
+The target product model (see `docs/product/PRD.md`) defines **five stages**:
 define and match regions; validate the design; size and power the test;
 measure completed-test impact; and Bayesian analysis and reporting.
 Prospective power analysis and test sizing are **planned, not yet
@@ -142,6 +138,6 @@ Licensing is undecided. See discussion in PR #1.
 
 ## Product documentation
 
-- [GeoTestLab Core Product Requirements Document](docs/product/01_GeoTestLab_Core_Product_Requirements_Document.md)
-- [Power Analysis and Test Sizing Specification](docs/product/02_Power_Analysis_and_Test_Sizing_Specification.md)
-- [PRD Traceability and Delivery Roadmap](docs/product/03_PRD_Traceability_and_Delivery_Roadmap.md)
+- [GeoTestLab Core Product Requirements Document](docs/product/PRD.md)
+- [Power Analysis and Test Sizing Specification](docs/product/power-analysis-and-test-sizing.md)
+- [PRD Traceability and Delivery Roadmap](docs/product/roadmap-and-traceability.md)

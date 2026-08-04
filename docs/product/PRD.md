@@ -646,7 +646,7 @@ For every candidate design, the application reports:
 
 The power analysis must use the proposed regional design and historical KPI behaviour rather than a generic market-level calculator that ignores the selected controls.
 
-Detailed requirements are defined in `02_Power_Analysis_and_Test_Sizing_Specification.md`.
+Detailed requirements are defined in `power-analysis-and-test-sizing.md`.
 
 ## FR-11. Test-size and duration scenarios
 
