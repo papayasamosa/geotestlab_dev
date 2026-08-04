@@ -4,11 +4,25 @@ Build statistically balanced test and control groups for geo-testing — no codi
 
 ## Current status
 
-`geotestmatch.py` remains the Streamlit application entry point. Data ingestion
-(`geotestlab/data/`) and matching (`geotestlab/matching/`) have been extracted
-into Streamlit-free, typed packages; validation and Bayesian logic remain
-substantially within the application script and are scheduled for later
-behaviour-preserving extraction.
+`geotestmatch.py` remains the Streamlit application entry point, but it now
+keeps the UI and thin adapters; the domain logic lives in Streamlit-free, typed
+packages under `geotestlab/`:
+
+- `geotestlab/data/` — ingestion, data quality, region mapping, period quality.
+- `geotestlab/matching/` — structural and KPI-pattern matching.
+- `geotestlab/validation/` — counterfactual validation (model matrix,
+  regularised models, rolling origin, placebo, Counterfactual Confidence).
+- `geotestlab/bayesian/` — Bayesian TBR core (AR(1), priors, model, sampling
+  service, diagnostics), with the PyMC trace kept separate from the
+  serialisable result.
+- `geotestlab/experiment/` — experiment identity, stage fingerprints,
+  staleness, and immutable design-freeze foundations.
+- `geotestlab/power/` — **an unapproved methodology prototype** for prospective
+  power analysis; a spike, not the production power engine.
+
+Validation and Bayesian logic no longer live substantially in the application
+script; they have been extracted into `geotestlab/validation/` and
+`geotestlab/bayesian/`.
 
 The canonical product requirements live under `docs/product/`: `PRD.md`
 defines the target product, `power-analysis-and-test-sizing.md` defines the
@@ -111,10 +125,10 @@ policy, and the remaining repository rules defined in `AGENTS.md`.
 ## Architecture
 
 The application entry point is `geotestmatch.py` (Streamlit). It calls into the
-`geotestlab/` package for extracted behaviour while validation, reporting and
-Bayesian logic remain substantially in the application script. The package is
-being split out of the application incrementally, one behaviour-preserving
-stage at a time:
+`geotestlab/` packages for extracted domain behaviour; the app script keeps
+thin adapters (for example `run_validation_method` and the Bayesian run
+handler) and the UI. The extraction is behaviour-preserving and one package at
+a time:
 
 - `geotestlab/data/` — ingestion, data-quality contract, region mapping, period-quality reports. (Stages 1–2)
 - `geotestlab/matching/` — the pure matching core (Stage 4): no Streamlit imports, unit-tested directly.
@@ -124,7 +138,10 @@ stage at a time:
   - `kpi_pattern.py` — KPI-pattern feature preparation (index-to-100 pattern distance).
   - `constraints.py` — guided 'Set Rules & Auto-Build Groups' search + conflict validation.
   - `strategies.py` — Basic (Greedy Nearest Neighbor), Intermediate (Hill Climbing), Advanced (Stochastic Genetic Search).
-- `geotestlab/validation/`, `geotestlab/modelling/`, `geotestlab/reporting/`, `geotestlab/ui/` — target subpackages (not yet extracted); validation and Bayesian logic currently live in `geotestmatch.py`.
+- `geotestlab/validation/` — typed counterfactual validation: frequency config, model matrix, regularised models, rolling-origin validation, placebo, Counterfactual Confidence and the `run_validation` service.
+- `geotestlab/bayesian/` — typed Bayesian TBR core: AR(1), priors, features, model construction, prediction, diagnostics and the `run_bayesian` service; the PyMC trace is kept separate from the serialisable `BayesianResult` summary.
+- `geotestlab/experiment/` — experiment identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints, stage-scoped staleness, immutable frozen design versions, and a local experiment-record export (foundations of FR-16 and FR-22, not the complete contracts).
+- `geotestlab/power/` — **methodology spike only**: synthetic power cases, model-based counterfactual simulation, placebo/residual methods, MDE search and fit-method comparison evidence. **Not approved for production**; the production power engine (FR-10/FR-11) is gated on explicit methodology approval.
 
 The Streamlit app keeps `@st.cache_data` wrappers around the pure package functions (aggregation, metric caching, KPI workbook parsing, NN pre-processing) so caching behaviour is unchanged. Numerical characterisation goldens (`tests/test_numerical_characterisation.py`) guard that every extraction is behaviour-preserving.
 
