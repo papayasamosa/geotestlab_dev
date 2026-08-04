@@ -1,8 +1,15 @@
 """Uncertainty around estimated power (Clopper-Pearson binomial interval).
 
-Power is an estimated detection rate k/n over n simulations; the Clopper-Pearson
-exact interval is reported alongside every power estimate so the decision
-record includes uncertainty around power.
+Power is an estimated detection rate k/n over n alternative simulations; the
+Clopper-Pearson interval is reported alongside every power estimate.
+
+IMPORTANT (corrected): this interval is CONDITIONAL Monte Carlo uncertainty. It
+covers only the binomial sampling error of the alternative detection count given
+the fitted model and the threshold estimated from an independent calibration
+sample. It is NOT an exact unconditional interval, because threshold-estimation
+uncertainty is not included. An outer repeated-calibration/bootstrap design is a
+documented production-stage option (see
+``docs/spikes/power-analysis-methodology.md``).
 """
 
 from __future__ import annotations
