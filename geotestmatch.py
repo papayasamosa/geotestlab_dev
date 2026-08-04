@@ -27,6 +27,12 @@ from geotestlab.data.exceptions import (
 )
 from geotestlab.data.ingestion import detect_date_columns, detect_metric_column
 from geotestlab.data.ingestion import load_and_reshape_kpi as _load_and_reshape_kpi
+from geotestlab.data.mapping import (
+    build_region_mapping,
+    compute_region_mapping_report,
+    region_mapping_fingerprint,
+    uncovered_required_regions,
+)
 from geotestlab.data.models import compute_mapping_report
 from geotestlab.data.period_quality import compute_period_quality
 
@@ -210,19 +216,24 @@ def _quality_blocking_errors():
     The app refuses to run validation/evaluation/KPI-pattern/Bayesian modelling
     while any blocker is present — warnings never block; only explicit
     blocking errors do.
+
+    Region-mapping blockers cover a required selected test region that the
+    mapped KPI data does not cover (absent from the file, or its raw label
+    could not be resolved). Unused unmapped raw regions are warnings, never
+    blockers.
     """
     errors: list[str] = []
     report = st.session_state.get("kpi_quality_report")
     if report is not None:
         errors.extend(report.blocking_errors)
     mapping = st.session_state.get("kpi_mapping_report")
-    if mapping is not None and mapping.unmapped_regions:
-        required = set(st.session_state.get("selected_experiment_regions", []) or [])
-        blocking_unmapped = [r for r in mapping.unmapped_regions if r in required]
-        if blocking_unmapped:
+    if mapping is not None:
+        required = st.session_state.get("selected_experiment_regions", []) or []
+        uncovered = uncovered_required_regions(mapping, required)
+        if uncovered:
             errors.append(
-                "The following selected region(s) could not be mapped to the KPI data: "
-                + ", ".join(blocking_unmapped)
+                "The following selected test region(s) have no mapped data in the KPI file: "
+                + ", ".join(uncovered)
             )
     return errors
 
@@ -324,36 +335,6 @@ def _render_mapping_quality(mapping_report):
                 mime="text/csv",
                 key="kpi_unmapped_rows_download",
             )
-
-
-def build_region_mapping(df_long, valid_regions, adobe_to_geo):
-    """
-    Maps each raw region string in df_long['region_raw'] to a canonical geo_col region
-    name, via adobe_to_geo (Adobe Analytics raw name -> canonical name) first, falling
-    back to a direct match against valid_regions.
-
-    valid_regions should be the FULL candidate universe (e.g. agg_df[geo_col].unique()),
-    not just the test+selected-control regions. Passing only the already-selected
-    regions here was a bug: it silently capped every downstream method's candidate pool
-    to whatever was already chosen in the Region Matching tab, so "Data-Optimised
-    Controls" (which is meant to search ALL non-test regions and let LASSO pick which
-    ones matter) could never actually see any region beyond the ones already selected —
-    it wasn't optimising over anything.
-    """
-    all_geomatch_regions = set(valid_regions)
-    df_long["region_clean"] = df_long["region_raw"].astype(str).str.strip()
-    df_long["mapped_geo"] = df_long["region_clean"].map(adobe_to_geo)
-
-    def final_region_name(row):
-        if pd.notna(row["mapped_geo"]):
-            return row["mapped_geo"]
-        elif row["region_clean"] in all_geomatch_regions:
-            return row["region_clean"]
-        else:
-            return None
-
-    df_long["region"] = df_long.apply(final_region_name, axis=1)
-    return df_long
 
 
 def apply_geo_aggregation(df_long, geo_col):
@@ -4871,6 +4852,8 @@ def render_time_series_validation(mode: str):
         st.session_state.kpi_rejected_rows = None
     if "kpi_mapping_report" not in st.session_state:
         st.session_state.kpi_mapping_report = None
+    if "kpi_mapping_fingerprint" not in st.session_state:
+        st.session_state.kpi_mapping_fingerprint = None
     if "kpi_available_dates" not in st.session_state:
         st.session_state.kpi_available_dates = []
     if "kpi_metric_options" not in st.session_state:
@@ -4899,6 +4882,7 @@ def render_time_series_validation(mode: str):
         st.session_state.kpi_quality_report = None
         st.session_state.kpi_rejected_rows = None
         st.session_state.kpi_mapping_report = None
+        st.session_state.kpi_mapping_fingerprint = None
         st.session_state.kpi_available_dates = []
         st.session_state.kpi_metric_options = []
 
@@ -5017,15 +5001,6 @@ def render_time_series_validation(mode: str):
         st.error("No metric names found in second column of the KPI file.")
         st.stop()
 
-    # ---- Data-quality report: shown immediately after parsing, before any
-    # validation / evaluation / KPI-pattern / Bayesian run. Blocking errors
-    # (when present) prevent modelling; warnings never silently block. ----
-    render_kpi_quality_report(
-        st.session_state.get("kpi_quality_report"),
-        rejected_rows=st.session_state.get("kpi_rejected_rows"),
-        mapping_report=st.session_state.get("kpi_mapping_report"),
-    )
-
     with st.expander("Summary of Uploaded Data", expanded=False):
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Regions detected", df_long["region_raw"].nunique())
@@ -5056,6 +5031,72 @@ def render_time_series_validation(mode: str):
         help="The metric used to assess how well the control regions track the test regions over time. Choose the KPI you plan to measure in your geo test.",
         on_change=clear_validation_state,
         label_visibility="collapsed",
+    )
+
+    # -------------------------------------------------------------------------
+    # Pre-run region-mapping report — computed as soon as the uploaded file,
+    # market, geography level, mapping source and selected metric are known,
+    # BEFORE the Run action, so mapped/unmapped geographies are reported and
+    # modelling is blocked when a required selected test region has no mapped
+    # data. Versioned by a deterministic input fingerprint: the report is
+    # reused across reruns unless a mapping-relevant input changes (file,
+    # market, geography level, selected metric, aggregation column, mapping
+    # source), so display-only interactions never recompute it.
+    # -------------------------------------------------------------------------
+    def _recompute_mapping_report():
+        """Build the current region-mapping report (pure mapping + adapter)."""
+        if st.session_state.get("kpi_pattern_mode"):
+            _adobe_to_geo = {}
+        else:
+            try:
+                _master_df = load_market_sheet(DATA_PATH, market)
+                _adobe_to_geo = dict(
+                    zip(
+                        _master_df[ADOBE_COL].astype(str).str.strip(),
+                        _master_df[geo_col].astype(str).str.strip(),
+                    )
+                )
+            except Exception as e:
+                st.warning(f"⚠️ Could not load the region mapping table: {e}")
+                return None
+        _test_regions_val = st.session_state.get("selected_experiment_regions", []) or []
+        _controls_val = st.session_state.get("final_controls")
+        _control_regions_val = (
+            _controls_val[geo_col].tolist()
+            if _controls_val is not None and geo_col in _controls_val.columns
+            else []
+        )
+        _valid_regions = sorted(
+            set(agg_df[geo_col].dropna().astype(str).str.strip().unique().tolist())
+            | set(_test_regions_val)
+            | set(_control_regions_val)
+        )
+        return compute_region_mapping_report(
+            df_long, _valid_regions, _adobe_to_geo, metric_name=selected_metric
+        )
+
+    _mapping_fingerprint = region_mapping_fingerprint(
+        file_name=getattr(uploaded_file, "name", None),
+        file_size=getattr(uploaded_file, "size", None),
+        market=market,
+        geo_col=geo_col,
+        selected_metric=selected_metric,
+        agg_col=_kpi_agg_col,
+        mapping_source=(
+            "kpi_pattern" if st.session_state.get("kpi_pattern_mode") else "structural"
+        ),
+    )
+    if st.session_state.get("kpi_mapping_fingerprint") != _mapping_fingerprint:
+        st.session_state.kpi_mapping_report = _recompute_mapping_report()
+        st.session_state.kpi_mapping_fingerprint = _mapping_fingerprint
+
+    # ---- Data-quality report (parse + region mapping), shown before any
+    # validation / evaluation / KPI-pattern / Bayesian run. Blocking errors
+    # (when present) prevent modelling; warnings never silently block. ----
+    render_kpi_quality_report(
+        st.session_state.get("kpi_quality_report"),
+        rejected_rows=st.session_state.get("kpi_rejected_rows"),
+        mapping_report=st.session_state.get("kpi_mapping_report"),
     )
 
     # -------------------------------------------------------------------------

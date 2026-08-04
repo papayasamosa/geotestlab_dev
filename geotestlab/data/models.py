@@ -66,12 +66,16 @@ class RegionMappingReport:
 
     ``unmapped_rows`` holds the long-format rows whose region could not be
     mapped (None when everything mapped), for download/export.
+    ``covered_regions`` holds the canonical regions that the mapped data
+    actually covers (non-blank ``region`` values), so callers can decide
+    whether a required selected region has usable data before modelling.
     """
 
     raw_regions: tuple[str, ...]
     mapped_regions: tuple[str, ...]
     unmapped_regions: tuple[str, ...]
     unmapped_rows: pd.DataFrame | None
+    covered_regions: tuple[str, ...] = ()
 
     schema_version: int = REGION_MAPPING_REPORT_SCHEMA_VERSION
 
@@ -114,9 +118,13 @@ def compute_mapping_report(mapped_frame: pd.DataFrame) -> RegionMappingReport:
     mapped_raw = tuple(r for r in raw_regions if r not in set(unmapped_raw))
     unmapped_rows = mapped_frame.loc[unmapped_mask].copy() if bool(unmapped_mask.any()) else None
 
+    clean_region = mapped_frame["region"].map(_norm)
+    covered_regions = tuple(sorted(clean_region[clean_region != ""].unique().tolist()))
+
     return RegionMappingReport(
         raw_regions=raw_regions,
         mapped_regions=mapped_raw,
         unmapped_regions=unmapped_raw,
         unmapped_rows=unmapped_rows,
+        covered_regions=covered_regions,
     )
