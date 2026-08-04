@@ -75,6 +75,24 @@ def uncovered_required_regions(
     return tuple(r for r in required_regions if r not in covered)
 
 
+def _iso_day(value) -> str:
+    """Normalise a date-like value to a deterministic ISO-8601 string.
+
+    Midnight timestamps (the common case for date-only pickers) collapse to
+    ``YYYY-MM-DD``; timestamps with a real time component keep it.
+    """
+    try:
+        from pandas import Timestamp
+
+        ts = Timestamp(value)
+        iso = ts.isoformat()
+        if ts == ts.normalize():
+            return iso[:10]
+        return iso
+    except Exception:
+        return str(value)
+
+
 def region_mapping_fingerprint(
     *,
     file_name: str | None,
@@ -84,21 +102,41 @@ def region_mapping_fingerprint(
     selected_metric: str,
     agg_col: str | None,
     mapping_source: str,
+    file_sha256: str | None = None,
+    kpi_pattern_source_digest: str | None = None,
+    candidate_universe_digest: str | None = None,
+    kpi_pattern_date_range=None,
+    mapping_reference_digest: str | None = None,
 ) -> dict[str, Any]:
     """Deterministic identity of the mapping-report inputs.
 
     The mapping report is reused across reruns while this fingerprint is
     unchanged, so display-only interactions never recompute it. Any material
-    change — file, market, geography level, selected metric, aggregation
-    column, or mapping source — changes the fingerprint and invalidates the
-    stored report.
+    change — file (name, size, or content SHA-256), KPI Pattern source digest,
+    market, geography level, selected metric, selected KPI Pattern date range,
+    aggregation column, candidate universe, mapping reference, or mapping
+    source — changes the fingerprint and invalidates the stored report.
+
+    The ``*_digest`` inputs are precomputed SHA-256 identities (digests only,
+    never raw content) supplied by the caller.
     """
+    _range = None
+    if kpi_pattern_date_range:
+        try:
+            _range = tuple(sorted(_iso_day(d) for d in kpi_pattern_date_range))
+        except Exception:
+            _range = tuple(str(d) for d in kpi_pattern_date_range)
     return {
         "file_name": file_name,
         "file_size": file_size,
+        "file_sha256": file_sha256,
         "market": market,
         "geo_col": geo_col,
         "selected_metric": selected_metric,
         "agg_col": agg_col,
         "mapping_source": mapping_source,
+        "kpi_pattern_source_digest": kpi_pattern_source_digest,
+        "candidate_universe_digest": candidate_universe_digest,
+        "kpi_pattern_date_range": _range,
+        "mapping_reference_digest": mapping_reference_digest,
     }

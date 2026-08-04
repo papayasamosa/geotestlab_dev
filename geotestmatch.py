@@ -47,6 +47,7 @@ from geotestlab.experiment import (
     active_frozen_version,
     build_content_digests,
     build_experiment_export,
+    candidate_universe_digest,
     compute_input_fingerprint,
     create_experiment_record,
     freeze_design,
@@ -54,6 +55,7 @@ from geotestlab.experiment import (
     propagate_staleness,
     record_stage_method_result,
     record_stage_result,
+    sha256_bytes,
     update_inputs,
 )
 
@@ -794,6 +796,8 @@ def reset_results():
     st.session_state.experiment_matching_inputs = None
     st.session_state.experiment_validation_inputs = None
     st.session_state.experiment_bayesian_inputs = None
+    st.session_state.kpi_pattern_source_bytes = None
+    st.session_state.kpi_pattern_date_range = None
 
 
 def reset_manual_results():
@@ -820,6 +824,8 @@ def reset_manual_results():
     st.session_state.experiment_matching_inputs = None
     st.session_state.experiment_validation_inputs = None
     st.session_state.experiment_bayesian_inputs = None
+    st.session_state.kpi_pattern_source_bytes = None
+    st.session_state.kpi_pattern_date_range = None
 
 
 def matching_setup_changed_since_last_run(
@@ -1005,9 +1011,14 @@ def _cached_workbook_bytes():
     return data
 
 
-def _cached_market_sheet():
-    """Selected market sheet, cached by market (never re-read per rerun)."""
-    market = globals().get("market")
+def _cached_market_sheet(market=None):
+    """Selected market sheet, cached by market (never re-read per rerun).
+
+    ``market`` defaults to the session-stored current market (set by the
+    sidebar), falling back to a module-level global if one exists.
+    """
+    if market is None:
+        market = st.session_state.get("current_market") or globals().get("market")
     if not market:
         return None
     key = ("sheet", str(market))
@@ -1022,6 +1033,51 @@ def _cached_market_sheet():
     return df
 
 
+def _current_candidate_universe(agg_df, geo_col):
+    """Candidate region universe for the current inputs (data + selected
+    test/control regions) — the same set the mapping recompute uses."""
+    test = st.session_state.get("selected_experiment_regions", []) or []
+    controls = st.session_state.get("final_controls")
+    control = (
+        controls[geo_col].tolist() if controls is not None and geo_col in controls.columns else []
+    )
+    return sorted(
+        set(agg_df[geo_col].dropna().astype(str).str.strip().unique().tolist())
+        | set(test)
+        | set(control)
+    )
+
+
+def _current_candidate_universe_digest(agg_df, geo_col):
+    """SHA-256 identity of the current candidate region universe."""
+    return candidate_universe_digest(_current_candidate_universe(agg_df, geo_col))
+
+
+def _current_mapping_reference_digest(geo_col, market=None):
+    """SHA-256 identity of the raw->canonical mapping reference (adobe_to_geo).
+
+    KPI Pattern mode has no structural mapping reference (empty dict). The
+    structural reference comes from the cached market sheet, so no re-read per
+    rerun is needed.
+    """
+    if st.session_state.get("kpi_pattern_mode"):
+        ref = {}
+    else:
+        master = _cached_market_sheet(market=market)
+        if master is None:
+            return None
+        try:
+            ref = dict(
+                zip(
+                    master[ADOBE_COL].astype(str).str.strip(),
+                    master[geo_col].astype(str).str.strip(),
+                )
+            )
+        except Exception:
+            return None
+    return compute_input_fingerprint(ref)
+
+
 def _compute_content_digests():
     """Content-level SHA-256 identities for the current workflow inputs.
 
@@ -1031,7 +1087,7 @@ def _compute_content_digests():
         source_bytes=st.session_state.get("kpi_source_bytes"),
         analytical_data=st.session_state.get("kpi_long_df"),
         workbook_bytes=_cached_workbook_bytes(),
-        market_sheet=_cached_market_sheet(),
+        market_sheet=_cached_market_sheet(market=st.session_state.get("current_market")),
         candidate_universe=st.session_state.get("kpi_candidate_universe"),
     )
 
@@ -1431,6 +1487,7 @@ with st.sidebar:
             on_change=reset_results,
             help="Select the market whose regions you want to use for geo-testing.",
         )
+        st.session_state["current_market"] = market
     else:
         st.header("1. Data Source")
         kpi_pattern_file = st.file_uploader(
@@ -1443,7 +1500,9 @@ with st.sidebar:
             on_change=reset_results,
         )
         market = "KPI Pattern"
+        st.session_state["current_market"] = market
         if kpi_pattern_file is not None:
+            st.session_state["kpi_pattern_source_bytes"] = kpi_pattern_file.getvalue()
             _kp_peek = read_kpi_pattern_excel(kpi_pattern_file.getvalue())
             _kp_date_cols = detect_date_columns(_kp_peek)
             _kp_non_date_cols = [c for c in _kp_peek.columns if c not in _kp_date_cols]
@@ -1506,6 +1565,7 @@ with st.sidebar:
                         kpi_pattern_date_range = None
                     else:
                         kpi_pattern_date_range = (_kp_start_date, _kp_end_date)
+                    st.session_state["kpi_pattern_date_range"] = kpi_pattern_date_range
 
 if not kpi_pattern_mode:
     try:
@@ -3626,6 +3686,10 @@ def render_time_series_validation(mode: str):
         st.session_state.kpi_source_bytes = None
     if "kpi_candidate_universe" not in st.session_state:
         st.session_state.kpi_candidate_universe = []
+    if "kpi_pattern_source_bytes" not in st.session_state:
+        st.session_state.kpi_pattern_source_bytes = None
+    if "kpi_pattern_date_range" not in st.session_state:
+        st.session_state.kpi_pattern_date_range = None
     if "file_upload_key" not in st.session_state:
         st.session_state.file_upload_key = 0
     if "bayesian_results" not in st.session_state:
@@ -3836,18 +3900,7 @@ def render_time_series_validation(mode: str):
             except Exception as e:
                 st.warning(f"⚠️ Could not load the region mapping table: {e}")
                 return None
-        _test_regions_val = st.session_state.get("selected_experiment_regions", []) or []
-        _controls_val = st.session_state.get("final_controls")
-        _control_regions_val = (
-            _controls_val[geo_col].tolist()
-            if _controls_val is not None and geo_col in _controls_val.columns
-            else []
-        )
-        _valid_regions = sorted(
-            set(agg_df[geo_col].dropna().astype(str).str.strip().unique().tolist())
-            | set(_test_regions_val)
-            | set(_control_regions_val)
-        )
+        _valid_regions = _current_candidate_universe(agg_df, geo_col)
         st.session_state.kpi_candidate_universe = sorted(str(r) for r in _valid_regions)
         return compute_region_mapping_report(
             df_long, _valid_regions, _adobe_to_geo, metric_name=selected_metric
@@ -3856,6 +3909,11 @@ def render_time_series_validation(mode: str):
     _mapping_fingerprint = region_mapping_fingerprint(
         file_name=getattr(uploaded_file, "name", None),
         file_size=getattr(uploaded_file, "size", None),
+        file_sha256=(
+            sha256_bytes(st.session_state["kpi_source_bytes"])
+            if st.session_state.get("kpi_source_bytes")
+            else None
+        ),
         market=market,
         geo_col=geo_col,
         selected_metric=selected_metric,
@@ -3863,6 +3921,14 @@ def render_time_series_validation(mode: str):
         mapping_source=(
             "kpi_pattern" if st.session_state.get("kpi_pattern_mode") else "structural"
         ),
+        kpi_pattern_source_digest=(
+            sha256_bytes(st.session_state["kpi_pattern_source_bytes"])
+            if st.session_state.get("kpi_pattern_source_bytes")
+            else None
+        ),
+        candidate_universe_digest=_current_candidate_universe_digest(agg_df, geo_col),
+        kpi_pattern_date_range=st.session_state.get("kpi_pattern_date_range"),
+        mapping_reference_digest=_current_mapping_reference_digest(geo_col, market=market),
     )
     if st.session_state.get("kpi_mapping_fingerprint") != _mapping_fingerprint:
         st.session_state.kpi_mapping_report = _recompute_mapping_report()
