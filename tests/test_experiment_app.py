@@ -99,11 +99,20 @@ def test_validation_completion_stamps_and_freeze(tmp_path: Path):
 
     rec = _record(app)
     assert len(rec["frozen_versions"]) == 1
-    assert rec["frozen_versions"][0]["version"] == 1
+    frozen = rec["frozen_versions"][0]
+    assert frozen["version"] == 1
+    assert frozen["schema_version"] == "frozen-design/v1"
+    assert frozen["planned"]["planned_test_periods"] == rec["analysed"]["planned_test_periods"]
+    # A complete design snapshot is captured, not just a fingerprint + periods.
+    assert frozen["design"]["test_regions"]
+    assert frozen["design"]["control_regions"]
+    assert frozen["design"]["tool_version"]
+    assert frozen["design"]["methodology_version"]
     assert (
-        rec["frozen_versions"][0]["planned"]["planned_test_periods"]
+        frozen["design"]["planned_test_period"]["planned_test_periods"]
         == rec["analysed"]["planned_test_periods"]
     )
+    assert frozen["design"]["source_data_digests"]["source_bytes"].startswith("sha256:")
 
 
 def test_changing_validation_input_marks_stage_stale(tmp_path: Path):
@@ -139,3 +148,38 @@ def test_changing_validation_input_marks_stage_stale(tmp_path: Path):
     assert app.session_state["experiment_validation_inputs"] is None
     assert rec["stage_status"]["counterfactual_validation"] == "stale"
     assert rec["stage_stale"]["counterfactual_validation"] is True
+
+
+def test_validation_completes_observed_impact_without_bayesian(tmp_path: Path):
+    """A completed-test evaluation (Evaluate mode) stamps observed_impact
+    completed WITHOUT a Bayesian run; content SHA-256 digests are part of the
+    validation identity."""
+    kpi_path = write_correlated_kpi_xlsx(
+        tmp_path / "weekly_eval.xlsx",
+        TEST_REGION,
+        CONTROL_REGIONS,
+        metric_name="Sales",
+        n_periods=60,
+        freq="W",
+        seed=123,
+    )
+    app = _new_app()
+    _manual_match(app)
+    _upload_kpi(app, "evaluate", "weekly_eval.xlsx", kpi_path.read_bytes())
+
+    run_btn = [b for b in app.button if b.key == "evaluate_run_button"][0]
+    run_btn.click()
+    app.run(timeout=RUN_TIMEOUT)
+
+    rec = _record(app)
+    assert rec["stage_status"]["observed_impact"] == "completed"
+    assert rec["stage_fingerprints"]["observed_impact"].startswith("fp1:")
+    assert rec["stage_stale"]["observed_impact"] is False
+    # Content digests are stored (digests only) and part of the validation inputs.
+    vinputs = app.session_state["experiment_validation_inputs"]
+    assert vinputs["content_digests"]["source_bytes"].startswith("sha256:")
+    assert vinputs["content_digests"]["analytical_data"].startswith("sha256:")
+    assert vinputs["content_digests"]["geography_workbook"].startswith("sha256:")
+    assert rec["content_digests"]["source_bytes"].startswith("sha256:")
+    # No Bayesian inputs/result were required.
+    assert app.session_state["experiment_bayesian_inputs"] is None

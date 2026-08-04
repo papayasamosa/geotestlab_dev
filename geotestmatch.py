@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import unicodedata
 
 import altair as alt
@@ -44,12 +45,14 @@ from geotestlab.experiment import (
     STAGE_LABELS,
     ExperimentRecord,
     active_frozen_version,
+    build_content_digests,
     build_experiment_export,
     compute_input_fingerprint,
     create_experiment_record,
     freeze_design,
     planned_vs_analysed,
     propagate_staleness,
+    record_stage_method_result,
     record_stage_result,
     update_inputs,
 )
@@ -912,6 +915,12 @@ def cleanup_session_state():
 # The pure logic lives in geotestlab.experiment; these adapters only bridge it
 # to session state / Streamlit widgets.
 # =============================================================================
+# Tool / methodology versions recorded in frozen design snapshots (Stage 2).
+GEOTESTLAB_TOOL_VERSION = "0.3.0"
+# Follows the power-analysis methodology spike; not an approved ADR.
+GEOTESTLAB_METHODOLOGY_VERSION = "0.2.0"
+
+
 def _experiment_record() -> ExperimentRecord:
     """Load the current experiment record from session state (creating one if needed)."""
     data = st.session_state.get("experiment_record")
@@ -978,6 +987,119 @@ def _experiment_input_summary():
     }
 
 
+def _cached_workbook_bytes():
+    """Bundled geography workbook bytes, cached by size (never re-read per rerun)."""
+    try:
+        key = ("wb", os.path.getsize(DATA_PATH))
+    except Exception:
+        return None
+    cached = st.session_state.get("experiment_geo_workbook_cache")
+    if cached and cached[0] == key:
+        return cached[1]
+    try:
+        with open(DATA_PATH, "rb") as f:
+            data = f.read()
+    except Exception:
+        return None
+    st.session_state.experiment_geo_workbook_cache = (key, data)
+    return data
+
+
+def _cached_market_sheet():
+    """Selected market sheet, cached by market (never re-read per rerun)."""
+    market = globals().get("market")
+    if not market:
+        return None
+    key = ("sheet", str(market))
+    cached = st.session_state.get("experiment_market_sheet_cache")
+    if cached and cached[0] == key:
+        return cached[1]
+    try:
+        df = load_market_sheet(DATA_PATH, market)
+    except Exception:
+        df = None
+    st.session_state.experiment_market_sheet_cache = (key, df)
+    return df
+
+
+def _compute_content_digests():
+    """Content-level SHA-256 identities for the current workflow inputs.
+
+    Digests only — raw content is never stored in the record/export.
+    """
+    return build_content_digests(
+        source_bytes=st.session_state.get("kpi_source_bytes"),
+        analytical_data=st.session_state.get("kpi_long_df"),
+        workbook_bytes=_cached_workbook_bytes(),
+        market_sheet=_cached_market_sheet(),
+        candidate_universe=st.session_state.get("kpi_candidate_universe"),
+    )
+
+
+def _current_design_snapshot():
+    """Complete design snapshot for freezing (available values only; never
+    fabricated platform/spend values)."""
+    matching = st.session_state.get("experiment_matching_inputs") or {}
+    validation = st.session_state.get("experiment_validation_inputs") or {}
+    analysed = (_experiment_record().analysed) or {}
+    _map = st.session_state.get("kpi_mapping_report")
+    _q = st.session_state.get("kpi_quality_report")
+    _rejected = st.session_state.get("kpi_rejected_rows")
+    return {
+        "test_regions": sorted(matching.get("test_regions", []) or []),
+        "control_regions": sorted(matching.get("control_regions", []) or []),
+        "exclusions": sorted(validation.get("manual_excluded_dates", []) or []),
+        "kpi": {
+            "file_name": validation.get("kpi_file_name"),
+            "file_size": validation.get("kpi_file_size"),
+            "selected_metric": validation.get("selected_metric"),
+            "agg_col": validation.get("kpi_agg_col"),
+            "time_series_frequency": validation.get("time_series_frequency"),
+        },
+        "historical_period": {
+            "pre_start": validation.get("pre_start"),
+            "pre_end": validation.get("pre_end"),
+        },
+        "planned_test_period": {
+            "test_start": validation.get("test_start"),
+            "test_end": validation.get("test_end"),
+            "use_post": validation.get("use_post"),
+            "post_start": validation.get("post_start"),
+            "post_end": validation.get("post_end"),
+            "planned_test_periods": analysed.get("planned_test_periods"),
+            "analysed_test_periods": analysed.get("analysed_test_periods"),
+            "excluded_test_periods": analysed.get("excluded_test_periods"),
+        },
+        "matching": {
+            "method": matching.get("matching_method"),
+            "kpi_pattern_mode": matching.get("kpi_pattern_mode"),
+            "weights": dict(matching.get("weights") or {}),
+        },
+        "seeds": {"matching_seed": 42},  # deterministic guided matching
+        "validation_settings": {
+            "include_lagged_controls": validation.get("include_lagged_controls"),
+            "min_training_periods": validation.get("min_training_periods"),
+            "placebo_length_periods": validation.get("placebo_length_periods"),
+        },
+        "data_quality_summary": {
+            "covered_regions": sorted(str(r) for r in (getattr(_map, "covered_regions", []) or [])),
+            "uncovered_regions": sorted(
+                str(r) for r in (getattr(_map, "uncovered_regions", []) or [])
+            ),
+            "observations_retained": getattr(_q, "observations_retained", None),
+            "observations_removed": getattr(_q, "observations_removed", None),
+            "duplicate_key_rows": getattr(_q, "duplicate_key_rows", None),
+            "rejected_rows": len(_rejected) if _rejected is not None else 0,
+        },
+        "source_data_digests": dict(validation.get("content_digests") or {}),
+        "tracking_outage_exclusions": sorted(validation.get("auto_flagged_dates", []) or []),
+        "tool_version": GEOTESTLAB_TOOL_VERSION,
+        "methodology_version": GEOTESTLAB_METHODOLOGY_VERSION,
+        "analyst": {"label": "", "notes": []},
+        "approved_power_result": None,  # recorded when the approved power stage runs
+    }
+
+
 def _stamp_match_quality():
     """Stamp the match_quality stage with the current matching-input fingerprint."""
     if st.session_state.get("final_controls") is None:
@@ -990,14 +1112,20 @@ def _stamp_match_quality():
 
 
 def _stamp_validation_stage():
-    """Stamp counterfactual_validation and store the analysed-period summary."""
+    """Stamp counterfactual_validation (and observed_impact when the completed-test
+    evaluation succeeds) and store the analysed-period summary."""
     vres = st.session_state.get("validation_results") or {}
     if not vres:
         return
     matching = st.session_state.get("experiment_matching_inputs") or {}
-    validation_inputs = st.session_state.get("experiment_validation_inputs") or {}
+    validation_inputs = dict(st.session_state.get("experiment_validation_inputs") or {})
+    # Content-level SHA-256 identities are part of the validation identity.
+    digests = _compute_content_digests()
+    validation_inputs["content_digests"] = digests
+    st.session_state.experiment_validation_inputs = validation_inputs
     fp = compute_input_fingerprint({**matching, **validation_inputs})
     rec = _experiment_record()
+    rec.content_digests = dict(digests)
     record_stage_result(rec, "counterfactual_validation", fp)
     rec.analysed = {
         "pre_start": _iso_date(vres.get("pre_start")),
@@ -1013,11 +1141,17 @@ def _stamp_validation_stage():
         "excluded_test_periods": (vres.get("planned_test_periods") or 0)
         - (vres.get("analysed_test_periods") or 0),
     }
+    # A completed-test evaluation (analysed test periods or a test uplift)
+    # completes observed_impact WITHOUT requiring a Bayesian run.
+    if vres.get("analysed_test_periods") not in (None, 0) or vres.get("uplift_pct") is not None:
+        record_stage_result(rec, "observed_impact", fp)
     _save_experiment_record(rec)
 
 
 def _stamp_bayesian_stage():
-    """Stamp the observed_impact stage with the Bayesian-run input fingerprint."""
+    """Record the Bayesian TBR as an additional method result under
+    observed_impact (the stage is completed by the completed-test evaluation;
+    a Bayesian run is not required for observed impact)."""
     bayesian_inputs = st.session_state.get("experiment_bayesian_inputs") or {}
     if not bayesian_inputs:
         return
@@ -1025,7 +1159,7 @@ def _stamp_bayesian_stage():
     validation = st.session_state.get("experiment_validation_inputs") or {}
     fp = compute_input_fingerprint({**matching, **validation, **bayesian_inputs})
     rec = _experiment_record()
-    record_stage_result(rec, "observed_impact", fp)
+    record_stage_method_result(rec, "observed_impact", "bayesian_tbr", fp)
     _save_experiment_record(rec)
 
 
@@ -1044,11 +1178,9 @@ def _reconcile_experiment_record():
         full.update(matching)
     if matching and validation:
         current["counterfactual_validation"] = compute_input_fingerprint({**matching, **validation})
+        current["observed_impact"] = compute_input_fingerprint({**matching, **validation})
         full.update(validation)
-    if matching and validation and bayesian:
-        current["observed_impact"] = compute_input_fingerprint(
-            {**matching, **validation, **bayesian}
-        )
+    if bayesian:
         full.update(bayesian)
 
     if full:
@@ -1170,7 +1302,12 @@ def render_experiment_record():
                 "this frozen design."
             ),
         ):
-            freeze_design(rec, _planned, rec.input_fingerprint)
+            freeze_design(
+                rec,
+                _planned,
+                rec.input_fingerprint,
+                design=_current_design_snapshot(),
+            )
             _save_experiment_record(rec)
             st.success(
                 f"Design frozen as version {active_frozen_version(rec)['version']} "
@@ -3485,6 +3622,10 @@ def render_time_series_validation(mode: str):
         st.session_state.kpi_available_dates = []
     if "kpi_metric_options" not in st.session_state:
         st.session_state.kpi_metric_options = []
+    if "kpi_source_bytes" not in st.session_state:
+        st.session_state.kpi_source_bytes = None
+    if "kpi_candidate_universe" not in st.session_state:
+        st.session_state.kpi_candidate_universe = []
     if "file_upload_key" not in st.session_state:
         st.session_state.file_upload_key = 0
     if "bayesian_results" not in st.session_state:
@@ -3516,6 +3657,10 @@ def render_time_series_validation(mode: str):
         st.session_state.kpi_mapping_fingerprint = None
         st.session_state.kpi_available_dates = []
         st.session_state.kpi_metric_options = []
+        st.session_state.kpi_source_bytes = None
+        st.session_state.kpi_candidate_universe = []
+        st.session_state.experiment_geo_workbook_cache = None
+        st.session_state.experiment_market_sheet_cache = None
 
     # -------------------------------------------------------------------------
     # 1. Data Source
@@ -3614,6 +3759,7 @@ def render_time_series_validation(mode: str):
                 uploaded_file, agg_col=_kpi_agg_col, metric_col=_kpi_metric_col
             )
             df_long = parsed.data
+            st.session_state.kpi_source_bytes = uploaded_file.getvalue()
             st.session_state.kpi_long_df = df_long
             st.session_state.kpi_quality_report = parsed.quality
             st.session_state.kpi_rejected_rows = parsed.rejected_rows
@@ -3702,6 +3848,7 @@ def render_time_series_validation(mode: str):
             | set(_test_regions_val)
             | set(_control_regions_val)
         )
+        st.session_state.kpi_candidate_universe = sorted(str(r) for r in _valid_regions)
         return compute_region_mapping_report(
             df_long, _valid_regions, _adobe_to_geo, metric_name=selected_metric
         )
