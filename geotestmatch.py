@@ -1,4 +1,5 @@
 import io
+import json
 import unicodedata
 
 import altair as alt
@@ -35,6 +36,23 @@ from geotestlab.data.mapping import (
 )
 from geotestlab.data.models import compute_mapping_report
 from geotestlab.data.period_quality import compute_period_quality
+
+# Experiment record (geotestlab.experiment) — identity, fingerprints, stage
+# status, design freeze, and reproducible export. Pure, no Streamlit imports.
+from geotestlab.experiment import (
+    STAGE_KEYS,
+    STAGE_LABELS,
+    ExperimentRecord,
+    active_frozen_version,
+    build_experiment_export,
+    compute_input_fingerprint,
+    create_experiment_record,
+    freeze_design,
+    planned_vs_analysed,
+    propagate_staleness,
+    record_stage_result,
+    update_inputs,
+)
 
 # Matching core (geotestlab.matching) — pure functions, no Streamlit imports.
 from geotestlab.matching import (
@@ -768,6 +786,11 @@ def reset_results():
     st.session_state.validation_triggered = False
     st.session_state.bayesian_results = None
     st.session_state.bayesian_interpretation_visible = False
+    # Experiment record inputs are cleared too — the record reconciles these
+    # stages to "stale" on the next rerun (Stage 4).
+    st.session_state.experiment_matching_inputs = None
+    st.session_state.experiment_validation_inputs = None
+    st.session_state.experiment_bayesian_inputs = None
 
 
 def reset_manual_results():
@@ -789,6 +812,11 @@ def reset_manual_results():
     st.session_state.validation_triggered = False
     st.session_state.bayesian_results = None
     st.session_state.bayesian_interpretation_visible = False
+    # Experiment record inputs are cleared too — the record reconciles these
+    # stages to "stale" on the next rerun (Stage 4).
+    st.session_state.experiment_matching_inputs = None
+    st.session_state.experiment_validation_inputs = None
+    st.session_state.experiment_bayesian_inputs = None
 
 
 def matching_setup_changed_since_last_run(
@@ -877,6 +905,309 @@ def cleanup_session_state():
         st.session_state.final_controls = df[keep]
 
 
+# =============================================================================
+# Experiment record (Stage 4): identity, deterministic input fingerprints,
+# explicit stage status, stale-result propagation, frozen approved design
+# versions, planned-vs-analysed comparison, and a reproducible local export.
+# The pure logic lives in geotestlab.experiment; these adapters only bridge it
+# to session state / Streamlit widgets.
+# =============================================================================
+def _experiment_record() -> ExperimentRecord:
+    """Load the current experiment record from session state (creating one if needed)."""
+    data = st.session_state.get("experiment_record")
+    if not data:
+        rec = create_experiment_record()
+        st.session_state.experiment_record = rec.to_dict()
+        return rec
+    return ExperimentRecord.from_dict(data)
+
+
+def _save_experiment_record(rec: ExperimentRecord) -> None:
+    st.session_state.experiment_record = rec.to_dict()
+
+
+def _iso_date(v):
+    if v is None:
+        return None
+    try:
+        return pd.Timestamp(v).isoformat()
+    except Exception:
+        return str(v)
+
+
+def _live_matching_inputs():
+    """Deterministic dict of the current live matching inputs (module-scope safe)."""
+    _geo = globals().get("geography_level")
+    _geo_col = globals().get("geo_col", _geo)
+    controls = st.session_state.get("final_controls")
+    control_regions = (
+        sorted(controls[_geo_col].dropna().astype(str).tolist())
+        if controls is not None and _geo_col in controls.columns
+        else []
+    )
+    return {
+        "matching_method": st.session_state.get("matching_method_sidebar"),
+        "market": globals().get("market"),
+        "geography_level": _geo,
+        "kpi_pattern_mode": st.session_state.get("kpi_pattern_mode", False),
+        "kpi_pattern_agg_col": st.session_state.get("kpi_pattern_agg_col_sidebar"),
+        "kpi_pattern_metric_value": st.session_state.get("kpi_pattern_metric_value_sidebar"),
+        "test_regions": sorted(
+            str(r) for r in (st.session_state.get("selected_experiment_regions", []) or [])
+        ),
+        "control_regions": control_regions,
+        "weights": dict(st.session_state.get("current_weights") or {}),
+    }
+
+
+def _experiment_input_summary():
+    """Human-readable summary of the current workflow inputs (for the record)."""
+    matching = _live_matching_inputs() or {}
+    validation = st.session_state.get("experiment_validation_inputs") or {}
+    return {
+        "matching_method": matching.get("matching_method"),
+        "market": matching.get("market"),
+        "geography_level": matching.get("geography_level"),
+        "test_region_count": len(matching.get("test_regions", []) or []),
+        "control_region_count": len(matching.get("control_regions", []) or []),
+        "kpi_file_name": validation.get("kpi_file_name"),
+        "selected_metric": validation.get("selected_metric"),
+        "time_series_frequency": validation.get("time_series_frequency"),
+        "test_start": validation.get("test_start"),
+        "test_end": validation.get("test_end"),
+    }
+
+
+def _stamp_match_quality():
+    """Stamp the match_quality stage with the current matching-input fingerprint."""
+    if st.session_state.get("final_controls") is None:
+        return
+    inputs = _live_matching_inputs()
+    st.session_state.experiment_matching_inputs = inputs
+    rec = _experiment_record()
+    record_stage_result(rec, "match_quality", compute_input_fingerprint(inputs))
+    _save_experiment_record(rec)
+
+
+def _stamp_validation_stage():
+    """Stamp counterfactual_validation and store the analysed-period summary."""
+    vres = st.session_state.get("validation_results") or {}
+    if not vres:
+        return
+    matching = st.session_state.get("experiment_matching_inputs") or {}
+    validation_inputs = st.session_state.get("experiment_validation_inputs") or {}
+    fp = compute_input_fingerprint({**matching, **validation_inputs})
+    rec = _experiment_record()
+    record_stage_result(rec, "counterfactual_validation", fp)
+    rec.analysed = {
+        "pre_start": _iso_date(vres.get("pre_start")),
+        "pre_end": _iso_date(vres.get("pre_end")),
+        "test_start": _iso_date(vres.get("test_start")),
+        "test_end": _iso_date(vres.get("test_end")),
+        "use_post": bool(vres.get("use_post", False)),
+        "post_start": _iso_date(vres.get("post_start")),
+        "post_end": _iso_date(vres.get("post_end")),
+        "time_series_frequency": vres.get("time_series_frequency", "weekly"),
+        "planned_test_periods": vres.get("planned_test_periods"),
+        "analysed_test_periods": vres.get("analysed_test_periods"),
+        "excluded_test_periods": (vres.get("planned_test_periods") or 0)
+        - (vres.get("analysed_test_periods") or 0),
+    }
+    _save_experiment_record(rec)
+
+
+def _stamp_bayesian_stage():
+    """Stamp the observed_impact stage with the Bayesian-run input fingerprint."""
+    bayesian_inputs = st.session_state.get("experiment_bayesian_inputs") or {}
+    if not bayesian_inputs:
+        return
+    matching = st.session_state.get("experiment_matching_inputs") or {}
+    validation = st.session_state.get("experiment_validation_inputs") or {}
+    fp = compute_input_fingerprint({**matching, **validation, **bayesian_inputs})
+    rec = _experiment_record()
+    record_stage_result(rec, "observed_impact", fp)
+    _save_experiment_record(rec)
+
+
+def _reconcile_experiment_record():
+    """Recompute current stage fingerprints each rerun and propagate staleness."""
+    rec = _experiment_record()
+    has_matching = st.session_state.get("final_controls") is not None
+    matching = _live_matching_inputs() if has_matching else None
+    validation = st.session_state.get("experiment_validation_inputs") or None
+    bayesian = st.session_state.get("experiment_bayesian_inputs") or None
+
+    current = {}
+    full = {}
+    if matching:
+        current["match_quality"] = compute_input_fingerprint(matching)
+        full.update(matching)
+    if matching and validation:
+        current["counterfactual_validation"] = compute_input_fingerprint({**matching, **validation})
+        full.update(validation)
+    if matching and validation and bayesian:
+        current["observed_impact"] = compute_input_fingerprint(
+            {**matching, **validation, **bayesian}
+        )
+        full.update(bayesian)
+
+    if full:
+        update_inputs(rec, compute_input_fingerprint(full), _experiment_input_summary())
+
+    # A stage that produced a result before but now has no current inputs (the app
+    # cleared it because the setup changed) is explicitly stale.
+    for stage in STAGE_KEYS:
+        if (
+            stage in rec.stage_fingerprints
+            and stage not in current
+            and rec.stage_status.get(stage) not in ("planned", "not_applicable", "not_started")
+        ):
+            rec.stage_stale[stage] = True
+            rec.stage_status[stage] = "stale"
+    propagate_staleness(rec, current)
+    _save_experiment_record(rec)
+
+
+def _current_planned_periods():
+    """Current planned periods from the latest validation run (for freezing)."""
+    vres = st.session_state.get("validation_results") or {}
+    if not vres.get("results"):
+        return None
+    _planned = vres.get("planned_test_periods")
+    _analysed = vres.get("analysed_test_periods")
+    return {
+        "pre_start": _iso_date(vres.get("pre_start")),
+        "pre_end": _iso_date(vres.get("pre_end")),
+        "test_start": _iso_date(vres.get("test_start")),
+        "test_end": _iso_date(vres.get("test_end")),
+        "use_post": bool(vres.get("use_post", False)),
+        "post_start": _iso_date(vres.get("post_start")),
+        "post_end": _iso_date(vres.get("post_end")),
+        "time_series_frequency": vres.get("time_series_frequency", "weekly"),
+        "planned_test_periods": _planned,
+        "analysed_test_periods": _analysed,
+        "excluded_test_periods": (_planned or 0) - (_analysed or 0)
+        if _planned is not None
+        else None,
+    }
+
+
+def _result_summaries_for_export():
+    """Small serialisable summaries of the current results, keyed by stage."""
+    summaries = {}
+    vres = st.session_state.get("validation_results") or {}
+    if vres.get("results"):
+        _by_method = {}
+        for method, res in vres["results"].items():
+            _by_method[method] = {
+                k: res.get(k)
+                for k in (
+                    "corr",
+                    "r2",
+                    "smape",
+                    "n_selected",
+                    "rolling_smape_mean",
+                    "counterfactual_reliability",
+                )
+                if k in res
+            }
+        summaries["counterfactual_validation"] = _by_method
+    bres = st.session_state.get("bayesian_results")
+    if bres:
+        summaries["observed_impact"] = {
+            k: bres.get(k)
+            for k in (
+                "mean_uplift",
+                "uplift_pct",
+                "prob_pos",
+                "uplift_pi_lower",
+                "uplift_pi_upper",
+                "corr",
+                "r2",
+                "smape",
+            )
+            if k in bres
+        }
+    return summaries
+
+
+def render_experiment_record():
+    """Stage 4 UI: identity, stage statuses, design freeze, planned-vs-analysed, export."""
+    rec = _experiment_record()
+    _status_icon = {
+        "not_started": "⚪",
+        "planned": "🔵",
+        "in_progress": "🔄",
+        "completed": "🟢",
+        "stale": "🟠",
+        "not_applicable": "⚪",
+    }
+    with st.expander("🧪 Experiment record & design freeze", expanded=False):
+        st.caption(f"**Experiment ID:** `{rec.experiment_id}`")
+        st.caption(f"**Created:** {rec.created_at} · **Updated:** {rec.updated_at}")
+        if rec.input_fingerprint:
+            st.caption(f"**Input fingerprint:** `{rec.input_fingerprint}`")
+        else:
+            st.caption("**Input fingerprint:** not yet computed — run matching to start.")
+
+        st.markdown("**Workflow stage statuses**")
+        for key, label in STAGE_LABELS.items():
+            status = rec.stage_status.get(key, "not_started")
+            stale = rec.stage_stale.get(key, False)
+            suffix = " — inputs changed, re-run" if stale else ""
+            st.caption(f"{_status_icon.get(status, '⚪')} **{label}:** {status}{suffix}")
+
+        st.markdown("**Design freeze**")
+        _planned = _current_planned_periods()
+        _can_freeze = bool(_planned) and bool(rec.input_fingerprint)
+        if st.button(
+            "🧊 Freeze approved design",
+            key="freeze_design_btn",
+            disabled=not _can_freeze,
+            help=(
+                "Capture the current planned test periods and input fingerprint as an "
+                "approved design version. Planned-vs-analysed compares later runs against "
+                "this frozen design."
+            ),
+        ):
+            freeze_design(rec, _planned, rec.input_fingerprint)
+            _save_experiment_record(rec)
+            st.success(
+                f"Design frozen as version {active_frozen_version(rec)['version']} "
+                f"({rec.experiment_id})."
+            )
+
+        _cmp = planned_vs_analysed(rec)
+        st.markdown("**Planned vs analysed**")
+        if _cmp["frozen"]:
+            st.caption(f"Frozen version {_cmp['version']} at {_cmp['frozen_at']}.")
+            if _cmp["matches"]:
+                st.success("✅ Analysed periods match the frozen design.")
+            else:
+                st.warning("⚠️ Analysed periods differ from the frozen design:")
+                for diff in _cmp["differences"]:
+                    st.caption(f"- {diff}")
+            if _cmp.get("design_changed_since_freeze"):
+                st.caption("🟠 Workflow inputs have changed since this design was frozen.")
+        else:
+            st.caption("No frozen design version yet — run an evaluation and freeze it.")
+
+        st.markdown("**Reproducible export**")
+        _export = build_experiment_export(rec, result_summaries=_result_summaries_for_export())
+        st.download_button(
+            "⬇️ Export experiment record (.json)",
+            data=json.dumps(_export, indent=2, default=str),
+            file_name=f"{rec.experiment_id}.json",
+            mime="application/json",
+            key="export_experiment_record_json",
+        )
+        st.caption(
+            "The export is a local serialisable record — no database is used. It captures "
+            "identity, input fingerprint, stage statuses, frozen design versions, "
+            "planned-vs-analysed, and result summaries."
+        )
+
+
 # ------------------------------------------------------------
 # Session state initialisation
 # ------------------------------------------------------------
@@ -906,6 +1237,16 @@ if "match_run_metrics" not in st.session_state:
     st.session_state.match_run_metrics = None
 if "match_results_stale" not in st.session_state:
     st.session_state.match_results_stale = False
+
+# ---- Experiment record (Stage 4) ----
+if "experiment_record" not in st.session_state:
+    st.session_state.experiment_record = create_experiment_record().to_dict()
+if "experiment_matching_inputs" not in st.session_state:
+    st.session_state.experiment_matching_inputs = None
+if "experiment_validation_inputs" not in st.session_state:
+    st.session_state.experiment_validation_inputs = None
+if "experiment_bayesian_inputs" not in st.session_state:
+    st.session_state.experiment_bayesian_inputs = None
 
 # ------------------------------------------------------------
 # Load workbook and market
@@ -1906,6 +2247,7 @@ def render_structural_matching_tab():
                 "control_group_size": len(control_geos),
             }
             st.session_state.match_results_stale = False
+            _stamp_match_quality()
 
             cleanup_session_state()
             st.success(
@@ -2198,6 +2540,7 @@ def render_structural_matching_tab():
                 "control_group_size": len(best_idx),
             }
             st.session_state.match_results_stale = False
+            _stamp_match_quality()
 
             cleanup_session_state()
             st.success(
@@ -3157,6 +3500,10 @@ def render_time_series_validation(mode: str):
         st.session_state.validation_triggered = False
         st.session_state.bayesian_results = None
         st.session_state.bayesian_interpretation_visible = False
+        # Experiment record: the validation/Bayesian inputs are gone, so those
+        # stages reconcile to stale on the next rerun (Stage 4).
+        st.session_state.experiment_validation_inputs = None
+        st.session_state.experiment_bayesian_inputs = None
 
     def clear_uploaded_kpi_state():
         """Clear validation/Bayesian results AND the previously parsed KPI file, so a newly
@@ -4404,6 +4751,29 @@ def render_time_series_validation(mode: str):
                 ),
             }
 
+            # ---- Experiment record: store the validation inputs and stamp the
+            # counterfactual_validation stage (Stage 4). ----
+            st.session_state.experiment_validation_inputs = {
+                "kpi_file_name": getattr(uploaded_file, "name", None),
+                "kpi_file_size": getattr(uploaded_file, "size", None),
+                "selected_metric": selected_metric,
+                "kpi_agg_col": _kpi_agg_col,
+                "time_series_frequency": time_series_frequency,
+                "pre_start": _iso_date(pre_start),
+                "pre_end": _iso_date(pre_end),
+                "test_start": _iso_date(test_start),
+                "test_end": _iso_date(test_end),
+                "use_post": bool(use_post),
+                "post_start": _iso_date(post_start),
+                "post_end": _iso_date(post_end),
+                "manual_excluded_dates": sorted(_iso_date(d) for d in _ts_manual_excluded_dates),
+                "auto_flagged_dates": sorted(_iso_date(d) for d in _ts_auto_flagged_dates),
+                "include_lagged_controls": include_lagged_controls,
+                "min_training_periods": min_training_periods,
+                "placebo_length_periods": placebo_length_periods,
+            }
+            _stamp_validation_stage()
+
             st.session_state.validation_triggered = False
 
     # -------------------------------------------------------------------------
@@ -5134,6 +5504,18 @@ with tab4:
                                 st.session_state.bayesian_results = _bayes_result.to_dict()
                                 st.session_state.bayesian_trace = _bayes_result.trace
                                 st.session_state.bayesian_interpretation_visible = True
+                                # ---- Experiment record: stamp observed_impact (Stage 4). ----
+                                st.session_state.experiment_bayesian_inputs = {
+                                    "selected_bayes_method": selected_bayes_method,
+                                    "use_structural_priors": st.session_state.get(
+                                        "use_structural_priors", False
+                                    ),
+                                    "use_ar1_errors": st.session_state.get("use_ar1_errors", True),
+                                    "bayes_control_list": sorted(
+                                        str(c) for c in bayes_control_list
+                                    ),
+                                }
+                                _stamp_bayesian_stage()
 
         # ---- Bayesian results display — IDENTICAL to working file ----
         if st.session_state.bayesian_results is not None:
@@ -5658,6 +6040,12 @@ with tab4:
                 - The green band (test/post-period) is the 94% posterior predictive interval — the plausible range of *actual counterfactual observations* under the no-test scenario, including observation-level noise. This is what you should compare the actuals against.
                 - When "Allow for noise streaks" is on (the default), the model checks whether noise runs in streaks — a high period followed by another high period. If it does, the green band and the uplift range are widened to match, because streaky noise doesn't cancel out over the test window the way independent noise would. (Technically: an AR(1) error model — e(t) = \u03c1\u00b7e(t\u22121) + noise — fitted via the exact conditional likelihood; the bands are simulated AR(1) residual paths anchored on the last pre-period residual, so multi-period totals inherit the autocorrelation.)
                 """)
+
+# ------------------------------------------------------------
+# Experiment record (Stage 4) — reconcile and display
+# ------------------------------------------------------------
+_reconcile_experiment_record()
+render_experiment_record()
 
 # ------------------------------------------------------------
 # Sidebar data quality footer
