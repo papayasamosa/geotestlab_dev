@@ -1,6 +1,13 @@
 # GeoTestLab — Project Documentation
 
-> *Last reconciled against commit `0e472af` of `geotestmatch.py`. The app's on-screen title currently carries a temporary "TEST " prefix ("TEST GeoTestLab") — remove before any production release.*
+> *Reviewed baseline: `c532625b3d7356e344138fcd9211f8ad25c71d3c`.*
+>
+> **Documentation map**
+> - `PROJECT_DOCUMENTATION.md` documents the **current implementation** as reviewed at the baseline commit above.
+> - `docs/product/01_GeoTestLab_Core_Product_Requirements_Document.md` defines the **target product** (the canonical product PRD).
+> - `docs/product/03_PRD_Traceability_and_Delivery_Roadmap.md` reconciles **current and planned work** and traces it to the PRD.
+>
+> The app's on-screen title currently carries a temporary "TEST " prefix ("TEST GeoTestLab") — remove before any production release.
 
 ## 1. Project Overview
 
@@ -496,11 +503,54 @@ If several of these checks fail, treat the resulting uplift estimate as **indica
 
 ## 5. Developer Notes
 
+### 5.0 Engineering baseline (current)
+
+Beyond the application behaviour described in §1–§4, the reviewed baseline
+includes:
+
+- **Typed KPI ingestion and data-quality contracts** — `geotestlab/data/`
+  provides typed ingestion, a structured data-quality report (parsed layout,
+  selected fields, source and retained observations, date range and inferred
+  frequency, expected and missing dates, raw/mapped/unmapped regions, duplicate
+  keys, missing/invalid observations, rejected rows, blocking errors and
+  non-blocking warnings), rejected-row and unmapped-row downloads, and
+  period-quality handling (tracking outages and missing periods).
+- **Deterministic guided matching** — the guided "Set Rules & Auto-Build Groups"
+  search is deterministic for identical inputs and uses an explicit random seed
+  (42).
+- **Matching-core extraction** — `geotestlab/matching/` is a Streamlit-free,
+  typed package (`models`, `structural`, `metrics`, `kpi_pattern`,
+  `constraints`, `strategies`) unit-tested directly.
+- **CI** — GitHub Actions runs test, lock-verification and numerical-regression
+  jobs on every pull request to `main`.
+- **Numerical regression gates** — `tests/test_numerical_characterisation.py`
+  guards extracted behaviour; CI blocks merge on failure. The package coverage
+  gate requires at least 90 percent coverage of `geotestlab/`.
+- **Locked dependencies** — Python 3.11 runtime and dev locks generated on
+  Linux; `scripts/compile_requirements.py --check` verifies reproducibility.
+
+Validation, placebo, Counterfactual Confidence and Bayesian logic remain
+substantially in `geotestmatch.py` and are scheduled for later
+behaviour-preserving extraction; see
+`docs/product/03_PRD_Traceability_and_Delivery_Roadmap.md` for the
+reconciliation of current and planned work.
+
 ### 5.1 Code structure (top-to-bottom)
 
-The app is a single Streamlit script (no separate modules) organised roughly as:
+The application is a Streamlit script that calls into the extracted
+`geotestlab/` package for data ingestion and matching, while retaining
+validation, reporting and Bayesian logic. It is organised roughly as:
 
-1. **Imports & app config** — `st.set_page_config` (page title currently "TEST GeoTestLab" — note the temporary "TEST " prefix in both the page title and `st.title` if preparing a production release), `load_css()` (loads an optional external `styles.css`, plus inline CSS scoped to `st.download_button` sizing), `CONFIG` dict of tunable constants (including the `reliability_thresholds` traffic-light bands — the single source of truth for §G2's classifiers), `DATA_PATH`, method-name constants (`METHOD_STRUCTURAL`, etc.).
+1. **Imports & app config** — imports from the extracted `geotestlab.data`
+   (ingestion, models, exceptions, period quality) and `geotestlab.matching`
+   (typed models, structural/metrics/KPI-pattern, constraints, strategies)
+   packages; `st.set_page_config` (page title currently "TEST GeoTestLab" —
+   note the temporary "TEST " prefix in both the page title and `st.title` if
+   preparing a production release), `load_css()` (loads an optional external
+   `styles.css`, plus inline CSS scoped to `st.download_button` sizing),
+   `CONFIG` dict of tunable constants (including the `reliability_thresholds`
+   traffic-light bands — the single source of truth for §G2's classifiers),
+   `DATA_PATH`, method-name constants (`METHOD_STRUCTURAL`, etc.).
 2. **Time-series validation helpers** — `detect_date_columns`, `detect_metric_column`, KPI loading/reshaping (`load_and_reshape_kpi`, supporting both the simple and aggregated file layouts — see §3.6), model matrix building, lag features (frequency-aware, §F2), Durbin-Watson, the Counterfactual Confidence classifiers (`classify_autocorrelation_risk`, `calculate_overfit_gap`, `classify_overfitting_risk`, `classify_rolling_validation_error`, `classify_rolling_bias_risk`, `combine_reliability_ratings`, `get_reliability_drivers` — §G2), frequency helpers (`get_frequency_config`, `infer_time_series_frequency` — §F2), display/export helpers (`format_range`, `build_chart_data_xlsx`), error metrics, MCMC diagnostic summary (incl. divergences), structural prior sigma calculation, model construction (`safe_tscv`, `build_regularized_model`, `classify_validation_method`, `_warn_on_row_loss`, `_warn_on_cv_fallback`), rolling-origin validation (+ `_summarize_rolling_origin_folds`), the placebo helpers (`_run_placebo_windows`, `_summarize_placebo_results`), and the main `run_validation_method()`.
 3. **Text/data cleaning helpers** — `repair_text_value`, `clean_dataframe_text`, `normalise_column_names`, `inspect_excel_sheet`.
 4. **Excel workbook loading** — `get_workbook_sheet_names`, `load_market_sheet`, population/geography/grouping-column helpers, `prepare_market_dataframe`, `read_kpi_pattern_excel` (cached loader for the KPI Pattern sidebar upload — see §3.7).
