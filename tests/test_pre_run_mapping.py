@@ -27,7 +27,11 @@ from geotestlab.data.mapping import (
     region_mapping_fingerprint,
     uncovered_required_regions,
 )
-from geotestlab.data.models import compute_mapping_report
+from geotestlab.data.models import (
+    REGION_MAPPING_REPORT_SCHEMA_VERSION,
+    RegionMappingReport,
+    compute_mapping_report,
+)
 from tests.fixtures.live_scenarios import (
     RUN_TIMEOUT,
     _manual_match,
@@ -199,6 +203,12 @@ class TestRegionMappingFingerprint:
             "selected_metric",
             "agg_col",
             "mapping_source",
+            # Stage 3A content-identity inputs.
+            "file_sha256",
+            "kpi_pattern_source_digest",
+            "candidate_universe_digest",
+            "kpi_pattern_date_range",
+            "mapping_reference_digest",
         ):
             altered = dict(self.BASE)
             altered[key] = "changed"
@@ -210,6 +220,70 @@ class TestRegionMappingFingerprint:
         a = region_mapping_fingerprint(**self.BASE)
         b = region_mapping_fingerprint(**self.BASE)
         assert a == b
+
+    def test_content_digests_are_included_when_supplied(self):
+        fp = region_mapping_fingerprint(
+            **self.BASE,
+            file_sha256="sha256:abc",
+            kpi_pattern_source_digest="sha256:kps",
+            candidate_universe_digest="sha256:universe",
+            kpi_pattern_date_range=("2026-01-04", "2026-03-29"),
+            mapping_reference_digest="sha256:ref",
+        )
+        assert fp["file_sha256"] == "sha256:abc"
+        assert fp["kpi_pattern_source_digest"] == "sha256:kps"
+        assert fp["candidate_universe_digest"] == "sha256:universe"
+        assert fp["kpi_pattern_date_range"] == ("2026-01-04", "2026-03-29")
+        assert fp["mapping_reference_digest"] == "sha256:ref"
+
+    def test_date_range_normalised_order_independent(self):
+        a = region_mapping_fingerprint(
+            **self.BASE, kpi_pattern_date_range=("2026-03-29", "2026-01-04")
+        )
+        b = region_mapping_fingerprint(
+            **self.BASE, kpi_pattern_date_range=("2026-01-04", "2026-03-29")
+        )
+        assert a == b
+        assert a["kpi_pattern_date_range"] == ("2026-01-04", "2026-03-29")
+
+
+# ---------------------------------------------------------------------------
+# RegionMappingReport schema compatibility (schema_version 1 -> 2)
+# ---------------------------------------------------------------------------
+
+
+class TestRegionMappingReportSchemaCompat:
+    def test_old_schema_report_loads_without_covered_regions(self):
+        # A v1 report predates `covered_regions`: it serialised with only the
+        # raw/mapped/unmapped tuples. It must still construct and carry
+        # schema_version=1 with covered_regions defaulted to ().
+        old = RegionMappingReport(
+            raw_regions=("A",),
+            mapped_regions=(),
+            unmapped_regions=("A",),
+            unmapped_rows=None,
+            schema_version=1,
+        )
+        assert old.schema_version == 1
+        assert old.covered_regions == ()
+
+    def test_old_schema_report_treats_required_as_uncovered(self):
+        # No coverage info in a v1 report -> every required region is treated
+        # as uncovered (conservative blocker), never a crash.
+        old = RegionMappingReport(
+            raw_regions=("A",),
+            mapped_regions=(),
+            unmapped_regions=("A",),
+            unmapped_rows=None,
+            schema_version=1,
+        )
+        assert uncovered_required_regions(old, ["X", "Y"]) == ("X", "Y")
+
+    def test_new_reports_use_current_schema_version(self):
+        df = _long_frame([("A", "Sales", pd.Timestamp("2026-01-04"), 1.0)])
+        report = compute_region_mapping_report(df, ["X"], {"A": "X"}, metric_name="Sales")
+        assert report.schema_version == REGION_MAPPING_REPORT_SCHEMA_VERSION == 2
+        assert report.covered_regions == ("X",)
 
 
 # ---------------------------------------------------------------------------

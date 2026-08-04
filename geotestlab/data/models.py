@@ -8,7 +8,9 @@ import pandas as pd
 
 # Schema versions so callers can detect and handle report-shape changes.
 DATA_QUALITY_REPORT_SCHEMA_VERSION = 2
-REGION_MAPPING_REPORT_SCHEMA_VERSION = 1
+# Bumped 1 -> 2 when `covered_regions` changed the report shape (callers must
+# tolerate schema_version=1 reports that predate `covered_regions`).
+REGION_MAPPING_REPORT_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
