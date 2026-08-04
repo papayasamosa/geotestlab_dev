@@ -1,5 +1,4 @@
 import io
-import re
 import unicodedata
 
 import altair as alt
@@ -11,10 +10,6 @@ from scipy import stats
 
 # pymc and arviz imported lazily inside the Bayesian tab to avoid
 # segfaults and Numba errors at startup on Python 3.14
-# New imports for validation module
-from sklearn.linear_model import ElasticNet, ElasticNetCV
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 
 from geotestlab.data.exceptions import (
@@ -75,6 +70,21 @@ from geotestlab.matching import (
     read_kpi_pattern_excel as _read_kpi_pattern_excel,
 )
 
+# Validation core (geotestlab.validation) — pure functions, no Streamlit imports.
+from geotestlab.validation import (
+    RELIABILITY_THRESHOLDS,
+    add_lagged_control_features,
+    build_model_matrix,
+    compute_metrics,
+    dates_are_contiguous,
+    get_frequency_config,
+    infer_time_series_frequency,
+    rolling_origin_validation,
+    run_validation,
+)
+from geotestlab.validation.metrics import _is_valid_number
+from geotestlab.validation.models import ValidationConfig, ValidationPeriods
+
 # ------------------------------------------------------------
 # App configuration
 # ------------------------------------------------------------
@@ -134,23 +144,9 @@ CONFIG = {
     "outlier_std_threshold": 5,
     "ess_min_threshold": 500,  # softer threshold for ESS (was 1000)
     # ---- Method comparison / Counterfactual Confidence traffic-light bands ----
-    # Single source of truth for the classify_* helper functions below. Durbin-Watson
-    # bands are practical interpretation bands, not formal critical-value tests — see
-    # classify_autocorrelation_risk().
-    "reliability_thresholds": {
-        "durbin_watson_low_band": (1.5, 2.5),  # 🟢 Low autocorrelation risk
-        "durbin_watson_moderate_low_band": (
-            1.2,
-            1.5,
-        ),  # 🟡 Moderate (positive autocorrelation side)
-        "durbin_watson_moderate_high_band": (
-            2.5,
-            2.8,
-        ),  # 🟡 Moderate (negative autocorrelation side)
-        "overfitting_gap_pp": {"low_max": 3, "moderate_max": 5},
-        "rolling_smape_pct": {"low_max": 10, "moderate_max": 15},
-        "rolling_bias_pct": {"low_max": 5, "moderate_max": 10},
-    },
+    # Single source of truth lives in geotestlab.validation.confidence
+    # (RELIABILITY_THRESHOLDS); CONFIG points at it so the app keeps one source.
+    "reliability_thresholds": RELIABILITY_THRESHOLDS,
 }
 
 # Single source of truth for SMD thresholds: CONFIG["smd_thresholds"] is canonical;
@@ -342,477 +338,6 @@ def apply_geo_aggregation(df_long, geo_col):
     return agg_df
 
 
-def build_model_matrix(agg_df, control_list, test_regions):
-    """
-    Build the model matrix (test KPI + one column per control) for a given control list.
-
-    Returns (model, matrix_diagnostics). matrix_diagnostics reports how many rows were
-    lost to the dropna() step (e.g. because a selected control had missing KPI values for
-    some dates) so callers can warn the user rather than silently losing data. Diagnostics
-    are computed after the merge but before dropna().
-
-    NOTE: this changed from returning `model` alone to returning `(model, matrix_diagnostics)`.
-    All callers in this file have been updated accordingly.
-    """
-    test_agg = (
-        agg_df[agg_df["region"].isin(test_regions)]
-        .groupby("date")["kpi"]
-        .sum()
-        .reset_index()
-        .rename(columns={"kpi": "test_kpi"})
-    )
-    control_wide = (
-        agg_df[agg_df["region"].isin(control_list)]
-        .pivot(index="date", columns="region", values="kpi")
-        .reset_index()
-    )
-    merged = (
-        test_agg.merge(control_wide, on="date", how="inner")
-        .sort_values("date")
-        .reset_index(drop=True)
-    )
-
-    rows_before_dropna = len(merged)
-    # Which control columns actually have missing values (only meaningful control columns,
-    # not "date"/"test_kpi").
-    control_cols_present = [c for c in control_list if c in merged.columns]
-    control_columns_with_missing = [c for c in control_cols_present if merged[c].isna().any()]
-
-    model = merged.dropna().reset_index(drop=True)
-    rows_after_dropna = len(model)
-    rows_dropped = rows_before_dropna - rows_after_dropna
-    pct_rows_dropped = (
-        (rows_dropped / rows_before_dropna * 100.0) if rows_before_dropna > 0 else 0.0
-    )
-
-    matrix_diagnostics = {
-        "rows_before_dropna": rows_before_dropna,
-        "rows_after_dropna": rows_after_dropna,
-        "rows_dropped": rows_dropped,
-        "pct_rows_dropped": pct_rows_dropped,
-        "control_columns_with_missing": control_columns_with_missing,
-    }
-    return model, matrix_diagnostics
-
-
-def add_lagged_control_features(
-    model_df, control_list, lags=(1,), frequency_config=None, time_series_frequency=None
-):
-    """
-    Add lagged versions of each control KPI column.
-
-    Each control gets a `{control}_lag{lag}` feature containing that control's KPI value
-    `lag` periods earlier. The target remains the current period's `test_kpi`. Rows with
-    missing lagged values are dropped.
-
-    Uses a true *calendar* lag at both frequencies (pass `frequency_config` from
-    get_frequency_config(), or `time_series_frequency` — "weekly"/"daily" — and it will be
-    resolved internally; defaults to weekly if neither is given) — weekly lag N matches each
-    row to the control's value from exactly N*7 calendar days earlier, daily lag N from
-    exactly N calendar days earlier — via a date-keyed merge, never a row-position shift. If
-    the exact source date is missing or was excluded (e.g. a gap in the series), the lag
-    value is left missing and the row is dropped by the dropna step below, rather than
-    silently borrowing a nearby date's value as though it were the previous period.
-
-    Args:
-        model_df: DataFrame with a "date" column, a "test_kpi" column, and one column per
-                   control in control_list (as produced by build_model_matrix).
-        control_list: base control region names (same-period columns already present in model_df).
-        lags: iterable of integer lags (in periods — weeks or days depending on frequency) to
-              add. Default (1,) adds a 1-period lag only.
-        frequency_config: optional dict from get_frequency_config(); if omitted, resolved from
-              time_series_frequency (defaulting to "weekly").
-        time_series_frequency: optional "weekly"/"daily" string, used only if frequency_config
-              is not supplied.
-
-    Returns:
-        model_df_lagged: model_df sorted by date, with additional `{control}_lag{lag}` columns,
-                          and rows with missing lag values dropped.
-        model_feature_cols: list of feature columns to use as model predictors — the original
-                             same-period control columns followed by the lagged columns.
-        lagged_feature_map: dict mapping each base control region to its same-period and lagged
-                             feature column names, e.g.
-                             {"Region A": {"current": "Region A", "lag1": "Region A_lag1"}, ...}
-                             or, for a 7-day lag, {"lag7": "Region A_lag7"}.
-        lag_drop_metadata: dict with rows_before_lag_drop, rows_after_lag_drop,
-                             rows_dropped_due_to_lag, and lag_drop_pct — lets callers warn when
-                             a meaningful share of rows were lost because exact lag dates were
-                             missing (most relevant for the daily calendar-day lag).
-    """
-    if frequency_config is None:
-        frequency_config = get_frequency_config(
-            time_series_frequency if time_series_frequency is not None else "weekly"
-        )
-    period_days = 1 if frequency_config.get("frequency") == "daily" else 7
-
-    model_df_lagged = model_df.sort_values("date").reset_index(drop=True).copy()
-    model_df_lagged["date"] = pd.to_datetime(model_df_lagged["date"])
-    rows_before_lag_drop = len(model_df_lagged)
-    lagged_feature_map = {}
-    lag_cols_all = []
-
-    # True calendar lag: match each row to the control value from exactly
-    # `lag * period_days` days earlier, via a date-keyed merge rather than a row-position
-    # shift. Missing/excluded source dates produce NaN (dropped below), never a
-    # borrowed/nearest value.
-    for c in control_list:
-        lagged_feature_map[c] = {"current": c}
-        for lag in lags:
-            lag_col = f"{c}_lag{lag}"
-            lookup = model_df_lagged[["date", c]].copy()
-            lookup["date"] = lookup["date"] + pd.Timedelta(days=int(lag) * period_days)
-            lookup = lookup.rename(columns={c: lag_col})
-            model_df_lagged = model_df_lagged.merge(lookup, on="date", how="left")
-            lagged_feature_map[c][f"lag{lag}"] = lag_col
-            lag_cols_all.append(lag_col)
-
-    model_df_lagged = model_df_lagged.dropna(subset=lag_cols_all).reset_index(drop=True)
-    rows_after_lag_drop = len(model_df_lagged)
-    rows_dropped_due_to_lag = rows_before_lag_drop - rows_after_lag_drop
-    lag_drop_pct = (
-        (rows_dropped_due_to_lag / rows_before_lag_drop * 100.0)
-        if rows_before_lag_drop > 0
-        else 0.0
-    )
-
-    model_feature_cols = list(control_list) + lag_cols_all
-    lag_drop_metadata = {
-        "rows_before_lag_drop": rows_before_lag_drop,
-        "rows_after_lag_drop": rows_after_lag_drop,
-        "rows_dropped_due_to_lag": rows_dropped_due_to_lag,
-        "lag_drop_pct": lag_drop_pct,
-    }
-    return model_df_lagged, model_feature_cols, lagged_feature_map, lag_drop_metadata
-
-
-def durbin_watson_stat(residuals):
-    """
-    Durbin-Watson statistic for residual autocorrelation.
-    ~2.0 = little autocorrelation; <2 suggests positive autocorrelation; >2 suggests negative autocorrelation.
-    Implemented manually (no statsmodels dependency).
-    """
-    residuals = np.asarray(residuals, dtype=float)
-    residuals = residuals[np.isfinite(residuals)]
-    if len(residuals) < 3:
-        return np.nan
-    denom = np.sum(residuals**2)
-    if denom == 0:
-        return np.nan
-    return np.sum(np.diff(residuals) ** 2) / denom
-
-
-def _is_valid_number(v):
-    """
-    Shared validity check used by the classify_* traffic-light helpers below.
-    Returns False for None, NaN, pd.NA, and +/-inf; True for any other finite number.
-    """
-    if v is None:
-        return False
-    try:
-        if pd.isna(v):
-            return False
-    except (TypeError, ValueError):
-        return False
-    try:
-        if not np.isfinite(float(v)):
-            return False
-    except (TypeError, ValueError):
-        return False
-    return True
-
-
-def classify_autocorrelation_risk(dw_stat):
-    """
-    Short traffic-light interpretation of the Durbin-Watson statistic, for the method
-    comparison table row "Autocorrelation Risk".
-
-    Durbin-Watson is an established statistic for first-order residual autocorrelation.
-    These red/amber/green bands are practical interpretation bands for this app, not
-    formal critical-value tests.
-
-    Durbin-Watson is approximately:
-    - 2.0 = little/no first-order autocorrelation
-    - below 2.0 = positive autocorrelation
-    - above 2.0 = negative autocorrelation
-
-    Practical diagnostic bands used here (not formal critical-value tests):
-    - 🟢 Low autocorrelation risk: 1.5 to 2.5
-    - 🟡 Moderate autocorrelation risk: 1.2 to <1.5, or >2.5 to 2.8
-    - 🔴 High autocorrelation risk: <1.2 or >2.8
-    """
-    if not _is_valid_number(dw_stat):
-        return "⚪ Insufficient data"
-
-    dw = float(dw_stat)
-    _t = CONFIG["reliability_thresholds"]
-    _low_lo, _low_hi = _t["durbin_watson_low_band"]
-    _mod_lo_lo, _mod_lo_hi = _t["durbin_watson_moderate_low_band"]
-    _mod_hi_lo, _mod_hi_hi = _t["durbin_watson_moderate_high_band"]
-
-    if _low_lo <= dw <= _low_hi:
-        return "🟢 Low"
-    elif (_mod_lo_lo <= dw < _mod_lo_hi) or (_mod_hi_lo < dw <= _mod_hi_hi):
-        return "🟡 Moderate"
-    else:
-        return "🔴 High"
-
-
-def calculate_overfit_gap(pre_smape, rolling_smape):
-    """
-    Overfitting Gap: how much worse the model performs out-of-sample (rolling-origin)
-    versus in-sample (pre-period fit). A large positive gap means the model looks good
-    on the data it was fitted on, but performs worse when predicting unseen historical
-    periods. This is a validation diagnostic, not a formal statistical test. Returns
-    np.nan if either input is missing, not finite (covers None, np.nan, pd.NA, and
-    +/-inf), or not convertible to a float.
-
-    (Internal variable/function names still use "overfit_gap" for backward
-    compatibility; all user-facing labels use "Overfitting Gap".)
-    """
-    if not _is_valid_number(pre_smape) or not _is_valid_number(rolling_smape):
-        return np.nan
-    return float(rolling_smape) - float(pre_smape)
-
-
-def classify_overfitting_risk(overfit_gap_smape):
-    """
-    Short traffic-light rating for the method comparison table row "Overfitting Risk".
-
-    Uses ONLY the Overfitting Gap (rolling-origin sMAPE minus pre-period sMAPE) — it
-    does not mix in autocorrelation, bias, rolling sMAPE, or placebo results, which
-    each have their own dedicated row. Answers only: does the model look meaningfully
-    worse on held-out historical validation than on the fitted pre-period?
-    """
-    if not _is_valid_number(overfit_gap_smape):
-        return "⚪ Insufficient data"
-    _t = CONFIG["reliability_thresholds"]["overfitting_gap_pp"]
-    if overfit_gap_smape <= _t["low_max"]:
-        return "🟢 Low"
-    if overfit_gap_smape <= _t["moderate_max"]:
-        return "🟡 Moderate"
-    return "🔴 High"
-
-
-def classify_rolling_validation_error(rolling_smape_mean):
-    """
-    Short traffic-light rating for the method comparison table row "Rolling Validation
-    Error", based ONLY on rolling_smape_mean (absolute out-of-sample sMAPE).
-
-    High rolling validation error means the model is inaccurate out-of-sample — this is
-    not the same thing as overfitting (a model can be inaccurate everywhere, in-sample
-    and out-of-sample alike, without a large gap between the two).
-    """
-    if not _is_valid_number(rolling_smape_mean):
-        return "⚪ Insufficient data"
-    _t = CONFIG["reliability_thresholds"]["rolling_smape_pct"]
-    if rolling_smape_mean <= _t["low_max"]:
-        return "🟢 Low"
-    if rolling_smape_mean <= _t["moderate_max"]:
-        return "🟡 Moderate"
-    return "🔴 High"
-
-
-def classify_rolling_bias_risk(rolling_bias_pct):
-    """
-    Short traffic-light rating for the method comparison table row "Rolling Bias Risk",
-    based ONLY on rolling_bias_pct — whether the model systematically over- or
-    under-predicts in held-out historical periods.
-    """
-    if not _is_valid_number(rolling_bias_pct):
-        return "⚪ Insufficient data"
-    _t = CONFIG["reliability_thresholds"]["rolling_bias_pct"]
-    if abs(rolling_bias_pct) <= _t["low_max"]:
-        return "🟢 Low"
-    if abs(rolling_bias_pct) <= _t["moderate_max"]:
-        return "🟡 Moderate"
-    return "🔴 High"
-
-
-def combine_reliability_ratings(component_ratings):
-    """
-    Derives the overall "Counterfactual Confidence" rating (🟢 High confidence /
-    🟡 Moderate confidence / 🔴 Low confidence / ⚪ Insufficient data) from a dict of
-    component traffic-light ratings, e.g.:
-        {
-            "rolling validation error": "🟢 Low",
-            "overfitting gap": "🟡 Moderate",
-            "rolling bias": "🟢 Low",
-            "autocorrelation risk": "⚪ Insufficient data",
-        }
-
-    This is a PRIORITY-ORDERED CASCADE, not a flat "worst of four" vote. The four
-    checks are not equally important: Rolling Validation Error is the primary
-    model-quality check (can this model predict unseen historical data at all?), so it
-    is evaluated first and acts as a gate. Overfitting, Autocorrelation Risk, and
-    Rolling Bias are evaluated next, in that priority order, as secondary checks that
-    can still hold confidence back but cannot single-handedly force it all the way down
-    to low the way Rolling Validation Error can.
-
-    Rule (first match wins):
-    1. Rolling Validation Error 🔴  -> "🔴 Low confidence", regardless of the other
-       three checks. A model that can't predict held-out history is not rescued by
-       good residual diagnostics or low bias.
-    2. Rolling Validation Error ⚪ (unavailable) -> "⚪ Insufficient data", regardless
-       of the other three. The primary check must be available to make any judgement.
-    3. Rolling Validation Error 🟡  -> "🟡 Moderate confidence". A moderate primary
-       check caps confidence at moderate; it cannot reach high, and the secondary
-       checks cannot pull it below moderate either.
-    4. Rolling Validation Error 🟢, but Overfitting, Autocorrelation Risk, or Rolling
-       Bias is 🔴 or 🟡 -> "🟡 Moderate confidence". A secondary check that is flagged
-       is not ignored, but on its own it caps confidence at moderate rather than
-       forcing it to low.
-    5. Rolling Validation Error 🟢 and all available secondary checks are 🟢
-       -> "🟢 High confidence".
-
-    (Internal variable/function names still use "reliability" for backward
-    compatibility; all user-facing labels use "Counterfactual Confidence".)
-    """
-
-    def _sym(key):
-        v = component_ratings.get(key)
-        return v.split(" ", 1)[0] if v else "⚪"
-
-    validation_error_sym = _sym("rolling validation error")
-    secondary_syms = [
-        _sym("overfitting gap"),
-        _sym("autocorrelation risk"),
-        _sym("rolling bias"),
-    ]
-
-    # ---- 1-2: Rolling Validation Error is the primary gate. ----
-    if validation_error_sym == "🔴":
-        return "🔴 Low confidence"
-    if validation_error_sym == "⚪":
-        return "⚪ Insufficient data"
-
-    # ---- 3: A moderate primary check caps confidence at moderate. ----
-    if validation_error_sym == "🟡":
-        return "🟡 Moderate confidence"
-
-    # ---- 4-5: Rolling Validation Error is 🟢 — secondary checks can only hold
-    # confidence back to moderate, never force it down to low. ----
-    available_secondary = [s for s in secondary_syms if s != "⚪"]
-    if any(s in ("🔴", "🟡") for s in available_secondary):
-        return "🟡 Moderate confidence"
-    return "🟢 High confidence"
-
-
-def get_reliability_drivers(component_ratings):
-    """
-    Produces a short, human-readable explanation of what drove the Counterfactual
-    Confidence rating, e.g. "Moderate overfitting gap" or
-    "High rolling validation error + moderate rolling bias".
-
-    component_ratings: dict of {short driver label: traffic-light string}, using the
-    same short driver labels as combine_reliability_ratings() (e.g. "rolling
-    validation error", "overfitting gap", "rolling bias", "autocorrelation risk").
-
-    Lists ALL flagged issues, not just the one(s) that determined the overall rating —
-    e.g. if Rolling Validation Error is high (which alone forces low confidence) and
-    Rolling Bias is also moderate, both are shown. Issues are listed in the same
-    priority order used by combine_reliability_ratings(): rolling validation error,
-    overfitting gap, autocorrelation risk, then rolling bias.
-    """
-    overall = combine_reliability_ratings(component_ratings)
-    symbols = {k: v.split(" ", 1)[0] for k, v in component_ratings.items() if v}
-
-    if overall == "🟢 High confidence":
-        return "Validation checks passed"
-    if overall == "⚪ Insufficient data":
-        return "Insufficient validation data to assess confidence"
-
-    priority_order = [
-        "rolling validation error",
-        "overfitting gap",
-        "autocorrelation risk",
-        "rolling bias",
-    ]
-    reds = [f"high {k}" for k in priority_order if symbols.get(k) == "🔴"]
-    yellows = [f"moderate {k}" for k in priority_order if symbols.get(k) == "🟡"]
-    drivers = reds + yellows
-    fallback = (
-        "validation checks failed" if overall == "🔴 Low confidence" else "elevated validation risk"
-    )
-    detail = " + ".join(drivers) if drivers else fallback
-    return f"{detail[:1].upper()}{detail[1:]}"
-
-
-# ------------------------------------------------------------
-# Frequency-awareness helpers (weekly vs daily time series)
-# ------------------------------------------------------------
-def get_frequency_config(time_series_frequency):
-    """
-    Return a dict of frequency-aware settings for the given time series frequency.
-
-    Args:
-        time_series_frequency: "weekly" or "daily". Anything else falls back to "weekly".
-
-    Returns:
-        dict with keys:
-            frequency: "weekly" or "daily"
-            period_label_singular: "week" or "day"
-            period_label_plural: "weeks" or "days"
-            lag_periods: 1 for weekly, 7 for daily
-            lag_label: "1-week" or "7-day"
-            default_min_training_periods: sensible default minimum training window
-            default_validation_horizon_periods: sensible default rolling-origin / placebo horizon
-            default_placebo_length_periods: sensible default placebo/test window length
-    """
-    if time_series_frequency == "daily":
-        return {
-            "frequency": "daily",
-            "period_label_singular": "day",
-            "period_label_plural": "days",
-            "lag_periods": 7,
-            "lag_label": "7-day",
-            "default_min_training_periods": 84,
-            "default_validation_horizon_periods": 28,
-            "default_placebo_length_periods": 28,
-        }
-    # Default / fallback: weekly (preserves existing behaviour)
-    return {
-        "frequency": "weekly",
-        "period_label_singular": "week",
-        "period_label_plural": "weeks",
-        "lag_periods": 1,
-        "lag_label": "1-week",
-        "default_min_training_periods": 13,
-        "default_validation_horizon_periods": 4,
-        "default_placebo_length_periods": 4,
-    }
-
-
-def infer_time_series_frequency(dates):
-    """
-    Infer whether a collection of dates looks daily or weekly, based on the median
-    difference between sorted unique dates. This is a suggestion/warning helper only
-    and should never be used to silently override a user's explicit selection.
-
-    Args:
-        dates: iterable of date-like values.
-
-    Returns:
-        "daily" if the median gap is close to 1 day, "weekly" if close to 7 days,
-        otherwise "unknown". Returns "unknown" if fewer than 2 unique dates are given.
-    """
-    try:
-        unique_dates = sorted(pd.to_datetime(pd.Series(list(dates))).dropna().unique())
-    except Exception:
-        return "unknown"
-    if len(unique_dates) < 2:
-        return "unknown"
-    diffs = np.diff(np.array(unique_dates)).astype("timedelta64[D]").astype(int)
-    if len(diffs) == 0:
-        return "unknown"
-    median_diff = float(np.median(diffs))
-    if 0.5 <= median_diff <= 1.5:
-        return "daily"
-    elif 5.5 <= median_diff <= 8.5:
-        return "weekly"
-    else:
-        return "unknown"
-
-
 def format_range(lower, upper, suffix="", decimals=1):
     """
     Consistently formats a (lower, upper) range as "{lower}{suffix} to {upper}{suffix}",
@@ -864,20 +389,6 @@ def build_chart_data_xlsx(sheets):
                 writer, sheet_name="Data", index=False
             )
     return buffer.getvalue()
-
-
-def smape(actual, pred):
-    denom = (np.abs(actual) + np.abs(pred)) / 2
-    denom = np.where(denom == 0, 1e-8, denom)
-    return np.mean(np.abs(actual - pred) / denom) * 100
-
-
-def compute_metrics(actual, pred):
-    corr = np.corrcoef(actual, pred)[0, 1]
-    r2 = r2_score(actual, pred)
-    s = smape(actual, pred)
-    rmse = np.sqrt(mean_squared_error(actual, pred))
-    return corr, r2, s, rmse
 
 
 def summarize_mcmc_diagnostics(summary_df, n_divergences=None, n_total_draws=None):
@@ -1116,579 +627,6 @@ def calculate_structural_prior_sigmas(
     return prior_sigmas.astype(float), df_out
 
 
-def safe_tscv(n_splits, n_periods):
-    """Return TimeSeriesSplit only if enough periods (weeks or days), else None (caller must handle)."""
-    if n_periods < 6:
-        return None
-    n = min(n_splits, n_periods // 3)
-    return TimeSeriesSplit(n_splits=max(2, n))
-
-
-def build_regularized_model(method_name, n_periods, n_splits_pref=5, fixed_alpha=1.0):
-    """
-    Builds an ElasticNet-family model for the given method_name ("enet" or "lasso").
-
-    Uses TimeSeriesSplit-based ElasticNetCV whenever there are enough pre-period
-    observations to support safe, leakage-free time-series cross-validation.
-
-    If there are too few periods for TimeSeriesSplit, this does NOT fall back to
-    regular K-fold CV — standard K-fold (even with shuffle=False) can still let
-    later time points influence hyperparameter choices for earlier ones, which is
-    a form of leakage for time-series data. It also does NOT treat a fixed-alpha
-    fallback as equivalent to cross-validated model selection: alpha=1.0 is an
-    arbitrary modelling choice, not a statistically defensible substitute for CV.
-    Instead, it returns a fixed-alpha ElasticNet explicitly labelled as exploratory
-    — callers must exclude exploratory-fallback results from Counterfactual
-    Reliability and from rolling-origin validation metrics used for method
-    comparison.
-
-    Returns: (model, cv_status, used_cv) where cv_status is a short human-readable
-    string describing whether TimeSeriesSplit CV or the exploratory fallback was
-    used, and used_cv is True only when TimeSeriesSplit-based ElasticNetCV was used.
-    """
-    tscv = safe_tscv(n_splits_pref, n_periods)
-    if tscv is not None:
-        if method_name == "enet":
-            model = ElasticNetCV(
-                l1_ratio=[0.1, 0.3, 0.5, 0.7, 0.9, 0.95],
-                alphas=np.logspace(-4, 4, 50),
-                cv=tscv,
-                max_iter=10000,
-                random_state=42,
-            )
-        else:  # lasso
-            model = ElasticNetCV(
-                l1_ratio=1, alphas=np.logspace(-4, 4, 100), cv=tscv, max_iter=10000, random_state=42
-            )
-        return (
-            model,
-            "TimeSeriesSplit cross-validation used to select regularisation strength.",
-            True,
-        )
-    # Too few pre-period observations for safe, leakage-free time-series CV. This
-    # fixed-alpha fit is exploratory only: it is NOT statistically equivalent to
-    # cross-validated model selection and must not feed Counterfactual Confidence
-    # or rolling-origin validation metrics used for method comparison.
-    l1_ratio = 1.0 if method_name == "lasso" else 0.5
-    model = ElasticNet(alpha=fixed_alpha, l1_ratio=l1_ratio, max_iter=10000, random_state=42)
-    cv_status = (
-        f"Insufficient history for TimeSeriesSplit; exploratory fixed-alpha ElasticNet "
-        f"fit (alpha={fixed_alpha}, l1_ratio={l1_ratio}) used instead — NOT cross-validated "
-        f"and excluded from Counterfactual Confidence."
-    )
-    return model, cv_status, False
-
-
-@st.cache_data(ttl=CONFIG["cache_ttl"], show_spinner=False)
-def rolling_origin_validation(
-    X,
-    y,
-    frequency_config,
-    horizon=4,
-    min_training_periods=13,
-    dates=None,
-    n_splits=5,
-    model_type="enet",
-    min_training_weeks=None,
-):
-    """
-    Expanding-window rolling origin validation.
-    Trains on rows 0:start_idx, tests on rows start_idx:start_idx+horizon.
-    Starts at min_training_periods, continues while a full horizon window is available.
-    horizon and min_training_periods are row counts (periods), matching the granularity of the
-    underlying data — weeks for weekly data, days for daily data.
-
-    Uses TimeSeriesSplit-based cross-validation to tune model regularisation whenever a fold's
-    training window has enough periods. Never falls back to regular K-fold CV, since that can leak
-    future information into hyperparameter tuning for time-series data. Folds with too little
-    training history for TimeSeriesSplit instead fit an exploratory fixed-alpha model (see
-    build_regularized_model()) — those folds are excluded from rolling_smape_mean and
-    rolling_rmse_mean, since a fixed-alpha fit is not statistically equivalent to a
-    cross-validated result and should not be presented as such.
-
-    Returns: fold_df (DataFrame, includes a "used_cv_fallback" column per fold), rolling_smape_mean
-    (float, computed only from TimeSeriesSplit-CV folds — np.nan if none are available),
-    rolling_rmse_mean (float, same basis), cv_status (str describing CV vs. fallback usage across
-    folds). For backwards compatibility, also accepts n_splits (ignored — all valid folds are used)
-    and min_training_weeks as an alias for min_training_periods.
-
-    Cached via @st.cache_data: this is pure and deterministic (all models use a fixed
-    random_state) with no Streamlit UI calls inside, and it's the most expensive step in
-    validation (fits up to ~20 folds). It's re-invoked on every Streamlit rerun once
-    validation_triggered is set, including reruns caused by unrelated widget changes
-    elsewhere on the page, so caching avoids redundant model fitting on identical inputs.
-    """
-    if min_training_weeks is not None:
-        min_training_periods = min_training_weeks
-    n = len(y)
-    empty_df = pd.DataFrame(
-        columns=[
-            "fold_number",
-            "training_periods",
-            "forecast_horizon_periods",
-            "training_weeks",
-            "forecast_horizon_weeks",
-            "smape",
-            "rmse",
-            "bias",
-            "bias_pct",
-            "uplift_error",
-            "uplift_error_pct",
-            "train_start_date",
-            "train_end_date",
-            "test_start_date",
-            "test_end_date",
-            "used_cv_fallback",
-        ]
-    )
-    if n < min_training_periods + horizon:
-        return (
-            empty_df,
-            np.nan,
-            np.nan,
-            "No folds: insufficient pre-period history for rolling-origin validation.",
-            0,
-        )
-
-    _dates_valid = dates is not None and len(dates) == n
-    folds = []
-    fold_num = 0
-    windows_skipped_non_contiguous = 0
-    _all_starts = list(range(min_training_periods, n - horizon + 1))
-    if len(_all_starts) > 20:
-        _step = len(_all_starts) // 20
-        _all_starts = _all_starts[::_step][:20]
-    for start_idx in _all_starts:
-        # A held-out window must represent `horizon` CONSECUTIVE calendar periods —
-        # skip it if an excluded/missing date left a gap inside it (training history
-        # before the window may still contain earlier gaps).
-        if _dates_valid and not _dates_are_contiguous(
-            dates[start_idx : start_idx + horizon], frequency_config
-        ):
-            windows_skipped_non_contiguous += 1
-            continue
-
-        train_X, train_y = X[:start_idx], y[:start_idx]
-        test_X, test_y = X[start_idx : start_idx + horizon], y[start_idx : start_idx + horizon]
-        if len(test_y) < horizon:
-            continue
-
-        scaler = StandardScaler()
-        train_X_scaled = scaler.fit_transform(train_X)
-        test_X_scaled = scaler.transform(test_X)
-
-        if model_type not in ("enet", "lasso"):
-            return (
-                empty_df,
-                np.nan,
-                np.nan,
-                "Unsupported model_type",
-                windows_skipped_non_contiguous,
-            )
-
-        model, fold_cv_status, fold_used_cv = build_regularized_model(
-            model_type, len(train_y), n_splits_pref=3
-        )
-        used_cv_fallback = not fold_used_cv
-
-        model.fit(train_X_scaled, train_y)
-        pred = model.predict(test_X_scaled)
-
-        fold_smape = smape(test_y, pred)
-        fold_rmse = np.sqrt(mean_squared_error(test_y, pred))
-        bias = float(np.mean(pred - test_y))
-        mean_actual = float(np.mean(test_y))
-        bias_pct = bias / mean_actual * 100 if mean_actual != 0 else np.nan
-        uplift_error = float(test_y.sum() - pred.sum())
-        pred_sum = float(pred.sum())
-        uplift_error_pct = uplift_error / pred_sum * 100 if pred_sum != 0 else np.nan
-
-        # Date labels (optional)
-        if dates is not None and len(dates) == n:
-            train_start_date = dates[0]
-            train_end_date = dates[start_idx - 1]
-            test_start_date = dates[start_idx]
-            test_end_date = dates[min(start_idx + horizon - 1, n - 1)]
-        else:
-            train_start_date = train_end_date = test_start_date = test_end_date = None
-
-        fold_num += 1
-        folds.append(
-            {
-                "fold_number": fold_num,
-                "training_periods": start_idx,
-                "forecast_horizon_periods": horizon,
-                # Backward-compatible aliases
-                "training_weeks": start_idx,
-                "forecast_horizon_weeks": horizon,
-                "smape": fold_smape,
-                "rmse": fold_rmse,
-                "bias": bias,
-                "bias_pct": bias_pct,
-                "uplift_error": uplift_error,
-                "uplift_error_pct": uplift_error_pct,
-                "train_start_date": train_start_date,
-                "train_end_date": train_end_date,
-                "test_start_date": test_start_date,
-                "test_end_date": test_end_date,
-                "used_cv_fallback": used_cv_fallback,
-            }
-        )
-
-    if not folds:
-        return (
-            empty_df,
-            np.nan,
-            np.nan,
-            "No folds: insufficient pre-period history for rolling-origin validation.",
-            windows_skipped_non_contiguous,
-        )
-
-    fold_df = pd.DataFrame(folds)
-    n_fallback_folds = int(fold_df["used_cv_fallback"].sum())
-    n_cv_folds = len(fold_df) - n_fallback_folds
-
-    # Exploratory fixed-alpha folds are NOT statistically equivalent to cross-validated
-    # results and must not feed the headline rolling-origin metrics used for method
-    # comparison or Counterfactual Confidence. Only TimeSeriesSplit-CV folds count here.
-    cv_fold_df = fold_df[~fold_df["used_cv_fallback"]]
-    if n_cv_folds > 0:
-        rolling_smape_mean = float(cv_fold_df["smape"].mean())
-        rolling_rmse_mean = float(cv_fold_df["rmse"].mean())
-    else:
-        rolling_smape_mean = np.nan
-        rolling_rmse_mean = np.nan
-
-    if n_fallback_folds == 0:
-        cv_status = (
-            "TimeSeriesSplit cross-validation used to select regularisation strength in all folds."
-        )
-    elif n_cv_folds == 0:
-        cv_status = (
-            "Insufficient history for TimeSeriesSplit in all folds; only exploratory fixed-alpha "
-            "fits were available, so rolling-origin validation metrics are Insufficient data "
-            "rather than being based on a non-cross-validated fallback."
-        )
-    else:
-        cv_status = (
-            f"Insufficient history for TimeSeriesSplit in {n_fallback_folds} of {len(fold_df)} folds; "
-            f"those folds were exploratory fixed-alpha fits and are excluded from rolling-origin "
-            f"validation metrics (based on the remaining {n_cv_folds} TimeSeriesSplit-CV fold(s))."
-        )
-    return fold_df, rolling_smape_mean, rolling_rmse_mean, cv_status, windows_skipped_non_contiguous
-
-
-def classify_validation_method(fold_df, main_model_used_cv_fallback):
-    """
-    Short, stakeholder-facing summary of whether rolling-origin validation for a
-    method used proper leakage-free TimeSeriesSplit cross-validation, only partially
-    did so, or wasn't possible at all due to insufficient pre-period history.
-
-    - 🟢 "Rolling-origin validation": every rolling-origin fold used TimeSeriesSplit CV.
-    - 🟡 "Partial rolling-origin validation": some folds were excluded because they
-      didn't have enough training history for TimeSeriesSplit (those folds used the
-      exploratory fixed-alpha fallback and are excluded from the headline metrics).
-    - ⚪ "Insufficient validation history": no valid TimeSeriesSplit-CV fold is
-      available at all (including when the main pre-period model itself couldn't run
-      TimeSeriesSplit).
-
-    Full technical detail (exact fold counts, fallback settings) is available
-    separately via the "cv_status" string, shown in the "Technical validation
-    details" expander rather than in the headline table.
-    """
-    if (
-        main_model_used_cv_fallback
-        or fold_df is None
-        or fold_df.empty
-        or "used_cv_fallback" not in fold_df.columns
-    ):
-        return "⚪ Insufficient validation history"
-    n_fallback_folds = int(fold_df["used_cv_fallback"].sum())
-    if n_fallback_folds == 0:
-        return "🟢 Rolling-origin validation"
-    elif n_fallback_folds < len(fold_df):
-        return "🟡 Partial rolling-origin validation"
-    else:
-        return "⚪ Insufficient validation history"
-
-
-def _warn_on_row_loss(matrix_diagnostics):
-    """
-    Row-loss diagnostics: warns the user when a meaningful share of rows were dropped
-    from the model matrix because the test series or a selected control had missing KPI
-    values for some dates. Extracted from run_validation_method() so the row-loss check
-    reads as a single, named step rather than being interleaved with matrix construction.
-    """
-    pct_dropped = matrix_diagnostics.get("pct_rows_dropped", 0.0)
-    rows_dropped = matrix_diagnostics.get("rows_dropped", 0)
-    rows_before = matrix_diagnostics.get("rows_before_dropna", 0)
-    if rows_dropped > 0 and pct_dropped > 20:
-        st.error(
-            f"{rows_dropped} of {rows_before} rows ({pct_dropped:.1f}%) were removed because "
-            "the test series or at least one selected control had missing KPI values. "
-            "This is a large share of the data and the validation result may be unreliable. "
-            f"Controls with missing values: {', '.join(matrix_diagnostics.get('control_columns_with_missing', [])) or 'none'}."
-        )
-    elif rows_dropped > 0 and pct_dropped > 10:
-        st.warning(
-            f"{rows_dropped} of {rows_before} rows ({pct_dropped:.1f}%) were removed because "
-            "the test series or at least one selected control had missing KPI values. "
-            "This can affect validation reliability. "
-            f"Controls with missing values: {', '.join(matrix_diagnostics.get('control_columns_with_missing', [])) or 'none'}."
-        )
-
-
-def _warn_on_cv_fallback(method_name, main_model_used_cv_fallback, fold_df):
-    """
-    Surfaces a warning whenever TimeSeriesSplit cross-validation couldn't be used —
-    either for the main pre-period model (no confidence rating at all) or for some
-    rolling-origin folds (those folds are excluded from the headline validation metrics
-    and Counterfactual Confidence). See build_regularized_model() and
-    rolling_origin_validation() for why this app never falls back to regular KFold.
-    """
-    if main_model_used_cv_fallback:
-        st.warning(
-            f"⚠️ There is insufficient pre-period history to run leakage-free TimeSeriesSplit "
-            f"cross-validation for **{method_name}**. This method has not been given a "
-            "confidence rating. Add more pre-period data or reduce the validation window."
-        )
-    elif not fold_df.empty and bool(fold_df["used_cv_fallback"].any()):
-        n_fallback_folds = int(fold_df["used_cv_fallback"].sum())
-        st.warning(
-            f"⚠️ {n_fallback_folds} of {len(fold_df)} rolling-origin folds for **{method_name}** "
-            "did not have enough training history for leakage-free TimeSeriesSplit cross-validation. "
-            "Those folds were fit exploratorily with a fixed regularisation strength and are excluded "
-            "from the rolling-origin validation metrics and Counterfactual Confidence shown here."
-        )
-
-
-def _summarize_rolling_origin_folds(fold_df):
-    """
-    Additional rolling-origin summary stats (P90 sMAPE, mean bias, uplift-error interval)
-    computed only from TimeSeriesSplit-CV folds — exploratory fixed-alpha fallback folds
-    are excluded, since Rolling-Origin Bias (%) directly feeds Counterfactual Confidence
-    and should not be contaminated by a non-cross-validated fit.
-
-    Returns a dict with keys: rolling_smape_p90, rolling_bias_pct_mean,
-    rolling_uplift_error_pct_median, rolling_uplift_error_pct_lower,
-    rolling_uplift_error_pct_upper. All np.nan if no CV folds are available.
-    """
-    if not fold_df.empty:
-        cv_fold_df = fold_df[~fold_df["used_cv_fallback"]]
-    else:
-        cv_fold_df = fold_df
-
-    if cv_fold_df.empty:
-        return {
-            "rolling_smape_p90": np.nan,
-            "rolling_bias_pct_mean": np.nan,
-            "rolling_uplift_error_pct_median": np.nan,
-            "rolling_uplift_error_pct_lower": np.nan,
-            "rolling_uplift_error_pct_upper": np.nan,
-        }
-
-    valid_uplift_errs = cv_fold_df["uplift_error_pct"].dropna()
-    if len(valid_uplift_errs) >= 2:
-        lower, upper = np.percentile(valid_uplift_errs, [2.5, 97.5])
-        lower, upper = float(lower), float(upper)
-    else:
-        lower = upper = np.nan
-
-    return {
-        "rolling_smape_p90": float(np.percentile(cv_fold_df["smape"], 90)),
-        "rolling_bias_pct_mean": float(cv_fold_df["bias_pct"].mean()),
-        "rolling_uplift_error_pct_median": float(np.median(valid_uplift_errs))
-        if len(valid_uplift_errs)
-        else np.nan,
-        "rolling_uplift_error_pct_lower": lower,
-        "rolling_uplift_error_pct_upper": upper,
-    }
-
-
-def _dates_are_contiguous(dates, frequency_config):
-    """True if consecutive dates are each exactly one period apart (7 calendar days for
-    weekly, 1 day for daily) with no gap. Used to keep rolling-origin/placebo evaluation
-    windows from silently spanning an excluded or missing date as though the series were
-    unbroken."""
-    period_days = 1 if frequency_config.get("frequency") == "daily" else 7
-    step = pd.Timedelta(days=period_days)
-    ts = pd.to_datetime(pd.Series(list(dates)))
-    if len(ts) < 2:
-        return True
-    return bool((ts.diff().dropna() == step).all())
-
-
-def _run_placebo_windows(
-    model_pre,
-    model_feature_cols,
-    dates_pre,
-    min_training_periods,
-    placebo_len,
-    method_name,
-    frequency_config,
-    max_windows=40,
-):
-    """
-    Simulates a fake intervention across all available historical pre-period windows
-    ("placebo testing"): repeatedly trains on an expanding window and evaluates on the
-    next placebo_len periods, using the same model type as the main fit. Never falls
-    back to regular KFold for time-series data — see build_regularized_model().
-
-    A candidate window is skipped (not just under-filled) when its placebo_len test
-    dates aren't calendar-contiguous at the given frequency — this happens when an
-    outage date was excluded from the pre-period, and prevents a window from silently
-    treating "period before the gap" and "period after the gap" as adjacent. Training
-    history before the window may still contain earlier gaps; only the evaluation
-    window itself must be unbroken.
-
-    Subsamples to at most `max_windows` evenly-spaced windows when more are available,
-    to keep runtime bounded (each window fits a fresh model). This caps the resolution
-    of any empirical p-value / percentile rank derived from the result at roughly
-    1/max_windows — e.g. with the default of 40, the smallest nonzero one-sided p-value
-    achievable is ~0.025, not smaller. Callers that report a p-value alongside the
-    "Placebo Windows" count should treat "p < 0.05" claims from very small window counts
-    with this precision limit in mind.
-
-    Returns (placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses,
-    window_diagnostics) — the first four are parallel lists, one entry per USED placebo
-    window (all empty if placebo_len is missing/non-positive or there isn't enough
-    pre-period history for even one window). window_diagnostics is a dict with
-    windows_available, windows_used, and windows_skipped_non_contiguous.
-    """
-    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses = [], [], [], []
-    window_diagnostics = {
-        "windows_available": 0,
-        "windows_used": 0,
-        "windows_skipped_non_contiguous": 0,
-    }
-
-    if placebo_len is None or placebo_len <= 0:
-        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
-
-    n_pre = len(dates_pre)
-    if n_pre < placebo_len + min_training_periods:
-        return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
-
-    all_starts = list(range(min_training_periods, n_pre - placebo_len + 1))
-    if len(all_starts) > max_windows:
-        step = len(all_starts) // max_windows
-        all_starts = all_starts[::step][:max_windows]
-    window_diagnostics["windows_available"] = len(all_starts)
-
-    for start_idx in all_starts:
-        train_dates = dates_pre[:start_idx]
-        test_dates = dates_pre[start_idx : start_idx + placebo_len]
-        if not _dates_are_contiguous(test_dates, frequency_config):
-            window_diagnostics["windows_skipped_non_contiguous"] += 1
-            continue
-        # Slice from the already-lagged pre-period matrix — this preserves lagged
-        # features computed from the full continuous series rather than recomputing
-        # (and losing the first row of) each placebo window independently.
-        m_train = model_pre[
-            (model_pre["date"] >= train_dates[0]) & (model_pre["date"] <= train_dates[-1])
-        ]
-        m_test = model_pre[
-            (model_pre["date"] >= test_dates[0]) & (model_pre["date"] <= test_dates[-1])
-        ]
-        if len(m_train) < min_training_periods or m_test.empty:
-            continue
-
-        X_tr = m_train[model_feature_cols].values
-        y_tr = m_train["test_kpi"].values
-        X_te = m_test[model_feature_cols].values
-        y_te = m_test["test_kpi"].values
-        scaler_p = StandardScaler()
-        X_tr_scaled = scaler_p.fit_transform(X_tr)
-        model_p, _placebo_cv_status, _placebo_used_cv = build_regularized_model(
-            method_name, len(y_tr), n_splits_pref=3
-        )
-        model_p.fit(X_tr_scaled, y_tr)
-        pred_p = model_p.predict(scaler_p.transform(X_te))
-
-        uplift_p = y_te.sum() - pred_p.sum()
-        placebos.append(uplift_p)
-        pred_sum = pred_p.sum()
-        placebo_uplift_pcts.append((uplift_p / pred_sum) * 100 if pred_sum != 0 else np.nan)
-        placebo_smapes.append(smape(y_te, pred_p))
-        placebo_rmses.append(np.sqrt(mean_squared_error(y_te, pred_p)))
-        window_diagnostics["windows_used"] += 1
-
-    return placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, window_diagnostics
-
-
-def _summarize_placebo_results(
-    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, uplift
-):
-    """
-    Summarizes the raw per-window placebo lists from _run_placebo_windows() into the
-    metrics shown in the "Placebo Testing" and "Observed Uplift vs Placebos" table
-    sections: the median/95% range of placebo uplift, placebo forecast error, and (if
-    an observed uplift is available) how extreme that observed uplift is relative to
-    the placebo distribution (percentile rank, one/two-sided p-values, z-score).
-
-    Returns a dict; all values are np.nan if there are no placebo windows.
-    """
-    if not placebos:
-        return {
-            "median_uplift": np.nan,
-            "p2_5": np.nan,
-            "p97_5": np.nan,
-            "median_placebo_smape": np.nan,
-            "p95_placebo_smape": np.nan,
-            "median_placebo_rmse": np.nan,
-            "p95_placebo_rmse": np.nan,
-            "median_placebo_uplift_pct": np.nan,
-            "p2_5_pct": np.nan,
-            "p97_5_pct": np.nan,
-            "percentile_rank": np.nan,
-            "p_one_sided": np.nan,
-            "p_two_sided": np.nan,
-            "z_score": np.nan,
-        }
-
-    median_uplift = np.median(placebos)
-    p2_5, p97_5 = np.percentile(placebos, [2.5, 97.5])
-    median_placebo_smape = np.median(placebo_smapes) if placebo_smapes else np.nan
-    p95_placebo_smape = np.percentile(placebo_smapes, 95) if placebo_smapes else np.nan
-    median_placebo_rmse = np.median(placebo_rmses) if placebo_rmses else np.nan
-    p95_placebo_rmse = np.percentile(placebo_rmses, 95) if placebo_rmses else np.nan
-    median_placebo_uplift_pct = np.median(placebo_uplift_pcts) if placebo_uplift_pcts else np.nan
-    p2_5_pct, p97_5_pct = (
-        np.percentile(placebo_uplift_pcts, [2.5, 97.5]) if placebo_uplift_pcts else (np.nan, np.nan)
-    )
-
-    if uplift is not None:
-        percentile_rank = np.mean(np.array(placebos) < uplift) * 100
-        p_one_sided = np.mean(np.array(placebos) >= uplift)
-        mean_placebo = np.mean(placebos)
-        p_two_sided = np.mean(
-            np.abs(np.array(placebos) - mean_placebo) >= np.abs(uplift - mean_placebo)
-        )
-        z_score = (uplift - mean_placebo) / (np.std(placebos) + 1e-12)
-    else:
-        percentile_rank = p_one_sided = p_two_sided = z_score = np.nan
-
-    return {
-        "median_uplift": median_uplift,
-        "p2_5": p2_5,
-        "p97_5": p97_5,
-        "median_placebo_smape": median_placebo_smape,
-        "p95_placebo_smape": p95_placebo_smape,
-        "median_placebo_rmse": median_placebo_rmse,
-        "p95_placebo_rmse": p95_placebo_rmse,
-        "median_placebo_uplift_pct": median_placebo_uplift_pct,
-        "p2_5_pct": p2_5_pct,
-        "p97_5_pct": p97_5_pct,
-        "percentile_rank": percentile_rank,
-        "p_one_sided": p_one_sided,
-        "p_two_sided": p_two_sided,
-        "z_score": z_score,
-    }
-
-
-# ------------------------------------------------------------
-# AR(1) predictive-residual simulation (Bayesian TBR intervals)
-# ------------------------------------------------------------
 def ar1_gap_steps(last_date, next_date, frequency_config):
     """Number of AR(1) steps between two dates for the given frequency (min 1).
 
@@ -1762,6 +700,11 @@ def simulate_ar1_predictive_residuals(
 # ------------------------------------------------------------
 # Power analysis / Minimum Detectable Effect (Design mode)
 # ------------------------------------------------------------
+# LEGACY: compute_power_curve() and find_mde() are the exploratory empirical
+# detectability preview based on placebo uplift percentages. They are NOT the
+# approved prospective Power Analysis and Test Sizing product (see
+# docs/product/power-analysis-and-test-sizing.md). Do not extend them into the
+# new power feature without an approved methodology decision.
 def compute_power_curve(placebo_uplift_pcts, effect_grid_pct=None, alpha=0.05):
     """
     Empirical power curve for a geo-test design, derived from the placebo
@@ -1822,6 +765,36 @@ def find_mde(power_df, column, target_power=0.8):
     return float(hit["effect_pct"].iloc[0]) if not hit.empty else None
 
 
+@st.cache_data(ttl=CONFIG["cache_ttl"], show_spinner=False)
+def _cached_rolling_origin_validation(
+    X,
+    y,
+    frequency_config,
+    horizon=4,
+    min_training_periods=13,
+    dates=None,
+    n_splits=5,
+    model_type="enet",
+    min_training_weeks=None,
+):
+    """st.cache_data wrapper over the pure rolling-origin validation.
+
+    Preserves the previous caching behaviour (avoid refitting up to ~20 folds on
+    every Streamlit rerun); the pure function itself is cache-free.
+    """
+    return rolling_origin_validation(
+        X,
+        y,
+        frequency_config,
+        horizon=horizon,
+        min_training_periods=min_training_periods,
+        dates=dates,
+        n_splits=n_splits,
+        model_type=model_type,
+        min_training_weeks=min_training_weeks,
+    )
+
+
 def run_validation_method(
     agg_df,
     control_list,
@@ -1843,443 +816,59 @@ def run_validation_method(
     min_training_periods=None,
     frequency_config=None,
 ):
-    """
-    Run a single validation method (ElasticNet or LASSO).
-    Returns a dict with metrics, predictions, placebo results, etc.
+    """Thin Streamlit adapter over the pure validation service.
 
-    If include_lagged_controls is True, each control also gets a lagged feature
-    (`{control}_lag{lag_periods}`), and the model is fit on the expanded feature set. A
-    combined pre + test/post model matrix is built first and lags are applied once, so the
-    first test/post period can still use the immediately preceding period's control KPI as
-    its lag. lag_periods is 1 for weekly data (a 1-week lag) and 7 for daily data (a 7-day
-    lag, chosen so the lag compares the same day of week).
-
-    time_series_frequency ("weekly" or "daily") — or an explicit frequency_config dict from
-    get_frequency_config() — determines the lag length, and (together with
-    placebo_length_periods / min_training_periods, which take precedence over the legacy
-    placebo_length_weeks / min_training_weeks arguments) the rolling-origin and placebo
-    window sizing. placebo_length_weeks and min_training_weeks are retained as backward-
-    compatible aliases and are treated as period counts matching the selected frequency.
+    Renders the pure service's structured warnings/errors/blockers (see
+    geotestlab.validation.service.run_validation) and returns the legacy result
+    dict so the existing UI keeps working unchanged. Returns None when there is
+    insufficient pre-period data to fit any model.
     """
     if frequency_config is None:
         frequency_config = get_frequency_config(time_series_frequency)
-    lag_periods = frequency_config["lag_periods"]
-
-    # Resolve period-based args, preferring the new *_periods names but falling back to the
-    # legacy *_weeks names so existing callers keep working unchanged.
     if placebo_length_periods is None:
         placebo_length_periods = placebo_length_weeks
     if min_training_periods is None:
         min_training_periods = min_training_weeks if min_training_weeks is not None else 13
 
-    pre_start = pd.to_datetime(pre_start)
-    pre_end = pd.to_datetime(pre_end)
-    if test_start is not None:
-        test_start = pd.to_datetime(test_start)
-    if test_end is not None:
-        test_end = pd.to_datetime(test_end)
-    if use_post and post_start is not None:
-        post_start = pd.to_datetime(post_start)
-    if use_post and post_end is not None:
-        post_end = pd.to_datetime(post_end)
-
-    # ---- Build a combined pre + test/post model matrix so lagged features apply once,
-    # across the full continuous date range, before splitting back out by period. ----
-    combined_end_candidates = [pre_end]
-    if test_end is not None:
-        combined_end_candidates.append(test_end)
-    if use_post and post_end is not None:
-        combined_end_candidates.append(post_end)
-    combined_end = max(combined_end_candidates)
-
-    full_mask = (agg_df["date"] >= pre_start) & (agg_df["date"] <= combined_end)
-    model_full, matrix_diagnostics = build_model_matrix(
-        agg_df[full_mask], control_list, test_regions
-    )
-
-    # ---- Row-loss diagnostics: warn when a meaningful share of rows were dropped because
-    # the test series or a selected control had missing KPI values for some dates. ----
-    _warn_on_row_loss(matrix_diagnostics)
-
-    if include_lagged_controls:
-        model_full, model_feature_cols, lagged_feature_map, lag_drop_metadata = (
-            add_lagged_control_features(
-                model_full, control_list, lags=(lag_periods,), frequency_config=frequency_config
-            )
-        )
-    else:
-        model_feature_cols = list(control_list)
-        lagged_feature_map = {}
-        lag_drop_metadata = None
-
-    # ---- Defensive check: model_feature_cols must all be present in model_full. If any
-    # are missing, it means one or more control regions never matched any row in the
-    # uploaded KPI data (usually because the aggregation level/region names in that file
-    # don't line up with the ones used for Region Matching) — surface a clear error
-    # instead of letting a raw KeyError propagate from the .values lookup below. ----
-    _missing_feature_cols = [c for c in model_feature_cols if c not in model_full.columns]
-    if _missing_feature_cols:
-        st.error(
-            "Could not build the validation model — the following control region(s) have no "
-            "matching data in the uploaded KPI file: "
-            + ", ".join(map(str, _missing_feature_cols))
-            + ". This usually means the aggregation level or region names in this file don't match "
-            "the ones used in Region Matching."
-        )
-        st.stop()
-
-    # Pre-period data (sliced from the combined, already-lagged matrix)
-    pre_mask = (model_full["date"] >= pre_start) & (model_full["date"] <= pre_end)
-    model_pre = model_full[pre_mask].sort_values("date").reset_index(drop=True)
-    if len(model_pre) < 6:
-        return None
-    X_pre = model_pre[model_feature_cols].values
-    y_pre = model_pre["test_kpi"].values
-    dates_pre = model_pre["date"].tolist()
-    scaler = StandardScaler()
-    X_pre_scaled = scaler.fit_transform(X_pre)
-
-    # Determine model type from method_name
-    # method_name is either "enet" or "lasso"
-    model, main_model_cv_status, main_model_used_cv = build_regularized_model(
-        method_name, len(y_pre), n_splits_pref=5
-    )
-    main_model_used_cv_fallback = not main_model_used_cv
-    model.fit(X_pre_scaled, y_pre)
-    y_pred_pre = model.predict(X_pre_scaled)
-    corr, r2, s, rmse = compute_metrics(y_pre, y_pred_pre)
-
-    # ---- Durbin-Watson statistic on pre-period residuals (autocorrelation diagnostic) ----
-    pre_residuals = y_pre - y_pred_pre
-    dw_stat = durbin_watson_stat(pre_residuals)
-
-    # Rolling-origin validation (using the same model type)
-    # horizon matches placebo_length_periods so both use the same window length
-    cv_horizon = (
-        placebo_length_periods
-        if placebo_length_periods is not None
-        else frequency_config["default_validation_horizon_periods"]
-    )
-    (
-        fold_df,
-        rolling_smape_mean,
-        rolling_rmse_mean,
-        rolling_cv_status,
-        rolling_windows_skipped_non_contiguous,
-    ) = rolling_origin_validation(
-        X_pre,
-        y_pre,
-        frequency_config,
-        horizon=cv_horizon,
+    config = ValidationConfig(
+        method_name=method_name,
+        compute_uplift=compute_uplift,
+        placebo_length_periods=placebo_length_periods,
         min_training_periods=min_training_periods,
-        dates=dates_pre,
-        model_type=method_name,
+        include_lagged_controls=include_lagged_controls,
+        time_series_frequency=time_series_frequency,
+        frequency_config=frequency_config,
     )
-    # Backwards-compat aliases
-    holdout_smape_mean = rolling_smape_mean
-    holdout_rmse_mean = rolling_rmse_mean
-
-    # ---- CV status (item 6): never falls back to regular KFold for time-series data, and
-    # never treats a fixed-alpha fallback as equivalent to cross-validated model selection.
-    # If there isn't enough pre-period history for TimeSeriesSplit at all, rolling-origin
-    # folds are all exploratory fixed-alpha fits too (a fold's training window can never be
-    # longer than the full pre-period), so rolling_smape_mean/rolling_rmse_mean above are
-    # already np.nan in that case, and Counterfactual Confidence naturally reports
-    # "Insufficient data" rather than a misleading rating based on an arbitrary alpha.
-    cv_status = f"Main model: {main_model_cv_status} Rolling-origin folds: {rolling_cv_status}"
-    _warn_on_cv_fallback(method_name, main_model_used_cv_fallback, fold_df)
-
-    # Additional rolling-origin summary stats. These also exclude exploratory fixed-alpha
-    # folds, since Rolling-Origin Bias (%) directly feeds Counterfactual Confidence and
-    # should not be contaminated by a non-cross-validated fit.
-    _rolling_summary = _summarize_rolling_origin_folds(fold_df)
-    rolling_smape_p90 = _rolling_summary["rolling_smape_p90"]
-    rolling_bias_pct_mean = _rolling_summary["rolling_bias_pct_mean"]
-    rolling_uplift_error_pct_median = _rolling_summary["rolling_uplift_error_pct_median"]
-    rolling_uplift_error_pct_lower = _rolling_summary["rolling_uplift_error_pct_lower"]
-    rolling_uplift_error_pct_upper = _rolling_summary["rolling_uplift_error_pct_upper"]
-
-    # ---- Overfitting Gap (part 1): compare pre-period (in-sample) fit against
-    # rolling-origin (out-of-sample) accuracy. A large gap means the model looks good
-    # in-sample but doesn't hold up out-of-sample when predicting held-out historical
-    # periods. This is a validation diagnostic, not a formal statistical test.
-    # n_pre_periods is used for pre-period observation counts; the reliability
-    # classification is finalised further below, once rolling-origin validation
-    # and residual diagnostics are known. ----
-    n_pre_periods = len(y_pre)
-    overfit_gap_smape = calculate_overfit_gap(s, rolling_smape_mean)
-    overfit_gap_rmse = calculate_overfit_gap(rmse, rolling_rmse_mean)
-
-    # Test period predictions (if uplift required)
-    model_test = None
-    if compute_uplift and test_start is not None and test_end is not None:
-        test_mask = (model_full["date"] >= test_start) & (model_full["date"] <= test_end)
-        model_test = model_full[test_mask].sort_values("date").reset_index(drop=True)
-        if not model_test.empty:
-            X_test = model_test[model_feature_cols].values
-            X_test_scaled = scaler.transform(X_test)
-            y_test_actual = model_test["test_kpi"].values
-            y_pred_test = model.predict(X_test_scaled)
-            uplift = y_test_actual.sum() - y_pred_test.sum()
-            uplift_pct = (uplift / y_pred_test.sum()) * 100 if y_pred_test.sum() != 0 else np.nan
-            dates_test = model_test["date"].tolist()
-        else:
-            uplift = uplift_pct = None
-            y_test_actual = y_pred_test = None
-            dates_test = []
-    else:
-        uplift = uplift_pct = None
-        y_test_actual = y_pred_test = None
-        dates_test = []
-
-    # Post-period (if any)
-    if use_post and post_start is not None and post_end is not None:
-        post_mask = (model_full["date"] >= post_start) & (model_full["date"] <= post_end)
-        model_post = model_full[post_mask].sort_values("date").reset_index(drop=True)
-        if not model_post.empty:
-            X_post = model_post[model_feature_cols].values
-            X_post_scaled = scaler.transform(X_post)
-            y_post_pred = model.predict(X_post_scaled)
-            y_post_actual = model_post["test_kpi"].values
-            dates_post = model_post["date"].tolist()
-        else:
-            y_post_pred = y_post_actual = dates_post = None
-    else:
-        y_post_pred = y_post_actual = dates_post = None
-
-    # Negative predictions flags
-    neg_pre = any(y_pred_pre < 0)
-    neg_test = any(y_pred_test < 0) if y_pred_test is not None else False
-    neg_post = any(y_post_pred < 0) if y_post_pred is not None else False
-
-    # ---------- Placebo generation (using the same model type) ----------
-    if compute_uplift:
-        if placebo_length_periods is not None:
-            placebo_len = placebo_length_periods
-        elif model_test is not None and not model_test.empty:
-            # Prefer actual observed rows in the test period over a calendar-based guess —
-            # this is robust to missing dates and correct for both weekly and daily data.
-            placebo_len = len(model_test)
-        elif test_start is not None and test_end is not None:
-            if frequency_config["frequency"] == "daily":
-                placebo_len = max(1, (test_end - test_start).days + 1)
-            else:
-                placebo_len = max(1, (test_end - test_start).days // 7 + 1)
-        else:
-            placebo_len = None
-    else:
-        placebo_len = None
-
-    placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, placebo_window_diagnostics = (
-        _run_placebo_windows(
-            model_pre,
-            model_feature_cols,
-            dates_pre,
-            min_training_periods,
-            placebo_len,
-            method_name,
-            frequency_config,
-        )
+    periods = ValidationPeriods(
+        pre_start=pd.to_datetime(pre_start),
+        pre_end=pd.to_datetime(pre_end),
+        test_start=pd.to_datetime(test_start) if test_start is not None else None,
+        test_end=pd.to_datetime(test_end) if test_end is not None else None,
+        use_post=use_post,
+        post_start=pd.to_datetime(post_start) if use_post and post_start is not None else None,
+        post_end=pd.to_datetime(post_end) if use_post and post_end is not None else None,
     )
-
-    # Placebo summary statistics (use the same functions)
-    _placebo_summary = _summarize_placebo_results(
-        placebos, placebo_uplift_pcts, placebo_smapes, placebo_rmses, uplift
+    result = run_validation(
+        agg_df,
+        control_list,
+        test_regions,
+        config,
+        periods,
+        rolling_origin_fn=_cached_rolling_origin_validation,
     )
-    median_uplift = _placebo_summary["median_uplift"]
-    p2_5 = _placebo_summary["p2_5"]
-    p97_5 = _placebo_summary["p97_5"]
-    median_placebo_smape = _placebo_summary["median_placebo_smape"]
-    p95_placebo_smape = _placebo_summary["p95_placebo_smape"]
-    median_placebo_rmse = _placebo_summary["median_placebo_rmse"]
-    p95_placebo_rmse = _placebo_summary["p95_placebo_rmse"]
-    median_placebo_uplift_pct = _placebo_summary["median_placebo_uplift_pct"]
-    p2_5_pct = _placebo_summary["p2_5_pct"]
-    p97_5_pct = _placebo_summary["p97_5_pct"]
-    percentile_rank = _placebo_summary["percentile_rank"]
-    p_one_sided = _placebo_summary["p_one_sided"]
-    p_two_sided = _placebo_summary["p_two_sided"]
-    z_score = _placebo_summary["z_score"]
-
-    # Report selected (non-zero coefficient) features for BOTH LASSO and Elastic Net.
-    # Elastic Net can also shrink coefficients to ~0 depending on l1_ratio, so it should
-    # not be reported as "all candidates selected" by default.
-    # With lagged controls, coefficients are over model_feature_cols (same-period + lag
-    # terms), so each feature is mapped back to its base region and term type. The lag
-    # recogniser is dynamic (any `{control}_lag{N}` feature, not just `_lag1`) so it works
-    # for both the weekly 1-period lag and the daily 7-period lag.
-    coefs = model.coef_
-    coeff_threshold = 1e-6
-    coeff_dict = dict(zip(model_feature_cols, coefs))
-    same_period_label = "Same day" if frequency_config["frequency"] == "daily" else "Same week"
-
-    def _feature_to_region_and_term(feat):
-        for c in control_list:
-            if feat == c:
-                return c, same_period_label
-            lag_match = re.match(rf"^{re.escape(c)}_lag(\d+)$", feat)
-            if lag_match:
-                lag_n = int(lag_match.group(1))
-                period_word = "day" if frequency_config["frequency"] == "daily" else "week"
-                period_word_plural = period_word + "s" if lag_n != 1 else period_word
-                return c, f"Lag {lag_n} {period_word_plural}"
-        return feat, same_period_label
-
-    selected_df_rows = []
-    for feat in model_feature_cols:
-        base_region, term_type = _feature_to_region_and_term(feat)
-        coeff_val = float(coeff_dict[feat])
-        selected_df_rows.append(
-            {
-                "Feature": feat,
-                "Base Region": base_region,
-                "Term Type": term_type,
-                "Coefficient": round(coeff_val, 4),
-                "Non-zero Coefficient": abs(coeff_val) > coeff_threshold,
-            }
-        )
-    selected_df = pd.DataFrame(
-        selected_df_rows,
-        columns=["Feature", "Base Region", "Term Type", "Coefficient", "Non-zero Coefficient"],
-    )
-
-    selected_features = [row["Feature"] for row in selected_df_rows if row["Non-zero Coefficient"]]
-    # selected_regions stays a clean list of base regions used (a region counts as
-    # selected if either its same-period or lagged term has a non-zero coefficient).
-    selected = sorted(
-        {row["Base Region"] for row in selected_df_rows if row["Non-zero Coefficient"]},
-        key=lambda r: control_list.index(r) if r in control_list else 0,
-    )
-    n_candidates = len(control_list)
-    n_selected = len(selected)
-    n_removed = n_candidates - n_selected
-    alpha = getattr(model, "alpha_", np.nan)
-
-    # ---- Selected feature count, kept for transparency in the selected-controls
-    # table only. It is NOT used as a reliability diagnostic — reliability is based
-    # solely on the four component checks below (rolling validation error,
-    # overfitting gap, rolling bias, autocorrelation risk). ----
-    n_selected_features = len(selected_features)
-
-    # ---- Component traffic-light ratings. Each is based on exactly one diagnostic —
-    # see classify_rolling_validation_error(), classify_overfitting_risk(),
-    # classify_rolling_bias_risk(), and classify_autocorrelation_risk(). ----
-    rolling_validation_error_risk = classify_rolling_validation_error(rolling_smape_mean)
-    overfitting_risk = classify_overfitting_risk(overfit_gap_smape)
-    rolling_bias_risk = classify_rolling_bias_risk(rolling_bias_pct_mean)
-    autocorrelation_risk = classify_autocorrelation_risk(dw_stat)
-    validation_method_label = classify_validation_method(fold_df, main_model_used_cv_fallback)
-
-    # ---- Counterfactual Confidence: a priority-ordered cascade led by Rolling
-    # Validation Error, with a short explanation of every check that contributed. See
-    # combine_reliability_ratings() for the full cascade logic. ----
-    reliability_components = {
-        "rolling validation error": rolling_validation_error_risk,
-        "overfitting gap": overfitting_risk,
-        "autocorrelation risk": autocorrelation_risk,
-        "rolling bias": rolling_bias_risk,
-    }
-    counterfactual_reliability = combine_reliability_ratings(reliability_components)
-    reliability_drivers = get_reliability_drivers(reliability_components)
-
-    return {
-        "dates_pre": dates_pre,
-        "y_pre": y_pre,
-        "y_pred_pre": y_pred_pre,
-        "corr": corr,
-        "r2": r2,
-        "smape": s,
-        "rmse": rmse,
-        "dw_stat": dw_stat,
-        "autocorrelation_risk": autocorrelation_risk,
-        "pre_residuals": pre_residuals,
-        "holdout_smape_mean": holdout_smape_mean,
-        "holdout_rmse_mean": holdout_rmse_mean,
-        "rolling_origin_folds": fold_df,
-        "rolling_smape_mean": rolling_smape_mean,
-        "rolling_windows_skipped_non_contiguous": rolling_windows_skipped_non_contiguous,
-        "rolling_rmse_mean": rolling_rmse_mean,
-        "rolling_smape_p90": rolling_smape_p90,
-        "rolling_bias_pct_mean": rolling_bias_pct_mean,
-        "rolling_validation_error_risk": rolling_validation_error_risk,
-        "rolling_bias_risk": rolling_bias_risk,
-        "rolling_uplift_error_pct_median": rolling_uplift_error_pct_median,
-        "rolling_uplift_error_pct_lower": rolling_uplift_error_pct_lower,
-        "rolling_uplift_error_pct_upper": rolling_uplift_error_pct_upper,
-        "overfit_gap_smape": overfit_gap_smape,
-        "overfit_gap_rmse": overfit_gap_rmse,
-        "overfitting_risk": overfitting_risk,
-        "validation_method_label": validation_method_label,
-        "cv_status": cv_status,
-        "used_cv_fallback": main_model_used_cv_fallback
-        or (not fold_df.empty and bool(fold_df["used_cv_fallback"].any())),
-        "main_model_used_cv_fallback": main_model_used_cv_fallback,
-        "n_selected_features": n_selected_features,
-        "n_pre_periods": n_pre_periods,
-        "n_pre_weeks": n_pre_periods,  # backward-compatible alias
-        "counterfactual_reliability": counterfactual_reliability,
-        "reliability_drivers": reliability_drivers,
-        "min_training_periods": min_training_periods,
-        "min_training_weeks": min_training_periods,  # backward-compatible alias
-        "validation_window_periods": cv_horizon,
-        "validation_window_weeks": cv_horizon,  # backward-compatible alias
-        "time_series_frequency": frequency_config["frequency"],
-        "frequency_config": frequency_config,
-        "lag_periods": lag_periods,
-        "lag_label": frequency_config["lag_label"],
-        "lag_drop_metadata": lag_drop_metadata,
-        "matrix_diagnostics": matrix_diagnostics,
-        "placebo_length_periods": placebo_len,
-        "uplift": uplift,
-        "uplift_pct": uplift_pct,
-        "dates_test": dates_test,
-        "y_test_actual": y_test_actual,
-        "y_pred_test": y_pred_test,
-        "dates_post": dates_post,
-        "y_post_actual": y_post_actual,
-        "y_post_pred": y_post_pred,
-        "placebos": placebos,
-        "placebo_uplift_pcts": placebo_uplift_pcts,
-        "placebo_smapes": placebo_smapes,
-        "placebo_rmses": placebo_rmses,
-        "placebo_window_diagnostics": placebo_window_diagnostics,
-        "median_placebo_uplift": median_uplift,
-        "placebo_range_lower": p2_5,
-        "placebo_range_upper": p97_5,
-        "median_placebo_uplift_pct": median_placebo_uplift_pct,
-        "placebo_range_lower_pct": p2_5_pct,
-        "placebo_range_upper_pct": p97_5_pct,
-        "placebo_percentile_rank": percentile_rank,
-        "placebo_p_value_one_sided": p_one_sided,
-        "placebo_p_value_two_sided": p_two_sided,
-        "placebo_z_score": z_score,
-        "median_placebo_smape": median_placebo_smape,
-        "p95_placebo_smape": p95_placebo_smape,
-        "median_placebo_rmse": median_placebo_rmse,
-        "p95_placebo_rmse": p95_placebo_rmse,
-        "neg_pre": neg_pre,
-        "neg_test": neg_test,
-        "neg_post": neg_post,
-        "selected_regions": selected,
-        "selected_features": selected_features,
-        "selected_df": selected_df,
-        "n_candidates": n_candidates,
-        "n_selected": n_selected,
-        "n_removed": n_removed,
-        "alpha": alpha,
-        "control_list": control_list,
-        "base_control_list": control_list,
-        "include_lagged_controls": include_lagged_controls,
-        "model_feature_cols": model_feature_cols,
-        "lagged_feature_map": lagged_feature_map,
-        "scaler": scaler,
-        "model": model,
-    }
+    for w in result.warnings:
+        st.warning(w)
+    for e in result.errors:
+        st.error(e)
+    if result.blockers:
+        for b in result.blockers:
+            st.error(b)
+        st.stop()
+    if result.insufficient_pre_period:
+        return None
+    return result.to_dict()
 
 
-# ------------------------------------------------------------
-# Text and column helpers
-# ------------------------------------------------------------
 def repair_text_value(v):
     if not isinstance(v, str):
         return v
@@ -6954,7 +5543,7 @@ with tab4:
                                         "use_structural_priors", False
                                     )
                                     _use_ar1 = st.session_state.get("use_ar1_errors", True)
-                                    if _use_ar1 and not _dates_are_contiguous(
+                                    if _use_ar1 and not dates_are_contiguous(
                                         pre_dates, bayes_freq_config
                                     ):
                                         st.error(
