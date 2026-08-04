@@ -4,8 +4,8 @@
 >
 > **Documentation map**
 > - `PROJECT_DOCUMENTATION.md` documents the **current implementation** as reviewed at the baseline commit above.
-> - `docs/product/01_GeoTestLab_Core_Product_Requirements_Document.md` defines the **target product** (the canonical product PRD).
-> - `docs/product/03_PRD_Traceability_and_Delivery_Roadmap.md` reconciles **current and planned work** and traces it to the PRD.
+> - `docs/product/PRD.md` defines the **target product** (the canonical product PRD).
+> - `docs/product/roadmap-and-traceability.md` reconciles **current and planned work** and traces it to the PRD.
 >
 > The app's on-screen title currently carries a temporary "TEST " prefix ("TEST GeoTestLab") — remove before any production release.
 
@@ -531,9 +531,8 @@ includes:
 
 Validation, placebo, Counterfactual Confidence and Bayesian logic remain
 substantially in `geotestmatch.py` and are scheduled for later
-behaviour-preserving extraction; see
-`docs/product/03_PRD_Traceability_and_Delivery_Roadmap.md` for the
-reconciliation of current and planned work.
+behaviour-preserving extraction; see `docs/product/roadmap-and-traceability.md`
+for the reconciliation of current and planned work.
 
 ### 5.1 Code structure (top-to-bottom)
 

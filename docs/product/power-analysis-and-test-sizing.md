@@ -1,7 +1,7 @@
 # GeoTestLab Power Analysis and Test Sizing Specification
 
 **Document type:** Functional and methodological product specification  
-**Parent document:** `01_GeoTestLab_Core_Product_Requirements_Document.md`  
+**Parent document:** `PRD.md`  
 **Version:** 1.0  
 **Status:** Draft for methodology approval  
 **Date:** 4 August 2026  

@@ -1,7 +1,7 @@
 # GeoTestLab PRD Traceability and Delivery Roadmap
 
 **Document type:** Scope reconciliation, requirement traceability and delivery plan  
-**Parent document:** `01_GeoTestLab_Core_Product_Requirements_Document.md`  
+**Parent document:** `PRD.md`  
 **Version:** 1.0  
 **Date:** 4 August 2026  
 
@@ -102,9 +102,9 @@ The maintainability PRD was accurate as a proposed programme on 27 July 2026, bu
 ```text
 docs/
   product/
-    01_GeoTestLab_Core_Product_Requirements_Document.md
-    02_Power_Analysis_and_Test_Sizing_Specification.md
-    03_PRD_Traceability_and_Delivery_Roadmap.md
+    PRD.md
+    power-analysis-and-test-sizing.md
+    roadmap-and-traceability.md
     decisions/
       ADR-001-power-method.md
       ADR-002-placebo-finite-sample-policy.md
