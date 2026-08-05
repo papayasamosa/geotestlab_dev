@@ -7,6 +7,8 @@ power, media delivery, effect plausibility, observed impact.
 
 from __future__ import annotations
 
+import math
+
 # The six product-level workflow stages, in workflow order.
 STAGE_KEYS = (
     "match_quality",
@@ -53,3 +55,40 @@ def default_stage_status() -> dict:
 
 def stage_label(stage: str) -> str:
     return STAGE_LABELS.get(stage, stage)
+
+
+def observed_impact_completed(validation_results) -> bool:
+    """Whether a completed-test evaluation genuinely completes observed impact.
+
+    ``observed_impact`` is NEVER completed merely because selected test periods
+    exist. Completion requires ALL of:
+
+    - completed-test Evaluate mode (``mode == "Evaluate"``);
+    - a completed evaluation service run (results present);
+    - at least one successful method result;
+    - a finite observed-impact value (``uplift_pct``) inside that method result;
+    - no blocker for that method.
+
+    Design-mode validation, failed evaluations and selected dates without a
+    model never complete the stage.
+    """
+    if not validation_results:
+        return False
+    if validation_results.get("mode") != "Evaluate":
+        return False
+    results = validation_results.get("results") or {}
+    for _method, res in results.items():
+        if not isinstance(res, dict):
+            continue
+        if res.get("blockers"):
+            continue
+        uplift_pct = res.get("uplift_pct")
+        if uplift_pct is None:
+            continue
+        try:
+            value = float(uplift_pct)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            return True
+    return False

@@ -15,10 +15,14 @@ The pure experiment-core logic is covered separately in
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pandas as pd
+import pytest
 from streamlit.testing.v1 import AppTest
 
+from geotestlab.experiment import material_file_identity
 from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 from tests.fixtures.live_scenarios import (
     CONTROL_REGIONS,
@@ -30,6 +34,34 @@ from tests.fixtures.live_scenarios import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APP_PATH = str(REPO_ROOT / "geotestmatch.py")
+
+# Minimal geography workbook regions (must include the match fixture regions).
+GEO_REGIONS = [
+    "Aberdeen City",
+    "Aberdeenshire",
+    "Angus",
+    "Argyll and Bute",
+    "Clackmannanshire",
+    "Dundee City",
+    "East Ayrshire",
+]
+
+
+def _write_geo_workbook(path: Path, regions, market="UK", population_delta=0) -> Path:
+    """Write a minimal geography workbook with one market sheet (same columns as
+    the bundled standardised file: Adobe Reference List, Local Authority Area,
+    Population, Population Density)."""
+    df = pd.DataFrame(
+        {
+            "Adobe Reference List": [f"ADB-{i:02d}" for i in range(len(regions))],
+            "Local Authority Area": regions,
+            "Population": [100_000 - i * 5_000 + population_delta for i in range(len(regions))],
+            "Population Density": [400.0 + i * 12.5 for i in range(len(regions))],
+        }
+    )
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name=market, index=False)
+    return path
 
 
 def _new_app() -> AppTest:
@@ -183,3 +215,142 @@ def test_validation_completes_observed_impact_without_bayesian(tmp_path: Path):
     assert rec["content_digests"]["source_bytes"].startswith("sha256:")
     # No Bayesian inputs/result were required.
     assert app.session_state["experiment_bayesian_inputs"] is None
+
+
+def test_design_validation_does_not_complete_observed_impact(tmp_path: Path):
+    """Design-mode validation (no completed-test evaluation) must NOT complete
+    observed_impact — merely having selected test periods is insufficient."""
+    kpi_path = write_correlated_kpi_xlsx(
+        tmp_path / "weekly_design.xlsx",
+        TEST_REGION,
+        CONTROL_REGIONS,
+        metric_name="Sales",
+        n_periods=60,
+        freq="W",
+        seed=123,
+    )
+    app = _new_app()
+    _manual_match(app)
+    _upload_kpi(app, "design", "weekly_design.xlsx", kpi_path.read_bytes())
+    run_btn = [b for b in app.button if b.key == "design_run_button"][0]
+    run_btn.click()
+    app.run(timeout=RUN_TIMEOUT)
+
+    rec = _record(app)
+    # counterfactual_validation is completed; observed_impact is NOT.
+    assert rec["stage_status"]["counterfactual_validation"] == "completed"
+    assert rec["stage_status"]["observed_impact"] in ("not_started", "planned")
+    assert "observed_impact" not in rec["stage_fingerprints"]
+
+
+def test_freeze_stores_executed_matching_and_quality_fields(tmp_path: Path):
+    """The frozen design's matching section is reconstructed from the executed
+    match snapshot (method, mode, setup, regions, controls, exclusions, weights,
+    share, market, geography level, KPI pattern) and the data-quality summary
+    stores separate fields (never a collapsed uncovered_regions)."""
+    kpi_path = write_correlated_kpi_xlsx(
+        tmp_path / "weekly_freeze.xlsx",
+        TEST_REGION,
+        CONTROL_REGIONS,
+        metric_name="Sales",
+        n_periods=60,
+        freq="W",
+        seed=123,
+    )
+    app = _new_app()
+    _manual_match(app)
+    _upload_kpi(app, "design", "weekly_freeze.xlsx", kpi_path.read_bytes())
+    run_btn = [b for b in app.button if b.key == "design_run_button"][0]
+    run_btn.click()
+    app.run(timeout=RUN_TIMEOUT)
+    freeze_btn = [b for b in app.button if b.key == "freeze_design_btn"][0]
+    freeze_btn.click()
+    app.run(timeout=RUN_TIMEOUT)
+
+    frozen = _record(app)["frozen_versions"][0]
+    matching = frozen["design"]["matching"]
+    # executed-match values (from match_run_snapshot, not live widget state)
+    assert matching["matching_method"] == "Structural"
+    assert matching["match_mode"] == "User Selected"
+    assert matching["setup_mode"] == "Manual Selection (Pick Both)"
+    assert matching["executed_strategy"] == "User Selected"
+    assert matching["market"] == "UK"
+    assert matching["geography_level"] == "Local Authority Area"
+    assert TEST_REGION in matching["test_regions"]
+    assert set(matching["selected_controls"]) == set(CONTROL_REGIONS)
+    assert matching["feature_weights"]
+    # region exclusions are separate from time-period exclusions
+    assert set(matching["region_exclusions"]) == {
+        "global",
+        "test_only",
+        "control_only",
+        "forced_test_regions",
+        "forced_control_eligibility",
+    }
+    assert set(matching["time_period_exclusions"]) == {"manual", "tracking_outages"}
+    assert matching["test_share"]["target"] == 25
+    assert matching["test_share"]["achieved"] is not None
+
+    # data-quality summary stores separate fields
+    dq = frozen["design"]["data_quality_summary"]
+    assert "uncovered_regions" not in dq
+    assert "raw_regions" in dq
+    assert "unmapped_raw_regions" in dq
+    assert "covered_regions" in dq
+    assert "required_regions_without_coverage" in dq
+    assert "blocking_errors" in dq
+    assert "warnings" in dq
+    assert TEST_REGION in dq["covered_regions"]
+
+    # tool version is derived from package metadata (never hardcoded 0.3.0)
+    from geotestlab.experiment import tool_version
+
+    assert frozen["design"]["tool_version"] == tool_version()
+
+
+def test_same_content_workbook_replacement_invalidates_caches(tmp_path, monkeypatch):
+    """The workbook/market-sheet caches are keyed on material file identity
+    (path + size + mtime_ns), so replacing the bundled workbook invalidates the
+    market sheet even when the path is unchanged. (Exact same-size detection is
+    covered by the pure material_file_identity test.)"""
+    wb_path = _write_geo_workbook(tmp_path / "geo.xlsx", GEO_REGIONS)
+    monkeypatch.setenv("GEOTESTLAB_DATA_PATH", str(wb_path))
+    kpi_path = write_correlated_kpi_xlsx(
+        tmp_path / "weekly_cache.xlsx",
+        TEST_REGION,
+        CONTROL_REGIONS,
+        metric_name="Sales",
+        n_periods=60,
+        freq="W",
+        seed=123,
+    )
+    app = _new_app()
+    _manual_match(app)
+    _upload_kpi(app, "design", "weekly_cache.xlsx", kpi_path.read_bytes())
+    run_btn = [b for b in app.button if b.key == "design_run_button"][0]
+    run_btn.click()
+    app.run(timeout=RUN_TIMEOUT)
+
+    wb_cache = app.session_state["experiment_geo_workbook_cache"]
+    sheet_cache = app.session_state["experiment_market_sheet_cache"]
+    identity_a = wb_cache[0]
+    assert set(identity_a) == {"path", "size", "mtime_ns"}  # not just size
+    assert sheet_cache[0][0] == "sheet"
+    assert sheet_cache[0][1] == "UK"
+    assert sheet_cache[0][2] == identity_a  # market sheet keyed on workbook identity
+
+    # Replace the workbook at the same path with different content.
+    _write_geo_workbook(wb_path, GEO_REGIONS, market="UK", population_delta=999)
+    stat = os.stat(wb_path)
+    os.utime(wb_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+    identity_b = material_file_identity(str(wb_path))
+    assert identity_b != identity_a
+
+    # Re-running the app invalidates the market sheet and re-reads it.
+    app.run(timeout=RUN_TIMEOUT)
+    sheet_cache2 = app.session_state["experiment_market_sheet_cache"]
+    assert sheet_cache2[0][2] == identity_b
+    assert sheet_cache2[0][2] != identity_a
+    sheet2 = sheet_cache2[1]
+    assert sheet2 is not None
+    assert float(sheet2["Population"].iloc[0]) == pytest.approx(100_999)

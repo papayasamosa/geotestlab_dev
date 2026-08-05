@@ -47,15 +47,20 @@ from geotestlab.experiment import (
     active_frozen_version,
     build_content_digests,
     build_experiment_export,
+    build_frozen_data_quality_summary,
+    build_frozen_matching_section,
     candidate_universe_digest,
     compute_input_fingerprint,
     create_experiment_record,
     freeze_design,
+    material_file_identity,
+    observed_impact_completed,
     planned_vs_analysed,
     propagate_staleness,
     record_stage_method_result,
     record_stage_result,
     sha256_bytes,
+    tool_version,
     update_inputs,
 )
 
@@ -178,7 +183,10 @@ CONFIG = {
 SMD_GOOD_THRESHOLD = CONFIG["smd_thresholds"]["good"]
 SMD_HIGH_THRESHOLD = CONFIG["smd_thresholds"]["high"]
 
-DATA_PATH = "data/Population Stats for Geo Tests - Master Sheet Only v2 (Standardised).xlsx"
+DATA_PATH = os.environ.get(
+    "GEOTESTLAB_DATA_PATH",
+    "data/Population Stats for Geo Tests - Master Sheet Only v2 (Standardised).xlsx",
+)
 
 # ------------------------------------------------------------
 # Time-Series Validation helpers
@@ -635,14 +643,17 @@ def inspect_excel_sheet(path: str, sheet_name: str) -> dict:
 # ------------------------------------------------------------
 # Excel workbook loading
 # ------------------------------------------------------------
+# The workbook/sheet readers are cached on (path, sheet, identity) so a
+# same-path replacement of the bundled workbook (same-size or not) changes
+# the identity and invalidates the Streamlit caches.
 @st.cache_data(ttl=CONFIG["cache_ttl"])
-def get_workbook_sheet_names(path: str) -> list[str]:
+def get_workbook_sheet_names(path: str, identity=None) -> list[str]:
     xl = pd.ExcelFile(path, engine="calamine")
     return xl.sheet_names
 
 
 @st.cache_data(ttl=CONFIG["cache_ttl"])
-def load_market_sheet(path: str, sheet_name: str) -> pd.DataFrame:
+def load_market_sheet(path: str, sheet_name: str, identity=None) -> pd.DataFrame:
     try:
         df = pd.read_excel(path, sheet_name=sheet_name, engine="calamine", dtype=str)
     except Exception:
@@ -932,7 +943,9 @@ def cleanup_session_state():
 # to session state / Streamlit widgets.
 # =============================================================================
 # Tool / methodology versions recorded in frozen design snapshots (Stage 2).
-GEOTESTLAB_TOOL_VERSION = "0.3.0"
+# The tool version is derived from installed package metadata (must match
+# pyproject.toml), with a tested development fallback — never hardcoded here.
+GEOTESTLAB_TOOL_VERSION = tool_version()
 # Follows the power-analysis methodology spike; not an approved ADR.
 GEOTESTLAB_METHODOLOGY_VERSION = "0.2.0"
 
@@ -1003,11 +1016,25 @@ def _experiment_input_summary():
     }
 
 
+def _workbook_identity():
+    """Material identity of the bundled workbook (path, size, mtime_ns)."""
+    return material_file_identity(DATA_PATH)
+
+
+def _workbook_identity_tuple():
+    """Hashable material identity (tuple) for Streamlit cache keys."""
+    ident = _workbook_identity()
+    if ident is None:
+        return None
+    return (ident["path"], ident["size"], ident["mtime_ns"])
+
+
 def _cached_workbook_bytes():
-    """Bundled geography workbook bytes, cached by size (never re-read per rerun)."""
-    try:
-        key = ("wb", os.path.getsize(DATA_PATH))
-    except Exception:
+    """Bundled geography workbook bytes, cached by material file identity
+    (path + size + mtime_ns, never size alone — a same-size replacement is
+    detected and invalidates the cache)."""
+    key = _workbook_identity()
+    if key is None:
         return None
     cached = st.session_state.get("experiment_geo_workbook_cache")
     if cached and cached[0] == key:
@@ -1022,7 +1049,8 @@ def _cached_workbook_bytes():
 
 
 def _cached_market_sheet(market=None):
-    """Selected market sheet, cached by market (never re-read per rerun).
+    """Selected market sheet, cached by (market, workbook identity) so the
+    sheet is invalidated whenever the workbook material identity changes.
 
     ``market`` defaults to the session-stored current market (set by the
     sidebar), falling back to a module-level global if one exists.
@@ -1031,12 +1059,12 @@ def _cached_market_sheet(market=None):
         market = st.session_state.get("current_market") or globals().get("market")
     if not market:
         return None
-    key = ("sheet", str(market))
+    key = ("sheet", str(market), _workbook_identity())
     cached = st.session_state.get("experiment_market_sheet_cache")
     if cached and cached[0] == key:
         return cached[1]
     try:
-        df = load_market_sheet(DATA_PATH, market)
+        df = load_market_sheet(DATA_PATH, market, _workbook_identity_tuple())
     except Exception:
         df = None
     st.session_state.experiment_market_sheet_cache = (key, df)
@@ -1104,17 +1132,37 @@ def _compute_content_digests():
 
 def _current_design_snapshot():
     """Complete design snapshot for freezing (available values only; never
-    fabricated platform/spend values)."""
+    fabricated platform/spend values).
+
+    The matching section is reconstructed from the EXECUTED match snapshot
+    (``match_run_snapshot``), not the live widget state. Region exclusions are
+    kept strictly separate from time-period exclusions. Data-quality fields
+    are stored separately (never a collapsed/uncovered-regions read)."""
+    snapshot = st.session_state.get("match_run_snapshot")
     matching = st.session_state.get("experiment_matching_inputs") or {}
     validation = st.session_state.get("experiment_validation_inputs") or {}
     analysed = (_experiment_record().analysed) or {}
     _map = st.session_state.get("kpi_mapping_report")
     _q = st.session_state.get("kpi_quality_report")
     _rejected = st.session_state.get("kpi_rejected_rows")
+    if snapshot:
+        test_regions = sorted(str(r) for r in (snapshot.get("test_geos") or []))
+        control_regions = sorted(str(r) for r in (snapshot.get("selected_controls") or []))
+        matching_section = build_frozen_matching_section(snapshot)
+    else:
+        test_regions = sorted(matching.get("test_regions", []) or [])
+        control_regions = sorted(matching.get("control_regions", []) or [])
+        matching_section = {
+            "matching_method": matching.get("matching_method"),
+            "kpi_pattern_mode": matching.get("kpi_pattern_mode"),
+            "feature_weights": dict(matching.get("weights") or {}),
+        }
+    required_regions = test_regions or (
+        st.session_state.get("selected_experiment_regions", []) or []
+    )
     return {
-        "test_regions": sorted(matching.get("test_regions", []) or []),
-        "control_regions": sorted(matching.get("control_regions", []) or []),
-        "exclusions": sorted(validation.get("manual_excluded_dates", []) or []),
+        "test_regions": test_regions,
+        "control_regions": control_regions,
         "kpi": {
             "file_name": validation.get("kpi_file_name"),
             "file_size": validation.get("kpi_file_size"),
@@ -1136,29 +1184,34 @@ def _current_design_snapshot():
             "analysed_test_periods": analysed.get("analysed_test_periods"),
             "excluded_test_periods": analysed.get("excluded_test_periods"),
         },
-        "matching": {
-            "method": matching.get("matching_method"),
-            "kpi_pattern_mode": matching.get("kpi_pattern_mode"),
-            "weights": dict(matching.get("weights") or {}),
+        "matching": matching_section,
+        "seeds": {
+            "matching_seed": (
+                snapshot.get("guided_seed") if snapshot else None
+            ),  # actual guided seed when executed
         },
-        "seeds": {"matching_seed": 42},  # deterministic guided matching
         "validation_settings": {
             "include_lagged_controls": validation.get("include_lagged_controls"),
             "min_training_periods": validation.get("min_training_periods"),
             "placebo_length_periods": validation.get("placebo_length_periods"),
         },
-        "data_quality_summary": {
-            "covered_regions": sorted(str(r) for r in (getattr(_map, "covered_regions", []) or [])),
-            "uncovered_regions": sorted(
-                str(r) for r in (getattr(_map, "uncovered_regions", []) or [])
-            ),
-            "observations_retained": getattr(_q, "observations_retained", None),
-            "observations_removed": getattr(_q, "observations_removed", None),
-            "duplicate_key_rows": getattr(_q, "duplicate_key_rows", None),
-            "rejected_rows": len(_rejected) if _rejected is not None else 0,
-        },
+        "data_quality_summary": build_frozen_data_quality_summary(
+            mapping_report=_map,
+            required_regions=required_regions,
+            blocking_errors=_quality_blocking_errors(),
+            warnings=(tuple(getattr(_q, "warnings", ()) or ()) if _q is not None else ()),
+            observations={
+                "observations_retained": getattr(_q, "observations_retained", None),
+                "observations_removed": getattr(_q, "observations_removed", None),
+                "duplicate_key_rows": getattr(_q, "duplicate_key_rows", None),
+                "rejected_rows": len(_rejected) if _rejected is not None else 0,
+            },
+        ),
         "source_data_digests": dict(validation.get("content_digests") or {}),
-        "tracking_outage_exclusions": sorted(validation.get("auto_flagged_dates", []) or []),
+        "time_period_exclusions": {
+            "manual": sorted(validation.get("manual_excluded_dates", []) or []),
+            "tracking_outages": sorted(validation.get("auto_flagged_dates", []) or []),
+        },
         "tool_version": GEOTESTLAB_TOOL_VERSION,
         "methodology_version": GEOTESTLAB_METHODOLOGY_VERSION,
         "analyst": {"label": "", "notes": []},
@@ -1207,9 +1260,12 @@ def _stamp_validation_stage():
         "excluded_test_periods": (vres.get("planned_test_periods") or 0)
         - (vres.get("analysed_test_periods") or 0),
     }
-    # A completed-test evaluation (analysed test periods or a test uplift)
-    # completes observed_impact WITHOUT requiring a Bayesian run.
-    if vres.get("analysed_test_periods") not in (None, 0) or vres.get("uplift_pct") is not None:
+    # observed_impact is completed ONLY by a genuinely successful completed-test
+    # evaluation (Evaluate mode, a completed evaluation service run, at least one
+    # successful method result with a finite observed-impact value, and no
+    # blocker for that method). Design-mode validation or failed evaluations
+    # never complete the stage.
+    if observed_impact_completed(vres):
         record_stage_result(rec, "observed_impact", fp)
     _save_experiment_record(rec)
 
@@ -1618,7 +1674,7 @@ if "experiment_bayesian_inputs" not in st.session_state:
 # Load workbook and market
 # ------------------------------------------------------------
 try:
-    available_markets = sorted(get_workbook_sheet_names(DATA_PATH))
+    available_markets = sorted(get_workbook_sheet_names(DATA_PATH, _workbook_identity_tuple()))
 except Exception as e:
     st.error(
         "We couldn't load the geography/population data file this app relies on. Please check that the data file is present and correctly formatted."
@@ -1742,7 +1798,7 @@ with st.sidebar:
 
 if not kpi_pattern_mode:
     try:
-        market_df_raw = load_market_sheet(DATA_PATH, market)
+        market_df_raw = load_market_sheet(DATA_PATH, market, _workbook_identity_tuple())
         market_df = prepare_market_dataframe(market_df_raw)
         grouping_options = get_grouping_columns(market_df)
     except Exception as e:
@@ -2587,13 +2643,25 @@ def render_structural_matching_tab():
                 "geo_col": geo_col,
                 "setup_mode": setup_mode,
                 "match_mode": "User Selected",
+                "matching_method": st.session_state.get("matching_method_sidebar"),
                 "test_geos": list(test_geos),
+                "selected_controls": sorted(
+                    st.session_state.final_controls[geo_col].dropna().astype(str).tolist()
+                ),
                 "control_pool_geos": [],
-                "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
                 "global_exclusions": sorted(global_exclude),
                 "test_only_exclusions": sorted(force_exp_exclude),
-                "control_only_exclusions": [],
+                "control_only_exclusions": sorted(force_ctrl_exclude),
+                "forced_test_regions": sorted(force_exp_include),
+                "forced_control_eligibility": sorted(force_ctrl_include),
+                "guided_seed": None,
+                "target_test_share": target_test_share,
+                "target_tolerance_pp": target_tolerance_pp,
+                "test_share": float(_test_pop_pct),
                 "kpi_pattern_period_quality": st.session_state.get("kpi_pattern_period_quality"),
+                "kpi_pattern_metric": st.session_state.get("kpi_pattern_metric_value_sidebar"),
+                "kpi_pattern_agg_col": st.session_state.get("kpi_pattern_agg_col_sidebar"),
+                "kpi_pattern_date_range": st.session_state.get("kpi_pattern_date_range"),
                 "active_features": list(active_features),
                 "weights": dict(weights),
                 "eligible_means": tuple(
@@ -2877,16 +2945,27 @@ def render_structural_matching_tab():
                 "geo_col": geo_col,
                 "setup_mode": setup_mode,
                 "match_mode": match_mode,
+                "matching_method": st.session_state.get("matching_method_sidebar"),
                 "test_geos": list(test_geos),
+                "selected_controls": sorted(
+                    st.session_state.final_controls[geo_col].dropna().astype(str).tolist()
+                ),
                 "control_pool_geos": list(control_pool_geos)
                 if "control_pool_geos" in locals()
                 else [],
-                "force_ctrl_exclude": list(st.session_state.get("force_ctrl_exclude", [])),
                 "global_exclusions": sorted(global_exclude),
                 "test_only_exclusions": sorted(force_exp_exclude),
                 "control_only_exclusions": sorted(force_ctrl_exclude),
+                "forced_test_regions": sorted(force_exp_include),
+                "forced_control_eligibility": sorted(force_ctrl_include),
                 "guided_seed": GUIDED_SEARCH_CONFIG.seed,
+                "target_test_share": target_test_share,
+                "target_tolerance_pp": target_tolerance_pp,
+                "test_share": float(_test_pop_pct),
                 "kpi_pattern_period_quality": st.session_state.get("kpi_pattern_period_quality"),
+                "kpi_pattern_metric": st.session_state.get("kpi_pattern_metric_value_sidebar"),
+                "kpi_pattern_agg_col": st.session_state.get("kpi_pattern_agg_col_sidebar"),
+                "kpi_pattern_date_range": st.session_state.get("kpi_pattern_date_range"),
                 "active_features": list(active_features),
                 "weights": dict(weights),
                 "eligible_means": tuple(eligible_means_tuple)
@@ -4062,7 +4141,7 @@ def render_time_series_validation(mode: str):
             _adobe_to_geo = {}
         else:
             try:
-                _master_df = load_market_sheet(DATA_PATH, market)
+                _master_df = load_market_sheet(DATA_PATH, market, _workbook_identity_tuple())
                 _adobe_to_geo = dict(
                     zip(
                         _master_df[ADOBE_COL].astype(str).str.strip(),
@@ -4761,7 +4840,7 @@ def render_time_series_validation(mode: str):
                 adobe_to_geo = {}
             else:
                 try:
-                    master_df = load_market_sheet(DATA_PATH, market)
+                    master_df = load_market_sheet(DATA_PATH, market, _workbook_identity_tuple())
                     adobe_to_geo = dict(
                         zip(
                             master_df[ADOBE_COL].astype(str).str.strip(),
