@@ -51,17 +51,27 @@ def validate_mde_config(
         raise ValueError(f"n_simulations must be > 0; got {n_simulations}")
 
 
-def find_mde(power_at, bounds, target, tolerance, n_grid=200):
+def find_mde(power_at, bounds, target, tolerance, n_grid=200, grid=None):
     """Find the smallest effect meeting ``target`` power within ``bounds``.
 
     ``power_at(effect) -> float`` is the estimated power for an effect.
     Returns ``(mde, reached, grid, powers)``; ``reached`` is False when no grid
     effect reaches the target. Invalid bounds/target/tolerance are rejected by
     :func:`validate_mde_config` before any power evaluation.
+
+    ``grid`` optionally supplies an explicit sorted effect grid (within
+    bounds) instead of a uniform ``n_grid``-point grid — used by the
+    market-evidence harness whose grid is dense near zero.
     """
     validate_mde_config(bounds, target, tolerance)
     lo, hi = float(bounds[0]), float(bounds[1])
-    grid = np.linspace(lo, hi, n_grid)
+    if grid is not None:
+        grid = np.unique(np.asarray([float(v) for v in grid]))
+        grid = grid[(grid >= lo) & (grid <= hi)]
+        if len(grid) < 2:
+            grid = np.linspace(lo, hi, n_grid)
+    else:
+        grid = np.linspace(lo, hi, n_grid)
     powers = np.array([float(power_at(float(e))) for e in grid])
     above = powers >= target
     idx = int(np.argmax(above)) if above.any() else -1

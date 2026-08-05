@@ -140,11 +140,22 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             )
         minimum_window_status = "ok"
 
-    n_grid = 200
-    effect_grid = np.linspace(config.mde_bounds[0], config.mde_bounds[1], n_grid)
-    powers = np.full(n_grid, np.nan)
-    ci_low = np.full(n_grid, np.nan)
-    ci_high = np.full(n_grid, np.nan)
+    if config.effect_grid:
+        effect_grid = np.unique(np.asarray([float(v) for v in config.effect_grid]))
+        lo, hi = float(config.mde_bounds[0]), float(config.mde_bounds[1])
+        if not np.isfinite(effect_grid).all():
+            raise ValueError("effect_grid must contain only finite values")
+        if len(effect_grid) < 2 or effect_grid[0] < lo or effect_grid[-1] > hi:
+            raise ValueError(
+                f"effect_grid must have >= 2 unique points within mde_bounds "
+                f"{tuple(config.mde_bounds)}; got {len(effect_grid)} points "
+                f"[{effect_grid[0]}, {effect_grid[-1]}]"
+            )
+    else:
+        effect_grid = np.linspace(config.mde_bounds[0], config.mde_bounds[1], 200)
+    powers = np.full(len(effect_grid), np.nan)
+    ci_low = np.full(len(effect_grid), np.nan)
+    ci_high = np.full(len(effect_grid), np.nan)
     failures_total = int(meta.get("failures", 0))
     alt_cache = {}
 
@@ -183,7 +194,8 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
         config.mde_bounds,
         config.target_power,
         config.mde_tolerance,
-        n_grid=n_grid,
+        n_grid=len(effect_grid),
+        grid=effect_grid,
     )
 
     warnings = warnings + list(meta.get("warnings", []))

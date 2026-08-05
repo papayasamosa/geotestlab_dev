@@ -155,8 +155,8 @@ def main(argv=None) -> int:
             file=sys.stderr,
         )
         for t in blocking:
-            comments = t.get("comments") or []
-            body = (comments[0].get("body") or "") if comments else ""
+            bodies = _comment_bodies(t)
+            body = bodies[0] if bodies else ""
             first_line = body.strip().splitlines()[0] if body.strip() else "(no comment body)"
             print(f"  - thread {t.get('id')}: {first_line}", file=sys.stderr)
         return 1
