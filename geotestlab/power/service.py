@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 
 from geotestlab.power.detection import critical_values, validate_detection_criterion
-from geotestlab.power.mde import find_mde
+from geotestlab.power.mde import find_mde, validate_mde_config
 from geotestlab.power.methods import FIT_METHOD_NAMES, METHODS
 from geotestlab.power.models import (
     EFFECT_INJECTIONS,
@@ -58,6 +58,13 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
     if not config.control_regions:
         raise ValueError("PowerConfig.control_regions must name the control region(s)")
     _validate_region_sets(config.test_regions, config.control_regions, case_df)
+    validate_mde_config(
+        config.mde_bounds,
+        config.target_power,
+        config.mde_tolerance,
+        alpha=config.alpha,
+        n_simulations=config.n_simulations,
+    )
 
     warnings: list[str] = []
     errors: list[str] = []
@@ -84,7 +91,6 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             config, warnings, errors, blockers, minimum_history_status, "not_applicable"
         )
 
-    rng = np.random.default_rng(config.random_seed)
     method_fn = METHODS[config.method]
     if config.method in ("model_simulation", "residual_simulation"):
         cal_null, alt_fn, meta = method_fn(
@@ -94,7 +100,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             config.control_regions,
             n_test,
             config.n_simulations,
-            rng,
+            config.random_seed,
             fit_method=config.fit_method,
         )
     else:
@@ -105,7 +111,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             config.control_regions,
             n_test,
             config.n_simulations,
-            rng,
+            config.random_seed,
         )
     cal_null = np.asarray(cal_null, dtype=float)
 
@@ -226,17 +232,46 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
 
 
 def _split_case(case_df, pre_count, config):
-    """Split into pre/test by pre_count or explicit planned test dates."""
+    """Split into pre/test with no holdout leakage.
+
+    - the pre-period is exactly ``all_dates[:pre_count]``;
+    - the intended test window is the dates after the pre-period;
+    - explicit ``test_dates`` must be a non-empty subset of that intended
+      window: a date inside the pre-period, or a date not present in the data,
+      is rejected; duplicates are rejected;
+    - ``n_test`` equals the number of retained valid test dates;
+    - no unselected post-period date ever enters the pre-period (leakage would
+      otherwise contaminate the counterfactual fit).
+
+    Returns ``(pre_df, test_df, n_test)``.
+    """
     all_dates = pd.to_datetime(pd.Series(sorted(case_df["date"].unique()))).to_numpy()
+    pre_dates = all_dates[:pre_count]
+    intended_test = all_dates[pre_count:]
+
     if config.test_dates:
-        test_dates = set(pd.to_datetime(pd.Series(list(config.test_dates))).to_numpy())
-        pre_dates = set(all_dates) - test_dates
+        requested = pd.to_datetime(pd.Series(list(config.test_dates))).to_numpy()
+        if len(np.unique(requested)) != len(requested):
+            raise ValueError("test_dates contains duplicate dates")
+        present = np.isin(requested, all_dates)
+        if not present.all():
+            raise ValueError(
+                f"test_dates contains dates not present in the data: {sorted(requested[~present])}"
+            )
+        in_window = np.isin(requested, intended_test)
+        if not in_window.all():
+            raise ValueError(
+                "test_dates must be a subset of the intended test window (dates "
+                f"after the pre-period); outside the window: "
+                f"{sorted(requested[~in_window])}"
+            )
+        test_dates = requested
     else:
-        pre_dates = set(all_dates[:pre_count])
-        test_dates = set(all_dates[pre_count:])
+        test_dates = intended_test
+
     pre_df = case_df[case_df["date"].isin(pre_dates)].copy()
     test_df = case_df[case_df["date"].isin(test_dates)].copy()
-    return pre_df, test_df, len(test_dates)
+    return pre_df, test_df, int(len(test_dates))
 
 
 def _validate_region_sets(test_regions, control_regions, case_df):

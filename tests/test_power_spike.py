@@ -34,13 +34,24 @@ from geotestlab.power import (
     build_date_keyed_matrix,
     build_fit_scenario,
     build_placebo_windows,
+    child_rngs,
     clopper_pearson,
     compare_fit_methods,
+    critical_values,
     find_mde,
+    fit_ar1,
+    fit_counterfactual,
     generate_synthetic_case,
     model_simulation,
+    placebo_empirical,
+    power_from_totals,
+    residual_simulation,
     run_power_analysis,
+    validate_detection_criterion,
+    validate_mde_config,
 )
+from geotestlab.power.methods import _shift
+from geotestlab.power.service import _split_case
 from geotestlab.power.synthetic import TEST_REGION
 
 N_PRE = 120
@@ -181,9 +192,7 @@ class TestModelSimulation:
         case = _case()
         pre_df = case.df[case.df["date"] < case.df["date"].unique()[N_PRE]]
         test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
-        null, alt_fn, meta = model_simulation(
-            pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 500, np.random.default_rng(3)
-        )
+        null, alt_fn, meta = model_simulation(pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 500, 3)
         assert abs(meta["rho_estimate"] - RHO) < 0.2
         assert abs(meta["sigma_estimate"] - SIGMA) < 0.5
 
@@ -513,7 +522,7 @@ class TestIndependentStreams:
         pre_df = case.df[case.df["date"] < case.df["date"].unique()[N_PRE]]
         test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
         cal_null, alt_fn, meta = model_simulation(
-            pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 1000, np.random.default_rng(11)
+            pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 1000, 11
         )
         alt1, _ = alt_fn(0.5, "relative", "one_sided_positive")
         alt2, _ = alt_fn(0.5, "relative", "one_sided_positive")
@@ -524,7 +533,7 @@ class TestIndependentStreams:
         pre_df = case.df[case.df["date"] < case.df["date"].unique()[N_PRE]]
         test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
         cal_null, alt_fn, meta = model_simulation(
-            pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 500, np.random.default_rng(3)
+            pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 500, 3
         )
         assert np.isfinite(meta["null_mean"])
         assert np.isfinite(meta["null_sd"])
@@ -842,3 +851,562 @@ class TestResultContract:
             "blockers",
         ):
             assert key in d
+
+
+# ---------------------------------------------------------------------------
+# Holdout-date leakage: _split_case must never leak post-period observations
+# ---------------------------------------------------------------------------
+class TestSplitCaseNoLeakage:
+    @staticmethod
+    def _dates(case):
+        return pd.to_datetime(pd.Series(sorted(case.df["date"].unique()))).to_numpy()
+
+    def test_pre_period_is_exactly_first_pre_count(self):
+        case = _case()
+        all_dates = self._dates(case)
+        cfg = _config(test_dates=tuple(all_dates[-6:]))
+        pre_df, test_df, n_test = _split_case(case.df, N_PRE, cfg)
+        assert set(pre_df["date"].unique()) == set(all_dates[:N_PRE])
+        assert n_test == 6
+
+    def test_unselected_post_period_dates_never_enter_fitting(self):
+        # Explicit subset of the intended window: the unselected post-period
+        # dates must NOT appear in pre_df (that would be holdout leakage).
+        case = _case()
+        all_dates = self._dates(case)
+        selected = tuple(all_dates[N_PRE : N_PRE + 4])
+        pre_df, test_df, n_test = _split_case(case.df, N_PRE, _config(test_dates=selected))
+        assert set(pre_df["date"].unique()) == set(all_dates[:N_PRE])
+        assert set(test_df["date"].unique()) == set(selected)
+        assert n_test == 4
+        assert not (set(pre_df["date"].unique()) & set(test_df["date"].unique()))
+        # every unselected post-period date is excluded entirely, not leaked
+        excluded = set(all_dates[N_PRE:]) - set(selected)
+        assert excluded.isdisjoint(pre_df["date"].unique())
+
+    def test_pre_period_date_in_test_dates_rejected(self):
+        case = _case()
+        all_dates = self._dates(case)
+        bad = tuple([all_dates[N_PRE - 1], all_dates[N_PRE]])
+        with pytest.raises(ValueError, match="subset of the intended test window"):
+            _split_case(case.df, N_PRE, _config(test_dates=bad))
+
+    def test_absent_date_rejected(self):
+        case = _case()
+        with pytest.raises(ValueError, match="not present in the data"):
+            _split_case(case.df, N_PRE, _config(test_dates=("2020-01-01",)))
+
+    def test_duplicate_test_dates_rejected(self):
+        case = _case()
+        all_dates = self._dates(case)
+        dup = tuple([all_dates[N_PRE], all_dates[N_PRE]])
+        with pytest.raises(ValueError, match="duplicate"):
+            _split_case(case.df, N_PRE, _config(test_dates=dup))
+
+    def test_unsorted_test_dates_accepted(self):
+        case = _case()
+        all_dates = self._dates(case)
+        window = all_dates[N_PRE : N_PRE + 4]
+        pre_df, test_df, n_test = _split_case(
+            case.df, N_PRE, _config(test_dates=tuple(window[::-1]))
+        )
+        assert n_test == 4
+        assert set(test_df["date"].unique()) == set(window)
+
+    def test_empty_retained_window_is_incomplete(self):
+        # pre_count covering every date -> no intended test window left.
+        case = _case()
+        res = run_power_analysis(case.df, len(self._dates(case)), _config(n_simulations=300))
+        assert res.completed is False
+        assert res.mde is None
+        assert any("at least one date" in b for b in res.blockers)
+        assert len(res.power_curve) == 0
+
+    def test_coefficient_leakage_absent(self):
+        # The counterfactual fit sees exactly pre_count periods: no post-period
+        # row can enter the fitted residuals even when test_dates is a subset.
+        case = _case()
+        all_dates = self._dates(case)
+        cfg = _config(test_dates=tuple(all_dates[N_PRE : N_PRE + 4]), n_simulations=500)
+        res = run_power_analysis(case.df, N_PRE, cfg)
+        assert res.completed is True
+        assert res.matrix_diagnostics["n_observations"] == N_PRE
+        assert res.windows_available == N_PRE
+
+
+# ---------------------------------------------------------------------------
+# NumPy 1.24 compatibility: SeedSequence-based independent streams
+# ---------------------------------------------------------------------------
+class TestChildRngs:
+    def test_derives_three_independent_streams(self):
+        rngs = child_rngs(42, 3)
+        assert len(rngs) == 3
+        draws = [r.normal(size=100) for r in rngs]
+        assert not np.array_equal(draws[0], draws[1])
+        assert not np.array_equal(draws[1], draws[2])
+
+    def test_reproducible(self):
+        a = [r.normal(size=50) for r in child_rngs(7, 3)]
+        b = [r.normal(size=50) for r in child_rngs(7, 3)]
+        for x, y in zip(a, b):
+            assert np.array_equal(x, y)
+
+    def test_matches_generator_spawn_children(self):
+        # The SeedSequence path must equal default_rng(seed).spawn(n) children
+        # so behaviour is identical to the NumPy >= 1.25 path.
+        seq = np.random.SeedSequence(99)
+        expected = [np.random.default_rng(c) for c in seq.spawn(3)]
+        got = child_rngs(99, 3)
+        assert np.array_equal(expected[0].normal(size=40), got[0].normal(size=40))
+        assert np.array_equal(expected[2].normal(size=40), got[2].normal(size=40))
+
+    def test_accepts_seed_sequence(self):
+        seq = np.random.SeedSequence(123)
+        a = [r.normal(size=30) for r in child_rngs(seq, 2)]
+        b = [r.normal(size=30) for r in child_rngs(123, 2)]
+        for x, y in zip(a, b):
+            assert np.array_equal(x, y)
+
+    def test_monte_carlo_methods_accept_integer_seed(self):
+        case = _case()
+        pre_df = case.df[case.df["date"] < case.df["date"].unique()[N_PRE]]
+        test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
+        null, alt_fn, meta = model_simulation(pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 300, 5)
+        assert len(null) == 300
+        assert np.isfinite(meta["null_mean"])
+        null_r, _, meta_r = residual_simulation(
+            pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 300, 5
+        )
+        assert len(null_r) == 300
+        assert np.isfinite(meta_r["null_mean"])
+
+
+# ---------------------------------------------------------------------------
+# Empirical-placebo direction: side controls the sign of the shift
+# ---------------------------------------------------------------------------
+class TestPlaceboNegativeDirection:
+    def test_negative_placebo_power_rises_with_magnitude(self):
+        # Pre-fix: the empirical placebo alternative ignored side, so the
+        # negative-side power stayed at ~alpha for every magnitude.
+        case = _case()
+        neg = run_power_analysis(
+            case.df, N_PRE, _config(method="placebo_empirical", side="one_sided_negative")
+        )
+        assert neg.completed is True
+        i_small = int(np.argmin(np.abs(neg.effect_grid - 0.5)))
+        i_big = int(np.argmin(np.abs(neg.effect_grid - 5.0)))
+        assert neg.power_curve[i_big] > neg.power_curve[i_small] + 0.1
+
+    def test_negative_placebo_mde_is_non_negative_magnitude(self):
+        case = _case()
+        res = run_power_analysis(
+            case.df, N_PRE, _config(method="placebo_empirical", side="one_sided_negative")
+        )
+        assert res.mde_reached is True
+        assert res.mde is not None
+        assert res.mde >= 0.0
+
+    def test_negative_and_positive_placebo_symmetric(self):
+        case = _case()
+        pos = run_power_analysis(
+            case.df, N_PRE, _config(method="placebo_empirical", side="one_sided_positive")
+        )
+        neg = run_power_analysis(
+            case.df, N_PRE, _config(method="placebo_empirical", side="one_sided_negative")
+        )
+        i = int(np.argmin(np.abs(neg.effect_grid - 2.0)))
+        assert abs(neg.power_curve[i] - pos.power_curve[i]) < 0.1
+
+    def test_twosided_placebo_default_positive_shift(self):
+        # two_sided uses the documented default signed shift (positive) with
+        # two-tailed detection. The empirical null is coarse (10 windows), so
+        # the two-tailed power at effect 0 is only approximately alpha.
+        case = _case()
+        res = run_power_analysis(
+            case.df, N_PRE, _config(method="placebo_empirical", side="two_sided")
+        )
+        assert res.completed is True
+        assert abs(res.power_curve[0] - 0.05) < 0.3
+
+    def test_alt_fn_direction_by_side(self):
+        case = _case()
+        pre_df = case.df[case.df["date"] < case.df["date"].unique()[N_PRE]]
+        test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
+        null, alt_fn, _ = placebo_empirical(pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 0, 0)
+        pos, _ = alt_fn(5.0, "relative", "one_sided_positive")
+        neg, _ = alt_fn(5.0, "relative", "one_sided_negative")
+        two, _ = alt_fn(5.0, "relative", "two_sided")
+        assert np.all(pos > null)
+        assert np.all(neg < null)
+        assert np.all(two > null)  # documented default positive shift
+
+
+# ---------------------------------------------------------------------------
+# MDE configuration validation (before any simulation)
+# ---------------------------------------------------------------------------
+class TestMDEConfigValidation:
+    def test_valid_config_passes(self):
+        validate_mde_config((0.0, 50.0), 0.8, 0.5, alpha=0.05, n_simulations=1000)
+
+    def test_negative_lower_bound_rejected(self):
+        case = _case()
+        with pytest.raises(ValueError, match="non-negative"):
+            run_power_analysis(case.df, N_PRE, _config(mde_bounds=(-1.0, 50.0)))
+
+    def test_upper_bound_equal_lower_rejected(self):
+        with pytest.raises(ValueError, match="upper bound"):
+            validate_mde_config((10.0, 10.0), 0.8, 0.5)
+
+    def test_upper_bound_below_lower_rejected(self):
+        with pytest.raises(ValueError, match="upper bound"):
+            validate_mde_config((20.0, 5.0), 0.8, 0.5)
+
+    def test_non_positive_tolerance_rejected(self):
+        with pytest.raises(ValueError, match="tolerance"):
+            validate_mde_config((0.0, 50.0), 0.8, 0.0)
+        with pytest.raises(ValueError, match="tolerance"):
+            validate_mde_config((0.0, 50.0), 0.8, -1.0)
+
+    def test_target_power_out_of_range_rejected(self):
+        for bad in (0.0, 1.0, -0.5, 1.5):
+            with pytest.raises(ValueError, match="target_power"):
+                validate_mde_config((0.0, 50.0), bad, 0.5)
+
+    def test_alpha_out_of_range_rejected(self):
+        for bad in (0.0, 1.0, -0.1, 1.1):
+            with pytest.raises(ValueError, match="alpha"):
+                validate_mde_config((0.0, 50.0), 0.8, 0.5, alpha=bad)
+
+    def test_n_simulations_non_positive_rejected(self):
+        with pytest.raises(ValueError, match="n_simulations"):
+            validate_mde_config((0.0, 50.0), 0.8, 0.5, n_simulations=0)
+        with pytest.raises(ValueError, match="n_simulations"):
+            validate_mde_config((0.0, 50.0), 0.8, 0.5, n_simulations=-10)
+
+    def test_non_finite_bounds_rejected(self):
+        # NaN/inf bounds must fail before simulation (a non-finite effect grid
+        # would otherwise produce meaningless power/MDE values).
+        for bad in (
+            (0.0, float("nan")),
+            (float("nan"), 50.0),
+            (0.0, float("inf")),
+            (float("-inf"), 50.0),
+            (float("nan"), float("inf")),
+        ):
+            with pytest.raises(ValueError, match="finite"):
+                validate_mde_config(bad, 0.8, 0.5)
+
+    def test_non_finite_tolerance_rejected(self):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with pytest.raises(ValueError, match="finite"):
+                validate_mde_config((0.0, 50.0), 0.8, bad)
+
+    def test_non_finite_target_power_rejected(self):
+        for bad in (float("nan"), float("inf")):
+            with pytest.raises(ValueError, match="target_power"):
+                validate_mde_config((0.0, 50.0), bad, 0.5)
+
+    def test_service_rejects_non_finite_bounds_before_simulation(self):
+        case = _case()
+        with pytest.raises(ValueError, match="finite"):
+            run_power_analysis(case.df, N_PRE, _config(mde_bounds=(0.0, float("inf"))))
+
+    def test_service_rejects_invalid_bounds_before_simulation(self):
+        case = _case()
+        with pytest.raises(ValueError, match="non-negative"):
+            run_power_analysis(case.df, N_PRE, _config(mde_bounds=(-5.0, 50.0)))
+
+    def test_find_mde_rejects_invalid_bounds(self):
+        with pytest.raises(ValueError, match="upper bound"):
+            find_mde(lambda e: 0.9, (10.0, 10.0), 0.8, 0.5)
+
+
+# ---------------------------------------------------------------------------
+# Service validation branches (fit method / injection / side / empty window)
+# ---------------------------------------------------------------------------
+class TestServiceValidationBranches:
+    def test_unknown_fit_method_rejected(self):
+        case = _case()
+        with pytest.raises(ValueError, match="Unknown fit method"):
+            run_power_analysis(case.df, N_PRE, _config(fit_method="ridge"))
+
+    def test_unknown_effect_injection_rejected(self):
+        case = _case()
+        with pytest.raises(ValueError, match="Unknown effect injection"):
+            run_power_analysis(case.df, N_PRE, _config(effect_injection="bogus"))
+
+    def test_unknown_side_rejected(self):
+        case = _case()
+        with pytest.raises(ValueError, match="Unknown side"):
+            run_power_analysis(case.df, N_PRE, _config(side="bogus"))
+
+    def test_no_test_window_returns_incomplete(self):
+        # pre_count == total dates -> empty intended test window.
+        case = _case()
+        total = len(case.df["date"].unique())
+        res = run_power_analysis(case.df, total, _config(n_simulations=300))
+        assert res.completed is False
+        assert len(res.power_curve) == 0
+        assert any("at least one date" in b for b in res.blockers)
+
+    def test_all_alternative_values_nan_gives_zero_power(self):
+        # A case whose counterfactual total is negative makes every relative
+        # alternative total NaN (low-volume guard) -> power 0 with a 0 CI.
+        case = generate_synthetic_case(
+            n_pre=N_PRE,
+            n_test=N_TEST,
+            rho=0.0,
+            sigma=2.0,
+            control_betas={"C1": 1.0},
+            test_coeffs={"C1": -2.0},
+            b0=5.0,
+            effect_pct=0.0,
+            seed=3,
+            base_controls={"C1": 10.0},
+            sd_control_noise=1.0,
+        )
+        res = run_power_analysis(
+            case.df, N_PRE, _config(n_simulations=300, control_regions=("C1",))
+        )
+        assert res.completed is True
+        assert res.failures > 0
+        i = int(np.argmin(np.abs(res.effect_grid - 1.0)))
+        assert res.power_curve[i] == 0.0
+        assert res.power_ci_lower[i] == 0.0
+        assert res.power_ci_upper[i] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Counterfactual fit branch coverage
+# ---------------------------------------------------------------------------
+class TestFitCounterfactualBranches:
+    def _pre_df(self, df, n_pre=N_PRE):
+        return df[df["date"] < df["date"].unique()[n_pre]]
+
+    def test_underdetermined_falls_back(self):
+        case = generate_synthetic_case(
+            n_pre=3,
+            n_test=2,
+            rho=0.0,
+            sigma=1.0,
+            control_betas={"C1": 1.0, "C2": 2.0, "C3": 0.5, "C4": 1.5},
+            test_coeffs={"C1": 1.0, "C2": 0.5, "C3": 0.5, "C4": 0.5},
+            b0=50.0,
+            seed=0,
+            base_controls={"C1": 10.0, "C2": 10.0, "C3": 10.0, "C4": 10.0},
+            sd_control_noise=1.0,
+        )
+        fit = fit_counterfactual(self._pre_df(case.df, 3), ("T",), ("C1", "C2", "C3", "C4"))
+        assert fit.fit_status == "fallback_constant_mean"
+        assert fit.diagnostics["fallback_reason"] == "underdetermined"
+
+    def test_no_observations_falls_back(self):
+        case = _case()
+        empty = self._pre_df(case.df)[
+            self._pre_df(case.df)["date"].isin(pd.to_datetime(["2020-01-01"]))
+        ]
+        fit = fit_counterfactual(empty, ("T",), ("C1", "C2"))
+        assert fit.fit_status == "fallback_constant_mean"
+        assert fit.diagnostics["fallback_reason"] == "no_observations"
+        assert len(fit.residuals) == 0
+
+    def test_ill_conditioned_falls_back_when_condition_limit_low(self):
+        # A full-rank design with a tiny condition-number limit forces the
+        # ill_conditioned fallback (rank is full but cond > limit).
+        case = _case()
+        fit = fit_counterfactual(
+            self._pre_df(case.df), ("T",), ("C1", "C2"), max_condition_number=1.0
+        )
+        assert fit.fit_status == "fallback_constant_mean"
+        assert fit.diagnostics["fallback_reason"] == "ill_conditioned"
+
+    def test_duplicate_columns_reported(self):
+        case = _case()
+        df = case.df.copy()
+        c1 = df[df["region"] == "C1"][["date", "kpi"]].copy()
+        c3 = c1.copy()
+        c3["region"] = "C3"  # exact duplicate of C1
+        df = pd.concat([df, c3], ignore_index=True)
+        fit = fit_counterfactual(self._pre_df(df), ("T",), ("C1", "C3"))
+        dup = fit.diagnostics["duplicate_predictor_pairs"]
+        assert [1, 2] in [sorted(p) for p in dup]
+
+    def test_unknown_fit_method_rejected(self):
+        case = _case()
+        with pytest.raises(ValueError, match="Unknown fit method"):
+            fit_counterfactual(self._pre_df(case.df), ("T",), ("C1", "C2"), fit_method="ridge")
+
+    def test_elastic_net_and_lasso_with_no_controls(self):
+        # X_no_const empty path for sklearn fits (constant-mean model, no fit).
+        case = _case()
+        for m in ("elastic_net", "lasso"):
+            fit = fit_counterfactual(self._pre_df(case.df), ("T",), (), fit_method=m)
+            assert fit.fit_status == "ok"
+            assert fit.model is None
+            assert len(fit.coef) == 1
+
+    def test_fit_ar1_short_and_constant(self):
+        assert fit_ar1(np.array([])) == (0.0, 0.0)
+        assert fit_ar1(np.array([1.0]))[0] == 0.0
+        assert fit_ar1(np.array([1.0, 2.0]))[0] == 0.0
+        rho, sigma = fit_ar1(np.full(10, 5.0))
+        assert rho == 0.0
+        assert sigma == 0.0
+
+    def test_residual_simulation_no_observations(self):
+        case = _case()
+        empty_pre = self._pre_df(case.df)[
+            self._pre_df(case.df)["date"].isin(pd.to_datetime(["2020-01-01"]))
+        ]
+        null, alt_fn, meta = residual_simulation(
+            empty_pre, case.df, ("T",), ("C1", "C2"), N_TEST, 100, 0
+        )
+        assert len(null) == 100
+        assert meta["windows_available"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Detection helpers: all sides and criterion gating
+# ---------------------------------------------------------------------------
+class TestDetectionHelpers:
+    def test_power_from_totals_all_sides(self):
+        rng = np.random.default_rng(0)
+        null = rng.normal(1000, 10, 200000)
+        alt = rng.normal(1040, 10, 200000)  # strong positive shift
+        p_pos = power_from_totals(null, alt, "one_sided_positive", 0.05)
+        p_neg = power_from_totals(null, alt, "one_sided_negative", 0.05)
+        p_two = power_from_totals(null, alt, "two_sided", 0.05)
+        assert 0.95 < p_pos < 1.0
+        assert 0.0 <= p_neg < 0.01  # positive shift detected ~ never on negative side
+        assert p_two < p_pos
+        # null calibration
+        assert abs(power_from_totals(null, null, "two_sided", 0.05) - 0.05) < 0.01
+        assert abs(power_from_totals(null, null, "one_sided_positive", 0.05) - 0.05) < 0.01
+        assert abs(power_from_totals(null, null, "one_sided_negative", 0.05) - 0.05) < 0.01
+
+    def test_critical_values_all_sides(self):
+        null = np.arange(1000, dtype=float)
+        lo, hi = critical_values(null, "one_sided_positive", 0.05)
+        assert lo == -np.inf and hi == pytest.approx(949.05, abs=0.01)
+        lo, hi = critical_values(null, "one_sided_negative", 0.05)
+        assert lo == pytest.approx(49.95, abs=0.01) and hi == np.inf
+        lo, hi = critical_values(null, "two_sided", 0.05)
+        assert lo == pytest.approx(24.975, abs=0.01)
+        assert hi == pytest.approx(974.025, abs=0.01)
+
+    def test_unknown_criterion_rejected(self):
+        with pytest.raises(ValueError, match="Unknown detection criterion"):
+            validate_detection_criterion("bogus")
+
+
+# ---------------------------------------------------------------------------
+# Analytic / generator / uncertainty branch coverage
+# ---------------------------------------------------------------------------
+class TestAnalyticAndGeneratorBranches:
+    def test_analytic_power_two_sided(self):
+        mean, sd = 1000.0, 10.0
+        two = analytic_power(mean, sd, 20.0, 0.05, "two_sided")
+        one = analytic_power(mean, sd, 20.0, 0.05, "one_sided_positive")
+        assert 0.0 < two < 1.0
+        assert two < one
+
+    def test_analytic_power_one_sided_negative(self):
+        mean, sd = 1000.0, 10.0
+        neg = analytic_power(mean, sd, -20.0, 0.05, "one_sided_negative")
+        pos = analytic_power(mean, sd, 20.0, 0.05, "one_sided_positive")
+        assert 0.0 < neg < 1.0
+        assert abs(neg - pos) < 0.001  # symmetric for opposite shifts
+
+    def test_ramp_effect_generator_absolute(self):
+        case = _case(effect_abs=50.0, shape="ramp")
+        y = case.df[case.df["region"] == TEST_REGION]["kpi"].to_numpy()
+        shift = y[N_PRE:] - case.cf[N_PRE:]
+        # ramp starts at ~0 effect (only AR(1) noise at t0) and rises ~50
+        assert abs(shift[0]) < 8.0
+        assert 40.0 < shift[-1] - shift[0] < 60.0
+
+    def test_ramp_effect_generator_relative(self):
+        case = _case(effect_pct=10.0, shape="ramp")
+        y = case.df[case.df["region"] == TEST_REGION]["kpi"].to_numpy()
+        rel = (y[N_PRE:] - case.cf[N_PRE:]) / case.cf[N_PRE:]
+        # relative ramp rises from ~0 to ~10% across the window
+        assert abs(rel[0]) < 0.05
+        assert 0.05 < rel[-1] - rel[0] < 0.18
+
+    def test_shift_low_volume_all_nan(self):
+        null = np.full(10, -5.0)  # non-positive null totals
+        alt, fail = _shift(null, -60.0, 1.0, "relative", 3, "one_sided_positive")
+        assert np.isnan(alt).all()
+        assert fail == 10
+
+    def test_clopper_pearson_zero_sample(self):
+        lo, hi = clopper_pearson(0, 0, 0.05)
+        assert np.isnan(lo) and np.isnan(hi)
+
+
+# ---------------------------------------------------------------------------
+# Alignment branch coverage
+# ---------------------------------------------------------------------------
+class TestAlignmentBranches:
+    def test_missing_test_region_yields_empty_test(self):
+        case = _case()
+        test, controls, diag = build_date_keyed_matrix(case.df, ("NOPE",), ("C1", "C2"))
+        assert test.isna().all()
+        assert diag["dates_retained"] == 0
+
+    def test_single_test_region(self):
+        case = _case()
+        test, controls, diag = build_date_keyed_matrix(case.df, ("T",), ("C1", "C2"))
+        assert test.notna().all()
+        assert len(test) == N_PRE + N_TEST
+
+    def test_missing_control_region_column(self):
+        case = _case()
+        test, controls, diag = build_date_keyed_matrix(case.df, ("T",), ("C1", "NOPE"))
+        assert "NOPE" in controls.columns
+        assert controls["NOPE"].isna().all()
+        assert diag["controls_with_missing_dates"]["NOPE"] == len(controls)
+
+    def test_expected_dates_param(self):
+        case = _case()
+        all_dates = sorted(case.df["date"].unique())
+        expected = list(all_dates[:5])
+        test, controls, diag = build_date_keyed_matrix(
+            case.df, ("T",), ("C1",), expected_dates=expected
+        )
+        assert len(test) == 5
+        assert diag["dates_expected"] == 5
+
+    def test_single_date_continuity(self):
+        case = _case()
+        d0 = case.df["date"].unique()[0]
+        test, controls, diag = build_date_keyed_matrix(
+            case.df, ("T",), ("C1",), expected_dates=[d0]
+        )
+        assert diag["continuity"] == "single_date"
+
+    def test_non_increasing_continuity(self):
+        case = _case()
+        d0 = case.df["date"].unique()[0]
+        test, controls, diag = build_date_keyed_matrix(
+            case.df, ("T",), ("C1",), expected_dates=[d0, d0]
+        )
+        assert diag["continuity"] == "non_increasing"
+
+    def test_gap_continuity(self):
+        case = _case()
+        uniq = case.df["date"].unique()
+        dates = [uniq[0], uniq[1], uniq[2], uniq[5]]  # skip two weeks
+        test, controls, diag = build_date_keyed_matrix(
+            case.df, ("T",), ("C1",), expected_dates=dates
+        )
+        assert diag["continuity"].startswith("1 gap")
+
+
+# ---------------------------------------------------------------------------
+# Fit-comparison branch coverage
+# ---------------------------------------------------------------------------
+class TestFitComparisonBranches:
+    def test_unknown_scenario_rejected(self):
+        with pytest.raises(ValueError, match="unknown fit scenario"):
+            build_fit_scenario("bogus")

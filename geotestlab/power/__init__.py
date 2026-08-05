@@ -18,7 +18,7 @@ from geotestlab.power.fit_comparison import (
     build_fit_scenario,
     compare_fit_methods,
 )
-from geotestlab.power.mde import find_mde
+from geotestlab.power.mde import find_mde, validate_mde_config
 from geotestlab.power.methods import (
     DEFAULT_MAX_CONDITION_NUMBER,
     FALLBACK_FIT_METHOD,
@@ -46,6 +46,7 @@ from geotestlab.power.models import (
 from geotestlab.power.models import (
     METHODS as METHOD_NAMES,
 )
+from geotestlab.power.random import child_rngs
 from geotestlab.power.service import run_power_analysis
 from geotestlab.power.synthetic import (
     SyntheticCase,
@@ -76,6 +77,7 @@ __all__ = [
     "build_date_keyed_matrix",
     "build_fit_scenario",
     "build_placebo_windows",
+    "child_rngs",
     "clopper_pearson",
     "compare_fit_methods",
     "critical_values",
@@ -92,4 +94,5 @@ __all__ = [
     "run_power_analysis",
     "validate_detection_criterion",
     "validate_effect_shape",
+    "validate_mde_config",
 ]

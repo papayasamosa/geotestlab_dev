@@ -11,7 +11,8 @@ synthetic cases. Each returns ``(calibration_null, alt_fn, meta)``:
   separate diagnostics stream, fit status, matrix diagnostics, window counts,
   simulation counts, failures and warnings.
 
-Monte-Carlo methods use three independent random streams (``rng.spawn(3)``):
+Monte-Carlo methods use three independent random streams derived from a
+single seed via ``SeedSequence.spawn`` (see ``geotestlab.power.random``):
 threshold calibration, alternative simulation, and diagnostics. The empirical
 placebo method is deterministic (no sampling stream), which is documented as a
 limitation: its "sample" is the pre-period placebo windows themselves.
@@ -41,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 from geotestlab.power.alignment import build_date_keyed_matrix
+from geotestlab.power.random import child_rngs
 
 # Counterfactual fit methods compared for PA-FR2 evidence (see fit_comparison).
 FIT_METHOD_NAMES = ("ols", "elastic_net", "lasso")
@@ -275,12 +277,13 @@ def _shift(null, cf_test_sum, effect, injection, n_test, side):
 # 1. Model-based counterfactual simulation
 # ---------------------------------------------------------------------------
 def model_simulation(
-    pre_df, test_df, test_regions, control_regions, n_test, n_sim, rng, fit_method="ols"
+    pre_df, test_df, test_regions, control_regions, n_test, n_sim, seed, fit_method="ols"
 ):
     """Model-based counterfactual simulation with independent streams.
 
     Threshold calibration, alternative simulation and diagnostics each use an
-    independent random stream derived from ``rng`` (``rng.spawn(3)``).
+    independent random stream derived from ``seed`` (``child_rngs(seed, 3)``),
+    which is NumPy >= 1.24 compatible.
     """
     fit = fit_counterfactual(pre_df, test_regions, control_regions, fit_method=fit_method)
     rho, sigma = fit_ar1(fit.residuals)
@@ -291,7 +294,7 @@ def model_simulation(
     cf_test = project_counterfactual(fit, test_df, test_regions, control_regions)
     cf_test_sum = float(np.sum(cf_test))
 
-    cal_rng, alt_rng, diag_rng = rng.spawn(3)
+    cal_rng, alt_rng, diag_rng = child_rngs(seed, 3)
 
     # 1) threshold-calibration stream
     cal_paths = _simulate_ar1_paths(rho, sigma, n_test_use, n_sim, cal_rng, e_start=e_start)
@@ -349,7 +352,7 @@ def build_placebo_windows(pre_df, test_regions, control_regions, window_len):
     return np.array(pcts, dtype=float)
 
 
-def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_sim, rng):
+def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_sim, seed):
     """Placebo uplift-% null; alt = legacy closed-form shift (relative only).
 
     Deterministic: there is no Monte-Carlo sampling stream, so the
@@ -358,6 +361,13 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
     (no independent calibration stream is possible without resampling). Empty
     placebo evidence is NOT replaced with ``[0.0]``; the service enforces
     ``min_placebo_windows`` and returns an explicit incomplete result.
+
+    The non-negative magnitude convention is applied consistently: the effect
+    magnitude is always non-negative and the direction is controlled by
+    ``side`` (``one_sided_positive`` shifts up, ``one_sided_negative`` shifts
+    down, ``two_sided`` uses the documented default signed shift — positive —
+    with two-tailed detection). ``seed`` is unused (the method is
+    deterministic) and is kept only to share the method-dispatch signature.
     """
     pcts = build_placebo_windows(pre_df, test_regions, control_regions, n_test)
     null = pcts
@@ -367,7 +377,9 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
             raise NotImplementedError(
                 "placebo_empirical supports relative injection only (documented limitation)"
             )
-        return pcts * (1.0 + effect / 100.0) + effect, 0
+        direction = -1.0 if side == "one_sided_negative" else 1.0
+        signed = direction * effect
+        return pcts * (1.0 + signed / 100.0) + signed, 0
 
     meta = {
         "windows_available": int(len(pcts)),
@@ -389,11 +401,12 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
 # 3. Historical residual simulation (bootstrap)
 # ---------------------------------------------------------------------------
 def residual_simulation(
-    pre_df, test_df, test_regions, control_regions, n_test, n_sim, rng, fit_method="ols"
+    pre_df, test_df, test_regions, control_regions, n_test, n_sim, seed, fit_method="ols"
 ):
     """Null totals by resampling pre-period residuals (with replacement).
 
-    Uses independent calibration / alternative / diagnostics bootstrap streams.
+    Uses independent calibration / alternative / diagnostics bootstrap streams
+    derived from ``seed`` (``child_rngs(seed, 3)``, NumPy >= 1.24 compatible).
     Empty residual evidence is NOT padded; the service enforces the minimum
     window count and returns an explicit incomplete result.
     """
@@ -402,7 +415,7 @@ def residual_simulation(
     cf_test = project_counterfactual(fit, test_df, test_regions, control_regions)
     cf_test_sum = float(np.sum(cf_test))
 
-    cal_rng, alt_rng, diag_rng = rng.spawn(3)
+    cal_rng, alt_rng, diag_rng = child_rngs(seed, 3)
 
     def _bootstrap(stream):
         if len(resid) == 0:
