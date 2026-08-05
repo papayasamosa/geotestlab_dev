@@ -2955,7 +2955,13 @@ def render_structural_matching_tab():
                 else [],
                 "global_exclusions": sorted(global_exclude),
                 "test_only_exclusions": sorted(force_exp_exclude),
-                "control_only_exclusions": sorted(force_ctrl_exclude),
+                # The executed control-pool exclusions: in 'Pick Test,
+                # Auto-Match Controls' they live in excluded_geos (the local
+                # force_ctrl_exclude is reset to [] there), in 'Set Rules &
+                # Auto-Build Groups' they live in force_ctrl_exclude.
+                "control_only_exclusions": sorted(
+                    excluded_geos if "excluded_geos" in locals() else force_ctrl_exclude
+                ),
                 "forced_test_regions": sorted(force_exp_include),
                 "forced_control_eligibility": sorted(force_ctrl_include),
                 "guided_seed": GUIDED_SEARCH_CONFIG.seed,

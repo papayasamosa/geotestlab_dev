@@ -354,3 +354,33 @@ def test_same_content_workbook_replacement_invalidates_caches(tmp_path, monkeypa
     sheet2 = sheet_cache2[1]
     assert sheet2 is not None
     assert float(sheet2["Population"].iloc[0]) == pytest.approx(100_999)
+
+
+def test_frozen_snapshot_preserves_control_pool_exclusions():
+    """In 'Pick Test, Auto-Match Controls' the executed control-pool exclusions
+    live in the exclude_geographies widget (the local force_ctrl_exclude is
+    reset to [] there); the match snapshot must preserve them so the frozen
+    matching section's control_only_exclusions round-trips them."""
+    from tests.fixtures.live_scenarios import _run_match
+
+    app = _new_app()
+    setup_radio = [r for r in app.radio if r.label == "Setup Mode"][0]
+    setup_radio.set_value(setup_radio.options[1])  # Pick Test, Auto-Match Controls
+    app.run(timeout=RUN_TIMEOUT)
+
+    ms = [m for m in app.multiselect if m.label == "select_geographies"][0]
+    test_label = next(o for o in ms.options if o.startswith(TEST_REGION + " ("))
+    ms.set_value([test_label])
+    app.run(timeout=RUN_TIMEOUT)
+
+    excl = [m for m in app.multiselect if m.label == "exclude_geographies"][0]
+    excl_label = next(o for o in excl.options if o.startswith("Angus ("))
+    excl.set_value([excl_label])
+    app.run(timeout=RUN_TIMEOUT)
+
+    _run_match(app)
+
+    snapshot = app.session_state["match_run_snapshot"]
+    assert "Angus" in snapshot["control_only_exclusions"]
+    # the executed control pool reflects the exclusion
+    assert "Angus" not in snapshot["control_pool_geos"]
