@@ -24,7 +24,9 @@ import sys
 import tempfile
 
 # A "P1"/"P2" severity marker (e.g. Codex's "![P1 Badge]..." / "![P2 Badge]...").
-_P1_P2_RE = re.compile(r"\bP[12]\b")
+# The pattern matches P1/P2 as standalone tokens (not part of other words such
+# as "RP2" or "P22") without relying on regex word-boundary escapes.
+_P1_P2_RE = re.compile(r"(?:^|[^A-Za-z0-9])P[12](?:[^0-9]|$)")
 
 
 def has_p1_p2_marker(body: str) -> bool:
@@ -51,27 +53,19 @@ def find_blocking_threads(threads) -> list:
 
 def _graphql_query() -> str:
     return (
-        "query($owner: String!, $name: String!, $number: Int!) { "
+        "query($owner: String!, $name: String!, $number: Int!, $cursor: String) { "
         "repository(owner: $owner, name: $name) { "
         "pullRequest(number: $number) { "
-        "reviewThreads(first: 100) { nodes { id isResolved isOutdated "
+        "reviewThreads(first: 100, after: $cursor) { "
+        "pageInfo { hasNextPage endCursor } "
+        "nodes { id isResolved isOutdated "
         "comments(first: 100) { nodes { body } } } } } } }"
     )
 
 
-def fetch_review_threads(repo: str, pr_number: int, gh: str = "gh") -> list:
-    """Fetch the PR's review threads via ``gh api graphql``.
-
-    The query + variables are passed through a temp JSON body so no shell
-    quoting is involved (portable on Windows and Linux).
-    """
-    owner, name = repo.split("/", 1)
-    query_json = json.dumps(
-        {
-            "query": _graphql_query(),
-            "variables": {"owner": owner, "name": name, "number": int(pr_number)},
-        }
-    )
+def _gh_graphql(query_json: str, gh: str) -> dict:
+    """Run one ``gh api graphql`` call with a temp JSON body (no shell quoting;
+    explicit UTF-8 so it works on Windows). Returns the parsed JSON response."""
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
@@ -93,11 +87,41 @@ def fetch_review_threads(repo: str, pr_number: int, gh: str = "gh") -> list:
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr or proc.stdout)
         raise RuntimeError(f"gh api graphql failed (exit {proc.returncode})")
-    data = json.loads(proc.stdout)
-    nodes = (data.get("data") or {}).get("repository", {}).get("pullRequest", {}).get(
-        "reviewThreads", {}
-    ).get("nodes") or []
-    return nodes
+    return json.loads(proc.stdout)
+
+
+def fetch_review_threads(repo: str, pr_number: int, gh: str = "gh") -> list:
+    """Fetch ALL review threads via ``gh api graphql`` (paginated).
+
+    Paginates through ``reviewThreads`` so PRs with more than one page of
+    threads never miss a later blocking thread.
+    """
+    owner, name = repo.split("/", 1)
+    threads: list = []
+    cursor = None
+    while True:
+        query_json = json.dumps(
+            {
+                "query": _graphql_query(),
+                "variables": {
+                    "owner": owner,
+                    "name": name,
+                    "number": int(pr_number),
+                    "cursor": cursor,
+                },
+            }
+        )
+        data = _gh_graphql(query_json, gh)
+        page = (data.get("data") or {}).get("repository", {}).get("pullRequest", {}).get(
+            "reviewThreads", {}
+        ) or {}
+        nodes = page.get("nodes") or []
+        threads.extend(nodes)
+        page_info = page.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            break
+        cursor = page_info.get("endCursor")
+    return threads
 
 
 def main(argv=None) -> int:

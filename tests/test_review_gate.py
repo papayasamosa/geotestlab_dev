@@ -138,3 +138,94 @@ class TestMain:
         monkeypatch.setattr("check_review_gate.fetch_review_threads", _fake_fetch)
         assert main(["--repo", "o/r", "--pr", "1"]) == 0
         assert "PASS" in capsys.readouterr().out
+
+
+class TestPagination:
+    def test_fetch_paginates_all_threads(self, monkeypatch):
+        from check_review_gate import fetch_review_threads
+
+        pages = [
+            {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": True, "endCursor": "cursor2"},
+                                "nodes": [
+                                    {
+                                        "id": "t1",
+                                        "isResolved": False,
+                                        "isOutdated": False,
+                                        "comments": [],
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                "nodes": [
+                                    {
+                                        "id": "t2",
+                                        "isResolved": False,
+                                        "isOutdated": False,
+                                        "comments": [],
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                }
+            },
+        ]
+        calls = []
+
+        def _fake_gh(query_json, gh):
+            calls.append(query_json)
+            return pages[len(calls) - 1]
+
+        monkeypatch.setattr("check_review_gate._gh_graphql", _fake_gh)
+        threads = fetch_review_threads("o/r", 1, gh="gh")
+        assert [t["id"] for t in threads] == ["t1", "t2"]
+        assert len(calls) == 2
+        # the second page request carries the endCursor from the first page
+        assert '"cursor": "cursor2"' in calls[1]
+
+    def test_single_page_no_cursor(self, monkeypatch):
+        from check_review_gate import fetch_review_threads
+
+        calls = []
+
+        def _fake_gh(query_json, gh):
+            calls.append(query_json)
+            return {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                "nodes": [
+                                    {
+                                        "id": "t1",
+                                        "isResolved": False,
+                                        "isOutdated": False,
+                                        "comments": [],
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                }
+            }
+
+        monkeypatch.setattr("check_review_gate._gh_graphql", _fake_gh)
+        threads = fetch_review_threads("o/r", 1, gh="gh")
+        assert [t["id"] for t in threads] == ["t1"]
+        assert len(calls) == 1
+        assert '"cursor": null' in calls[0]
