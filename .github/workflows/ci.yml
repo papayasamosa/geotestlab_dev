@@ -136,3 +136,37 @@ jobs:
         run: |
           pytest tests/test_bayesian_core.py::TestReducedSamplingSmoke -q
           pytest tests/test_bayesian_state_app.py::TestBayesianTraceCreation -q
+
+  # Review-completeness merge gate: fails when an unresolved, non-outdated
+  # review thread on the PR carries a P1 or P2 marker. Resolved threads,
+  # outdated threads and lower-priority (P3+/no-marker) threads never block.
+  # Least-privilege: read-only pull-requests/issues scopes. The same logic is
+  # also available as a tested maintainer-side script
+  # (scripts/check_review_gate.py) that the automatic merge workflow MUST run
+  # before merging, so a P1/P2 arriving after the last CI run is still caught.
+  review-gate:
+    name: review-gate
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run review completeness gate
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/check_review_gate.py \
+            --repo "${{ github.repository }}" \
+            --pr "${{ github.event.pull_request.number }}"
+
+      - name: Skip review gate (non-PR event)
+        if: github.event_name != 'pull_request'
+        run: echo "review-gate: not a pull_request event; skipping."
