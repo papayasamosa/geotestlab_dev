@@ -18,6 +18,102 @@ from geotestlab.experiment.records import ExperimentRecord, add_note
 FROZEN_SCHEMA_VERSION = "frozen-design/v1"
 
 
+def build_frozen_matching_section(snapshot) -> dict:
+    """Frozen ``matching`` section reconstructed from the executed-match snapshot.
+
+    The snapshot is the app's ``match_run_snapshot`` — what was actually
+    executed, not the live (possibly changed) widget state. Only available
+    values are included; nothing is fabricated. Region exclusions are kept
+    strictly separate from time-period exclusions.
+
+    Included (when available): matching method, match mode, setup mode,
+    executed strategy, test regions, selected controls, eligible control pool,
+    global/test-only/control-only region exclusions, forced test regions,
+    forced control eligibility, feature weights, actual guided seed, target and
+    achieved test share, market, geography level, and KPI Pattern metric and
+    dates. Returns a JSON-safe dict.
+    """
+    s = snapshot or {}
+    return {
+        "matching_method": s.get("matching_method"),
+        "match_mode": s.get("match_mode"),
+        "setup_mode": s.get("setup_mode"),
+        "executed_strategy": s.get("executed_strategy") or s.get("match_mode"),
+        "market": s.get("market"),
+        "geography_level": s.get("geography_level"),
+        "test_regions": sorted(str(r) for r in (s.get("test_geos") or [])),
+        "selected_controls": sorted(str(r) for r in (s.get("selected_controls") or [])),
+        "eligible_control_pool": sorted(str(r) for r in (s.get("control_pool_geos") or [])),
+        "region_exclusions": {
+            "global": sorted(str(r) for r in (s.get("global_exclusions") or [])),
+            "test_only": sorted(str(r) for r in (s.get("test_only_exclusions") or [])),
+            "control_only": sorted(str(r) for r in (s.get("control_only_exclusions") or [])),
+            "forced_test_regions": sorted(str(r) for r in (s.get("forced_test_regions") or [])),
+            "forced_control_eligibility": sorted(
+                str(r) for r in (s.get("forced_control_eligibility") or [])
+            ),
+        },
+        "time_period_exclusions": {
+            "manual": sorted(str(d) for d in (s.get("manual_excluded_dates") or [])),
+            "tracking_outages": sorted(str(d) for d in (s.get("tracking_outage_dates") or [])),
+        },
+        "feature_weights": dict(s.get("weights") or {}),
+        "guided_seed": s.get("guided_seed"),
+        "test_share": {
+            "target": s.get("target_test_share"),
+            "achieved": s.get("test_share"),
+        },
+        "kpi_pattern": {
+            "metric": s.get("kpi_pattern_metric"),
+            "agg_col": s.get("kpi_pattern_agg_col"),
+            "date_range": list(s.get("kpi_pattern_date_range") or []),
+        },
+    }
+
+
+def build_frozen_data_quality_summary(
+    mapping_report=None,
+    required_regions=(),
+    blocking_errors=(),
+    warnings=(),
+    observations=None,
+) -> dict:
+    """JSON-safe frozen data-quality summary with separately stored fields.
+
+    Never reads a non-existent ``uncovered_regions`` attribute. Fields are
+    stored separately:
+
+    - ``raw_regions`` / ``unmapped_raw_regions`` — from the mapping report;
+    - ``covered_regions`` — canonical regions the mapped data actually covers;
+    - ``required_regions_without_coverage`` — selected required regions with no
+      mapped data (the same pure rule the pre-run gate uses);
+    - ``blocking_errors`` / ``warnings`` — explicit, never fabricated.
+
+    ``observations`` is an optional dict of additional parse-level values
+    (observations retained/removed, duplicate rows, rejected rows).
+    """
+    _raw = tuple(getattr(mapping_report, "raw_regions", ()) or ())
+    _unmapped = tuple(getattr(mapping_report, "unmapped_regions", ()) or ())
+    _covered = tuple(getattr(mapping_report, "covered_regions", ()) or ())
+    if mapping_report is not None:
+        from geotestlab.data.mapping import uncovered_required_regions
+
+        required_without = uncovered_required_regions(mapping_report, tuple(required_regions))
+    else:
+        required_without = ()
+    summary = {
+        "raw_regions": sorted(str(r) for r in _raw),
+        "unmapped_raw_regions": sorted(str(r) for r in _unmapped),
+        "covered_regions": sorted(str(r) for r in _covered),
+        "required_regions_without_coverage": sorted(str(r) for r in required_without),
+        "blocking_errors": list(blocking_errors or ()),
+        "warnings": list(warnings or ()),
+    }
+    if observations:
+        summary.update(dict(observations))
+    return summary
+
+
 @dataclass
 class FrozenVersion:
     """One immutable approved design version (typed + schema-versioned)."""

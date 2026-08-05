@@ -13,35 +13,49 @@ Covers, with small hand-calculable fixtures (no Streamlit):
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
+import tomllib
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from geotestlab.data.models import RegionMappingReport
 from geotestlab.experiment import (
+    DEV_TOOL_VERSION,
     STAGE_KEYS,
     ExperimentRecord,
     active_frozen_version,
     analytical_data_digest,
     build_content_digests,
     build_experiment_export,
+    build_frozen_data_quality_summary,
+    build_frozen_matching_section,
     candidate_universe_digest,
+    canonical_frame,
     compute_input_fingerprint,
+    compute_stale_flags,
     create_experiment_record,
     default_stage_status,
     freeze_design,
     is_frozen,
     load_experiment_record,
     load_experiment_record_from_export,
+    material_file_identity,
     new_experiment_id,
+    observed_impact_completed,
     planned_vs_analysed,
     propagate_staleness,
     record_stage_method_result,
     record_stage_result,
+    set_stage_status,
     sha256_bytes,
+    stage_has_result,
     stage_is_stale,
+    tool_version,
     update_inputs,
     utc_now_iso,
 )
@@ -699,3 +713,428 @@ class TestVersioning:
         assert rec2.stage_status == rec.stage_status
         assert rec2.schema_version == "experiment-record/v2"
         assert rec2.frozen_versions[0].planned["planned_test_periods"] == 4
+
+
+# ---------------------------------------------------------------------------
+# Authoritative tool version (derived from package metadata, never hardcoded)
+# ---------------------------------------------------------------------------
+class TestToolVersion:
+    def test_tool_version_matches_pyproject_when_installed(self, monkeypatch):
+        try:
+            installed = importlib.metadata.version("geotestlab")
+        except importlib.metadata.PackageNotFoundError:
+            installed = None
+        if installed is None:
+            # not installed as a distribution -> the development fallback is used
+            assert tool_version() == DEV_TOOL_VERSION
+        else:
+            assert tool_version() == installed
+            # installed version must match pyproject.toml's version declaration
+            pyproject = tomllib.loads(
+                (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text()
+            )
+            assert installed == pyproject["project"]["version"]
+
+    def test_tool_version_fallback_when_not_installed(self, monkeypatch):
+        def _raise(name):
+            raise importlib.metadata.PackageNotFoundError(name)
+
+        monkeypatch.setattr(importlib.metadata, "version", _raise)
+        assert tool_version() == DEV_TOOL_VERSION
+        assert isinstance(tool_version(), str)
+
+
+# ---------------------------------------------------------------------------
+# Collision-free frame digests (type-preserving canonical rows)
+# ---------------------------------------------------------------------------
+class TestCanonicalFrameCollisions:
+    def test_delimiter_join_does_not_collide(self):
+        a = pd.DataFrame({"x": ["a|b"], "y": ["c"]})
+        b = pd.DataFrame({"x": ["a"], "y": ["b|c"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_numeric_1_vs_string_1(self):
+        a = pd.DataFrame({"v": [1]})
+        b = pd.DataFrame({"v": ["1"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_none_vs_string_none(self):
+        a = pd.DataFrame({"v": [None]})
+        b = pd.DataFrame({"v": ["None"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_nan_vs_string_nan(self):
+        a = pd.DataFrame({"v": [float("nan")]})
+        b = pd.DataFrame({"v": ["nan"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_timestamp_vs_identical_iso_string(self):
+        a = pd.DataFrame({"t": [pd.Timestamp("2025-01-06")]})
+        b = pd.DataFrame({"t": ["2025-01-06T00:00:00"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_reversed_rows_same_digest(self):
+        df = pd.DataFrame(
+            {"date": ["2025-01-06", "2025-01-13"], "region": ["T", "C1"], "kpi": [1.0, 2.0]}
+        )
+        shuffled = df.iloc[[1, 0]].reset_index(drop=True)
+        assert analytical_data_digest(df) == analytical_data_digest(shuffled)
+
+    def test_duplicate_rows_deterministic(self):
+        df = pd.DataFrame({"v": [2, 1, 2, 1]})
+        assert analytical_data_digest(df) == analytical_data_digest(df.copy())
+
+    def test_column_order_policy(self):
+        df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+        reordered = df[["b", "a"]]
+        assert analytical_data_digest(df) == analytical_data_digest(reordered)
+
+    def test_canonical_frame_none_in_none_out(self):
+        assert canonical_frame(None) is None
+
+
+# ---------------------------------------------------------------------------
+# Material file identity (same-size replacement invalidation)
+# ---------------------------------------------------------------------------
+class TestMaterialFileIdentity:
+    def test_same_file_same_identity(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_bytes(b"AAAA")
+        assert material_file_identity(path) == material_file_identity(path)
+
+    def test_same_size_replacement_different_identity(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_bytes(b"AAAA")
+        identity_a = material_file_identity(path)
+        # Same-size replacement (identical byte count, different content).
+        path.write_bytes(b"BBBB")
+        # Explicitly bump mtime so the identity changes even though size is equal.
+        import os
+
+        st = os.stat(path)
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+        identity_b = material_file_identity(path)
+        assert identity_a["size"] == identity_b["size"]  # same size
+        assert identity_a["path"] == identity_b["path"]
+        assert identity_a["mtime_ns"] != identity_b["mtime_ns"]
+        assert identity_a != identity_b
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert material_file_identity(tmp_path / "missing.xlsx") is None
+
+    def test_identity_has_path_size_mtime(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_bytes(b"hello")
+        ident = material_file_identity(path)
+        assert set(ident) == {"path", "size", "mtime_ns"}
+        assert ident["size"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Frozen matching section (reconstructed from the executed-match snapshot)
+# ---------------------------------------------------------------------------
+class TestFrozenMatchingSection:
+    @staticmethod
+    def _snapshot():
+        return {
+            "matching_method": "structural",
+            "match_mode": "Global Optimal",
+            "setup_mode": "Pick Test, Auto-Match Controls",
+            "market": "UK",
+            "geography_level": "Local Authority Area",
+            "test_geos": ["Aberdeen City"],
+            "selected_controls": ["Aberdeenshire", "Angus"],
+            "control_pool_geos": ["Aberdeenshire", "Angus", "Argyll and Bute"],
+            "global_exclusions": ["Orkney Islands"],
+            "test_only_exclusions": ["Shetland Islands"],
+            "control_only_exclusions": [],
+            "forced_test_regions": ["Highland"],
+            "forced_control_eligibility": ["Aberdeenshire"],
+            "guided_seed": 42,
+            "target_test_share": 25,
+            "target_tolerance_pp": 5,
+            "test_share": 18.5,
+            "weights": {"Population": 0.5, "Population Density": 0.5},
+            "kpi_pattern_metric": "Total Sales",
+            "kpi_pattern_agg_col": "Region",
+            "kpi_pattern_date_range": ("2025-01-06", "2025-06-30"),
+        }
+
+    def test_reconstruction_round_trip(self):
+        section = build_frozen_matching_section(self._snapshot())
+        json.dumps(section)  # JSON-safe
+        snap = self._snapshot()
+        assert section["matching_method"] == snap["matching_method"]
+        assert section["match_mode"] == snap["match_mode"]
+        assert section["setup_mode"] == snap["setup_mode"]
+        assert section["executed_strategy"] == snap["match_mode"]
+        assert section["market"] == snap["market"]
+        assert section["geography_level"] == snap["geography_level"]
+        assert section["test_regions"] == sorted(snap["test_geos"])
+        assert section["selected_controls"] == sorted(snap["selected_controls"])
+        assert section["eligible_control_pool"] == sorted(snap["control_pool_geos"])
+        assert section["feature_weights"] == snap["weights"]
+        assert section["guided_seed"] == 42
+        assert section["test_share"] == {"target": 25, "achieved": 18.5}
+        assert section["kpi_pattern"]["metric"] == "Total Sales"
+        assert section["kpi_pattern"]["agg_col"] == "Region"
+        assert list(section["kpi_pattern"]["date_range"]) == list(snap["kpi_pattern_date_range"])
+
+    def test_region_exclusions_separate_from_time_period_exclusions(self):
+        snapshot = self._snapshot()
+        snapshot["manual_excluded_dates"] = ["2025-03-03"]
+        snapshot["tracking_outage_dates"] = ["2025-02-10"]
+        section = build_frozen_matching_section(snapshot)
+        assert section["region_exclusions"]["global"] == ["Orkney Islands"]
+        assert section["region_exclusions"]["test_only"] == ["Shetland Islands"]
+        assert section["region_exclusions"]["control_only"] == []
+        assert section["region_exclusions"]["forced_test_regions"] == ["Highland"]
+        assert section["region_exclusions"]["forced_control_eligibility"] == ["Aberdeenshire"]
+        assert section["time_period_exclusions"]["manual"] == ["2025-03-03"]
+        assert section["time_period_exclusions"]["tracking_outages"] == ["2025-02-10"]
+
+    def test_empty_snapshot_is_safe(self):
+        section = build_frozen_matching_section(None)
+        assert section["test_regions"] == []
+        assert section["region_exclusions"]["global"] == []
+        assert section["time_period_exclusions"]["manual"] == []
+        assert section["feature_weights"] == {}
+        assert section["guided_seed"] is None
+
+    def test_no_fabricated_values(self):
+        section = build_frozen_matching_section({})
+        assert section["matching_method"] is None
+        assert section["test_share"] == {"target": None, "achieved": None}
+        assert section["kpi_pattern"]["metric"] is None
+
+
+# ---------------------------------------------------------------------------
+# Frozen data-quality summary (separate fields, never uncovered_regions)
+# ---------------------------------------------------------------------------
+class TestFrozenDataQualitySummary:
+    def _mapping_report(self, **over):
+        return RegionMappingReport(
+            raw_regions=("C1", "C2", "C3"),
+            mapped_regions=("C1", "C2"),
+            unmapped_regions=("C3",),
+            unmapped_rows=None,
+            covered_regions=("C1", "C2"),
+            **over,
+        )
+
+    def test_fields_stored_separately(self):
+        mapping = self._mapping_report()
+        summary = build_frozen_data_quality_summary(
+            mapping_report=mapping,
+            required_regions=("C1", "C4"),
+            blocking_errors=("The following selected test region(s) have no mapped data: C4",),
+            warnings=("Unmapped raw regions: C3",),
+            observations={"observations_retained": 100, "rejected_rows": 2},
+        )
+        json.dumps(summary)
+        assert summary["raw_regions"] == ["C1", "C2", "C3"]
+        assert summary["unmapped_raw_regions"] == ["C3"]
+        assert summary["covered_regions"] == ["C1", "C2"]
+        assert summary["required_regions_without_coverage"] == ["C4"]
+        assert summary["blocking_errors"]
+        assert summary["warnings"] == ["Unmapped raw regions: C3"]
+        assert summary["observations_retained"] == 100
+        assert summary["rejected_rows"] == 2
+        # the non-existent attribute is never read / never emitted
+        assert "uncovered_regions" not in summary
+
+    def test_no_required_regions_with_coverage(self):
+        mapping = self._mapping_report()
+        summary = build_frozen_data_quality_summary(
+            mapping_report=mapping, required_regions=("C1", "C2")
+        )
+        assert summary["required_regions_without_coverage"] == []
+
+    def test_no_mapping_report_is_safe(self):
+        summary = build_frozen_data_quality_summary(required_regions=("C1",))
+        assert summary["raw_regions"] == []
+        assert summary["covered_regions"] == []
+        assert summary["required_regions_without_coverage"] == []
+        assert summary["blocking_errors"] == []
+
+    def test_none_mapping_report(self):
+        summary = build_frozen_data_quality_summary(mapping_report=None, required_regions=())
+        assert summary["covered_regions"] == []
+        assert summary["unmapped_raw_regions"] == []
+
+
+# ---------------------------------------------------------------------------
+# Observed-impact completion requires a successful completed-test evaluation
+# ---------------------------------------------------------------------------
+class TestObservedImpactCompletion:
+    def test_design_mode_never_completes(self):
+        assert observed_impact_completed({"mode": "Design", "results": {"enet": {}}}) is False
+        assert observed_impact_completed({"mode": "Design", "results": {}}) is False
+        assert observed_impact_completed({"mode": "Design"}) is False
+
+    def test_empty_or_missing_results_fails(self):
+        assert observed_impact_completed({"mode": "Evaluate"}) is False
+        assert observed_impact_completed({"mode": "Evaluate", "results": {}}) is False
+        assert observed_impact_completed(None) is False
+        assert observed_impact_completed({}) is False
+
+    def test_selected_dates_without_model_fails(self):
+        # test_start present but no model ran -> uplift is None
+        vres = {
+            "mode": "Evaluate",
+            "results": {"enet": {"uplift_pct": None}},
+            "analysed_test_periods": 4,
+        }
+        assert observed_impact_completed(vres) is False
+
+    def test_non_finite_uplift_fails(self):
+        vres = {"mode": "Evaluate", "results": {"enet": {"uplift_pct": float("nan")}}}
+        assert observed_impact_completed(vres) is False
+        vres["results"]["enet"]["uplift_pct"] = float("inf")
+        assert observed_impact_completed(vres) is False
+
+    def test_method_blocker_fails(self):
+        vres = {
+            "mode": "Evaluate",
+            "results": {"enet": {"uplift_pct": 5.0, "blockers": ("blocked",)}},
+        }
+        assert observed_impact_completed(vres) is False
+
+    def test_successful_finite_uplift_completes(self):
+        vres = {"mode": "Evaluate", "results": {"enet": {"uplift_pct": 5.5}}}
+        assert observed_impact_completed(vres) is True
+
+    def test_any_successful_method_completes(self):
+        vres = {
+            "mode": "Evaluate",
+            "results": {
+                "enet": {"uplift_pct": None},
+                "lasso": {"uplift_pct": 3.2},
+            },
+        }
+        assert observed_impact_completed(vres) is True
+
+    def test_non_dict_result_entry_skipped(self):
+        vres = {"mode": "Evaluate", "results": {"enet": "not-a-dict"}}
+        assert observed_impact_completed(vres) is False
+
+    def test_non_numeric_uplift_skipped(self):
+        vres = {"mode": "Evaluate", "results": {"enet": {"uplift_pct": "abc"}}}
+        assert observed_impact_completed(vres) is False
+
+
+# ---------------------------------------------------------------------------
+# Additional branch coverage for the experiment core
+# ---------------------------------------------------------------------------
+class TestFingerprintCoercionBranches:
+    def test_inf_floats_and_numpy_scalars(self):
+        fp = compute_input_fingerprint(
+            {
+                "inf": float("inf"),
+                "ninf": float("-inf"),
+                "nf": np.float64(1.5),
+                "nb": np.bool_(True),
+                "arr": np.array([1, 2.5]),
+                "tup": (1, "a"),
+                "series": pd.Series([1, 2]),
+                "frame": pd.DataFrame({"x": [1]}),
+            }
+        )
+        assert fp.startswith("fp1:")
+        fp2 = compute_input_fingerprint(
+            {
+                "inf": "Infinity",
+                "ninf": "-Infinity",
+                "nf": 1.5,
+                "nb": True,
+                "arr": [1.0, 2.5],  # float64 array -> tolist gives floats
+                "tup": [1, "a"],
+                "series": [1, 2],
+                "frame": [{"x": 1}],
+            }
+        )
+        assert fp == fp2
+
+    def test_uncoercible_object_falls_back_to_str(self):
+        class Weird:
+            def __str__(self):
+                return "weird"
+
+        assert compute_input_fingerprint({"x": Weird()}).startswith("fp1:")
+
+
+class TestCanonicalFrameTypeTags:
+    def test_bool_vs_string_bool(self):
+        a = pd.DataFrame({"v": [True]})
+        b = pd.DataFrame({"v": ["True"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_float_vs_string_float(self):
+        a = pd.DataFrame({"v": [1.5]})
+        b = pd.DataFrame({"v": ["1.5"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_int_vs_float(self):
+        a = pd.DataFrame({"v": [1]})
+        b = pd.DataFrame({"v": [1.0]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+
+    def test_dict_and_other_cells(self):
+        class Weird:
+            def __str__(self):
+                return "weird"
+
+        a = pd.DataFrame({"v": pd.Series([{"a": 1}], dtype=object)})
+        b = pd.DataFrame({"v": pd.Series([Weird()], dtype=object)})
+        c = pd.DataFrame({"v": ["weird"]})
+        assert analytical_data_digest(a) != analytical_data_digest(b)
+        assert analytical_data_digest(b) != analytical_data_digest(c)
+
+
+class TestRecordStatusBranches:
+    def test_set_stage_status_unknown_stage_raises(self):
+        rec = create_experiment_record(NOW)
+        with pytest.raises(ValueError, match="Unknown stage"):
+            set_stage_status(rec, "bogus", "completed")
+
+    def test_set_stage_status_applies(self):
+        rec = create_experiment_record(NOW)
+        set_stage_status(rec, "match_quality", "in_progress")
+        assert rec.stage_status["match_quality"] == "in_progress"
+
+    def test_stage_has_result_direct(self):
+        rec = create_experiment_record(NOW)
+        assert stage_has_result(rec, "match_quality") is False
+        record_stage_result(rec, "match_quality", "fp1:x")
+        assert stage_has_result(rec, "match_quality") is True
+
+
+class TestStaleExtraBranches:
+    def test_propagate_staleness_skips_planned_stages(self):
+        rec = create_experiment_record(NOW)
+        changed = propagate_staleness(rec, {"statistical_power": "fp1:new"})
+        assert changed == []
+        assert rec.stage_status["statistical_power"] == "planned"
+
+    def test_compute_stale_flags_with_string_current(self):
+        rec = create_experiment_record(NOW)
+        flags = compute_stale_flags(rec, "fp1:any")
+        assert set(flags) == set(STAGE_KEYS)
+        assert all(not flags[s] for s in STAGE_KEYS)
+
+
+class TestPlannedVsAnalysedExtraBranches:
+    def test_invalid_date_falls_back_to_str(self):
+        rec = create_experiment_record(NOW)
+        freeze_design(rec, {"pre_start": "not-a-date", "planned_test_periods": 4}, "fp1:x")
+        rec.analysed = {"pre_start": "2025-01-06", "planned_test_periods": 4}
+        out = planned_vs_analysed(rec)
+        assert out["planned"]["pre_start"] == "not-a-date"
+        assert out["frozen"] is True
+
+    def test_planned_counts_fallback_from_analysed_plus_excluded(self):
+        rec = create_experiment_record(NOW)
+        freeze_design(rec, {"analysed_test_periods": 10, "excluded_test_periods": 2}, "fp1:x")
+        rec.analysed = {"analysed_test_periods": 10, "excluded_test_periods": 2}
+        out = planned_vs_analysed(rec)
+        assert out["planned_counts"]["planned_test_periods"] == 12

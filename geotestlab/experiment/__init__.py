@@ -9,7 +9,9 @@ from geotestlab.experiment.content import (
     analytical_data_digest,
     build_content_digests,
     candidate_universe_digest,
+    canonical_frame,
     market_sheet_digest,
+    material_file_identity,
     sha256_bytes,
     sha256_content,
 )
@@ -26,6 +28,8 @@ from geotestlab.experiment.freeze import (
     FROZEN_SCHEMA_VERSION,
     FrozenVersion,
     active_frozen_version,
+    build_frozen_data_quality_summary,
+    build_frozen_matching_section,
     freeze_design,
     is_frozen,
     planned_vs_analysed,
@@ -49,6 +53,7 @@ from geotestlab.experiment.stages import (
     STAGE_LABELS,
     STAGE_STATUSES,
     default_stage_status,
+    observed_impact_completed,
     stage_label,
 )
 from geotestlab.experiment.stale import (
@@ -56,8 +61,10 @@ from geotestlab.experiment.stale import (
     propagate_staleness,
     stage_is_stale,
 )
+from geotestlab.experiment.version import DEV_TOOL_VERSION, tool_version
 
 __all__ = [
+    "DEV_TOOL_VERSION",
     "EXPORT_SCHEMA_VERSION",
     "ExperimentRecord",
     "FROZEN_SCHEMA_VERSION",
@@ -71,7 +78,10 @@ __all__ = [
     "analytical_data_digest",
     "build_content_digests",
     "build_experiment_export",
+    "build_frozen_data_quality_summary",
+    "build_frozen_matching_section",
     "candidate_universe_digest",
+    "canonical_frame",
     "canonical_json",
     "compute_input_fingerprint",
     "compute_stale_flags",
@@ -82,7 +92,9 @@ __all__ = [
     "load_experiment_record",
     "load_experiment_record_from_export",
     "market_sheet_digest",
+    "material_file_identity",
     "new_experiment_id",
+    "observed_impact_completed",
     "planned_vs_analysed",
     "propagate_staleness",
     "record_stage_method_result",
@@ -93,6 +105,7 @@ __all__ = [
     "stage_has_result",
     "stage_is_stale",
     "stage_label",
+    "tool_version",
     "touch",
     "update_inputs",
     "utc_now_iso",
