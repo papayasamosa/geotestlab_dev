@@ -176,9 +176,8 @@ def compare_fit_methods(
         # Power-level evidence using this fit method's noise model. The same
         # seed is used for every method so the random streams are identical and
         # any power difference reflects the fit method alone.
-        rng = np.random.default_rng(seed)
         cal_null, alt_fn, _ = model_simulation(
-            pre_df, test_df, test_regions, fit_control_regions, n_test, n_sim, rng, fit_method=m
+            pre_df, test_df, test_regions, fit_control_regions, n_test, n_sim, seed, fit_method=m
         )
         alt, _ = alt_fn(reference_effect, "relative", "one_sided_positive")
         lower, upper = critical_values(cal_null, "one_sided_positive", alpha)
