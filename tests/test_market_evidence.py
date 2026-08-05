@@ -195,6 +195,22 @@ class TestReferenceTruth:
         assert reference_power(sc, 0.8) == reference_power(sc, 0.8)
         assert reference_null_sd(sc) == reference_null_sd(sc)
 
+    def test_absolute_reference_scales_by_test_length(self):
+        # Regression (Codex P1): the production spike's _shift treats an
+        # absolute effect as a PER-PERIOD lift (total shift = effect * n_test);
+        # the reference must use the same convention or low_volume power is
+        # systematically wrong (was shift = effect, one period only).
+        sc = build_market_scenario("low_volume")
+        n_test = int(sc.truth["n_test"])
+        sd = reference_null_sd(sc)
+        e = 0.5
+        expected = analytic_power(
+            sc.truth["cf_sum_test"], sd, e * n_test, 0.05, "one_sided_positive"
+        )
+        assert reference_power(sc, e) == pytest.approx(expected, rel=1e-6)
+        wrong = analytic_power(sc.truth["cf_sum_test"], sd, e, 0.05, "one_sided_positive")
+        assert abs(reference_power(sc, e) - wrong) > 1e-3
+
 
 class TestNoiseSimulator:
     def test_shape_and_reproducible(self):
@@ -226,6 +242,25 @@ class TestMarketEvidenceHarness:
         )
         assert len(ev["runs"]) == 2 * 2 * 1 * 1 * 1
         assert ev["totals"]["total_runs"] == 4
+
+    def test_placebo_recorded_once_with_na_fit_method(self):
+        # Regression (Codex P2): placebo_empirical never receives a fit method,
+        # so it must be recorded ONCE under ``n/a``, not once per fit method.
+        ev = run_market_evidence(
+            scenario_names=["weekly_104"],
+            methods=["model_simulation", "placebo_empirical"],
+            fit_methods=["ols", "elastic_net", "lasso"],
+            seeds=(0,),
+            n_sim=200,
+        )
+        model = [r for r in ev["runs"] if r["method"] == "model_simulation"]
+        placebo = [r for r in ev["runs"] if r["method"] == "placebo_empirical"]
+        assert len(model) == 3  # one per fit method
+        assert len(placebo) == 1  # once, no fit-method labelling
+        assert placebo[0]["fit_method"] == "n/a"
+        cells = ev["summaries"]["weekly_104"]["cells"]
+        assert "placebo_empirical|n/a" in cells
+        assert "placebo_empirical|ols" not in cells
 
     def test_json_safe(self):
         ev = _small_evidence(seeds=(0, 1))
@@ -505,9 +540,13 @@ def test_full_evidence_report_matches_committed():
 
     # Sanity bounds on the committed evidence.
     totals = report["totals"]
-    assert totals["total_runs"] == 12 * 3 * 3 * 1 * 2 + 1 * 3 * 1 * 2 * 2  # 216 + 12
-    assert totals["n_errored"] == 6  # placebo x absolute-injection (low_volume)
-    assert totals["n_fallback"] >= 12  # duplicate_controls x 3 fits x 2 seeds
+    # Broad: 12 scenarios x (model 3 fits + residual 3 fits + placebo 1) x 1
+    # side x 2 seeds = 168. Side matrix: weekly_104 x (1+1+1) x 2 sides x 2
+    # seeds = 12. Total = 180.
+    assert totals["total_runs"] == 168 + 12
+    assert totals["n_errored"] == 2  # placebo x absolute-injection (low_volume), 2 seeds
+    assert totals["n_fallback"] >= 12  # duplicate_controls x (3+3) fits x 2 seeds
+    assert totals["n_incomplete"] == 2  # weekly_52 placebo, 2 seeds
     sc104 = report["summaries"]["weekly_104"]
     model_ols = sc104["cells"]["model_simulation|ols"]
     assert abs(model_ols["null_calibration_mean"] - 0.05) < 0.04

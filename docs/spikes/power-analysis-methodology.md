@@ -264,10 +264,13 @@ the evidence isolates each method's estimation error.
 
 The harness is `geotestlab/power/market_evidence.py` (deterministic; the committed
 report regenerates byte-identically via `python scripts/update_market_evidence.py
---approve`). The full report (228 runs, ~60 s locally) is committed at
+--approve`). The full report (180 runs, ~50 s locally) is committed at
 `docs/spikes/evidence/power-methodology-evidence.json`; the `@pytest.mark.slow` test
 `test_full_evidence_report_matches_committed` guards it. Reference effects are chosen
-so reference power sits in a discriminating 0.26–0.67 range.
+so reference power sits in a discriminating 0.26–0.67 range. Effect units follow the
+injection convention of the production spike: relative effects scale the
+counterfactual total by `effect/100`; absolute effects are **per-period lifts**, so
+the test-window total shift is `effect × n_test`.
 
 ### 9.1 Scenario inventory
 
@@ -275,7 +278,7 @@ so reference power sits in a discriminating 0.26–0.67 range.
 |---|---|---|---|
 | `weekly_52/104/156` | 52/104/156 weekly pre-periods, 2 test regions, 4 controls, AR(1) ρ=0.4, σ=2 | 0.626 / 0.644 / 0.668 | yes |
 | `daily_weekday` | 365 daily pre-periods, weekday seasonality in controls + test-specific offsets, 6 tracking-outage dates, 2 test regions | 0.464 | yes |
-| `low_volume` | small KPI (absolute injection; relative ill-defined) | 0.428 | yes |
+| `low_volume` | small KPI (absolute injection; relative ill-defined) | 0.544 | yes |
 | `high_autocorrelation` | ρ=0.9 | 0.336 | yes |
 | `heteroskedastic` | noise sd scales with KPI level | 0.341 | yes |
 | `seasonal_residuals` | weekend innovation sd ~2.5× weekdays | 0.394 | yes |
@@ -289,7 +292,7 @@ so reference power sits in a discriminating 0.26–0.67 range.
 `model_simulation` calibrates to α across every scenario (0.051–0.060).
 `placebo_empirical` is **inflated** with few windows (0.125 with 8 windows — the
 empirical threshold sits near the sample maximum), and `weekly_52` yields only 4
-windows so placebo returns an explicit **incomplete** result (6 of the 228 runs).
+windows so placebo returns an explicit **incomplete** result (2 of the 180 runs).
 This is evidence that placebo-window empirical power is a **cross-check only** and
 that short histories cannot support 12-period placebo windows.
 
@@ -303,7 +306,7 @@ that short histories cannot support 12-period placebo windows.
 | `weekly_156` | +0.050 | |
 | `weekly_52` | **+0.306** | ρ̂ collapses to 0.07 (truth 0.4) at 52 weeks → null too narrow → power overestimated |
 | `daily_weekday` | **−0.195** | unmodeled weekday offsets inflate residual σ̂ (4.6 vs 2.8) → null too wide → power underestimated |
-| `low_volume` | +0.572 | overfit residuals → null too narrow (see 9.7) |
+| `low_volume` | +0.055 | absolute-injection convention matches the method after the per-period-lift correction |
 | `high_autocorrelation` | +0.238 | ρ̂=0.86 < truth 0.90 → null too narrow |
 | `heteroskedastic` | +0.130 | constant-σ AR(1) misses level-scaled variance |
 | `seasonal_residuals` | −0.028 | well captured by the fitted residual sd |
@@ -314,9 +317,10 @@ that short histories cannot support 12-period placebo windows.
 
 `residual_simulation` consistently **overestimates** power (+0.17 to +0.44):
 bootstrapping residuals ignores autocorrelation, so the null is too narrow whenever
-ρ>0. `placebo_empirical` also overestimates (+0.14 to +0.31) and cannot handle
-absolute injection (raises a documented `NotImplementedError`, surfaced as a failure
-mode in the report).
+ρ>0. `placebo_empirical` also overestimates (+0.14 to +0.31), is recorded once under
+`n/a` (it never receives a fit method — its counterfactual is always the default OLS
+fit), and cannot handle absolute injection (raises a documented `NotImplementedError`,
+surfaced as a failure mode in the report).
 
 ### 9.4 MDE bias and the not-reached failure mode
 
@@ -344,20 +348,21 @@ the regularisation has nothing to shrink. Fit-method differences appear only whe
 design is ill-conditioned, which the controlled cases in section 8 already document
 (near-collinear OLS instability). `duplicate_controls` is the one market shape where
 the fit method is irrelevant in a different sense: the explicit rank rule fires for
-**all three** methods (12 of 228 runs fall back) and the constant-mean fallback
-collapses power (0.09 vs 0.63 reference). **No production fit method is selected by
-this evidence.**
+**all three** fit methods of the two simulation methods (12 of 180 runs fall back) and
+the constant-mean fallback collapses power (0.09 vs 0.63 reference). **No production
+fit method is selected by this evidence.**
 
 ### 9.7 Failure modes and fallback evidence
 
 - **Fallback (12 runs):** `duplicate_controls` → `fallback_reason='rank_deficient'`
-  for OLS, Elastic Net and LASSO; power collapses to 0.09 (vs 0.63) and MDE inflates
-  to 5.5 (vs 1.1). The explicit rule prevents silent minimum-norm garbage.
-- **Incomplete (6 runs):** `weekly_52` placebo → 4 windows < 5 → `completed=false`,
+  for OLS, Elastic Net and LASSO on both simulation methods; power collapses to 0.09
+  (vs 0.63) and MDE inflates to 5.5 (vs 1.1). The explicit rule prevents silent
+  minimum-norm garbage.
+- **Incomplete (2 runs):** `weekly_52` placebo → 4 windows < 5 → `completed=false`,
   no MDE, structured error + blocker.
-- **Errored (6 runs):** placebo × absolute injection (`low_volume`) → documented
+- **Errored (2 runs):** placebo × absolute injection (`low_volume`) → documented
   `NotImplementedError` recorded as a failure mode.
-- **Runtime:** the full 228-run matrix took ~61 s locally (≈0.27 s/run at n_sim=500,
+- **Runtime:** the full 180-run matrix took ~50 s locally (≈0.28 s/run at n_sim=500,
   16-point effect grid); runtime is excluded from the committed report (non-
   deterministic) and reported here.
 

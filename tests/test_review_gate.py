@@ -131,6 +131,30 @@ class TestMain:
         assert main(["--repo", "o/r", "--pr", "1"]) == 1
         assert "FAIL" in capsys.readouterr().err
 
+    def test_main_fails_with_real_api_comments_shape(self, monkeypatch, capsys):
+        # Regression: the failure-reporting path crashed with KeyError: 0 when
+        # the thread used the real GraphQL shape (comments = {"nodes": [...]}),
+        # because it indexed the dict directly. This only fired when the gate
+        # FAILED (resolved threads short-circuit before the body print).
+        from check_review_gate import main
+
+        def _fake_fetch(repo, pr, gh="gh"):
+            return [
+                {
+                    "id": "t1",
+                    "isResolved": False,
+                    "isOutdated": False,
+                    "comments": {"nodes": [{"body": "**P1 Badge**  real shape finding"}]},
+                }
+            ]
+
+        monkeypatch.setattr("check_review_gate.fetch_review_threads", _fake_fetch)
+        err = capsys.readouterr().err  # clear
+        assert main(["--repo", "o/r", "--pr", "1"]) == 1
+        captured = capsys.readouterr().err
+        assert "FAIL" in captured
+        assert "real shape finding" in captured  # first line printed, no crash
+
     def test_main_passes_when_no_blocking_threads(self, monkeypatch, capsys):
         from check_review_gate import main
 

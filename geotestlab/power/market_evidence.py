@@ -328,7 +328,10 @@ def build_market_scenario(name, seed=0) -> MarketScenario:
             seed=seed,
         )
         truth["injection"] = "absolute"
-        truth["reference_effect"] = 5.0
+        # Absolute effects are PER-PERIOD lifts: the test-window total shift is
+        # effect * n_test, so a small per-period lift already reaches useful
+        # power for this low-volume market.
+        truth["reference_effect"] = 0.5
         truth["mde_bounds"] = (0.0, 10.0)
         truth["description"] = "low-volume KPI (absolute injection; relative ill-defined)"
         return MarketScenario(
@@ -596,12 +599,17 @@ def reference_power(
     seed=REFERENCE_SEED,
 ):
     """Reference power for ``effect`` from the known process (normal approx on
-    the true null SD). ``effect`` is in the scenario's injection units."""
+    the true null SD). ``effect`` is in the scenario's injection units.
+
+    The shift convention matches the production spike's ``_shift``: a relative
+    effect scales the counterfactual total by ``effect/100``; an absolute
+    effect is a PER-PERIOD lift, so the test-window total shift is
+    ``effect * n_test``."""
     sd = reference_null_sd(scenario, n_sim=n_sim, seed=seed)
     cf = float(scenario.truth["cf_sum_test"])
     direction = -1.0 if side == "one_sided_negative" else 1.0
     if scenario.truth["injection"] == "absolute":
-        shift = direction * float(effect)
+        shift = direction * float(effect) * int(scenario.truth["n_test"])
     else:
         shift = direction * cf * (float(effect) / 100.0)
     return float(analytic_power(cf, sd, shift, alpha, side))
@@ -659,11 +667,17 @@ def _power_at(result, effect):
 
 def _noise_diagnostics(case, fit_method):
     """Re-fit the counterfactual to report residual noise diagnostics
-    (rho_hat / sigma_hat) without changing the spike result contract."""
+    (rho_hat / sigma_hat) without changing the spike result contract.
+
+    ``fit_method`` may be ``n/a`` (placebo rows): the placebo method's
+    counterfactual is always the default OLS fit, so ``n/a`` maps to OLS for
+    this diagnostic only.
+    """
     dates = sorted(pd.to_datetime(pd.Series(case.df["date"].unique())))
     pre_dates = set(dates[: case.pre_count])
     pre_df = case.df[case.df["date"].isin(pre_dates)]
-    fit = fit_counterfactual(pre_df, case.test_regions, case.control_regions, fit_method=fit_method)
+    use_fit = "ols" if fit_method == "n/a" else fit_method
+    fit = fit_counterfactual(pre_df, case.test_regions, case.control_regions, fit_method=use_fit)
     rho, sigma = fit_ar1(fit.residuals)
     return {
         "rho_estimate": float(rho),
@@ -730,7 +744,11 @@ def run_market_evidence(
         sc = scenarios[name]
         grid = _evidence_grid(sc.truth["mde_bounds"])
         for method in methods:
-            for fm in fit_methods:
+            # placebo_empirical never receives a fit method (its counterfactual
+            # is always the default OLS fit), so it is recorded once under
+            # ``n/a`` rather than once per fit method.
+            loop_fits = ("n/a",) if method == "placebo_empirical" else fit_methods
+            for fm in loop_fits:
                 for side in sides:
                     for seed in seeds:
                         runs.append(
@@ -785,6 +803,10 @@ def run_market_evidence(
 
 def _run_one(scenario, method, fit_method, side, seed, n_sim, effect_grid, alpha, target_power):
     bounds = tuple(scenario.truth["mde_bounds"])
+    # placebo_empirical never uses a fit method; the service still requires a
+    # valid FIT_METHOD_NAMES entry, so the default OLS is passed internally
+    # while the recorded fit_method stays ``n/a``.
+    config_fit = "ols" if method == "placebo_empirical" else fit_method
     config = PowerConfig(
         method=method,
         detection_criterion="interval_excludes_zero",
@@ -800,7 +822,7 @@ def _run_one(scenario, method, fit_method, side, seed, n_sim, effect_grid, alpha
         min_placebo_windows=5,
         test_regions=scenario.test_regions,
         control_regions=scenario.control_regions,
-        fit_method=fit_method,
+        fit_method=config_fit,
         effect_grid=effect_grid,
     )
     t0 = time.perf_counter()
@@ -897,10 +919,15 @@ def summarise_evidence(runs, scenario_names):
     matrix)."""
     summaries = {}
     sides = sorted({r["side"] for r in runs})
+    methods = ("model_simulation", "residual_simulation", "placebo_empirical")
     for name in scenario_names:
         by = {}
-        for method in ("model_simulation", "residual_simulation", "placebo_empirical"):
-            for fm in ("ols", "elastic_net", "lasso"):
+        for method in methods:
+            # placebo rows are recorded once under ``n/a`` (no fit method).
+            loop_fits = (
+                ("n/a",) if method == "placebo_empirical" else ("ols", "elastic_net", "lasso")
+            )
+            for fm in loop_fits:
                 key = f"{method}|{fm}"
                 sub = [
                     r
@@ -915,7 +942,7 @@ def summarise_evidence(runs, scenario_names):
                 by[key] = _summarise_cell(sub)
         by_side = {}
         for side in sides:
-            for method in ("model_simulation", "residual_simulation", "placebo_empirical"):
+            for method in methods:
                 sub = [
                     r
                     for r in runs
