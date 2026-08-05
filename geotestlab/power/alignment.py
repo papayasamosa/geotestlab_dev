@@ -50,8 +50,12 @@ def build_date_keyed_matrix(df, test_regions, control_regions, expected_dates=No
     ]
 
     # Pivot without raising on duplicate keys (first wins; duplicates are
-    # reported above so no data is silently discarded).
-    piv = df.pivot_table(index="date", columns="region", values="kpi", aggfunc="first")
+    # reported above so no data is silently discarded). dropna=False keeps
+    # all-NaN rows/columns so tracking outages (a date where EVERY region is
+    # missing) are reported as removed dates instead of silently vanishing.
+    piv = df.pivot_table(
+        index="date", columns="region", values="kpi", aggfunc="first", dropna=False
+    )
     piv.index = pd.to_datetime(piv.index)
 
     if expected_dates is not None:
@@ -65,9 +69,11 @@ def build_date_keyed_matrix(df, test_regions, control_regions, expected_dates=No
     elif len(test_cols) == 1:
         test_raw = pd.to_numeric(piv[test_cols[0]], errors="coerce")
     else:
-        # Sum over test regions per date (skipna matches the evaluation
-        # workflow's groupby().sum(), which sums the available regions).
-        test_raw = piv[test_cols].apply(pd.to_numeric, errors="coerce").sum(axis=1)
+        # Sum over test regions per date. min_count=1 sums the available
+        # regions when some are missing (matching the evaluation workflow's
+        # groupby().sum()) but yields NaN when EVERY test region is missing,
+        # so an all-outage date never masquerades as a zero-KPI observation.
+        test_raw = piv[test_cols].apply(pd.to_numeric, errors="coerce").sum(axis=1, min_count=1)
     test = test_raw.reindex(expected)
 
     diag["dates_expected"] = int(len(expected))

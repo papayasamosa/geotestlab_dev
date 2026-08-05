@@ -70,6 +70,12 @@ class PowerConfig:
     min_simulations: int = 100
     # Counterfactual fit method (PA-FR2 evidence): ols | elastic_net | lasso.
     fit_method: str = "ols"
+    # Optional explicit effect grid (sorted, within mde_bounds). When empty, a
+    # uniform 200-point grid over mde_bounds is used. The market-evidence
+    # harness passes a grid that is DENSE NEAR ZERO, where the power curve is
+    # steepest, so power at small reference effects is resolved accurately
+    # without evaluating 200 points.
+    effect_grid: tuple = ()
     # Explicit selected design (PA-FR2): required. The spike must not assume
     # one region is test and every other region is control.
     test_regions: tuple = ()
