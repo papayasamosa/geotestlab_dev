@@ -1083,6 +1083,34 @@ class TestMDEConfigValidation:
         with pytest.raises(ValueError, match="n_simulations"):
             validate_mde_config((0.0, 50.0), 0.8, 0.5, n_simulations=-10)
 
+    def test_non_finite_bounds_rejected(self):
+        # NaN/inf bounds must fail before simulation (a non-finite effect grid
+        # would otherwise produce meaningless power/MDE values).
+        for bad in (
+            (0.0, float("nan")),
+            (float("nan"), 50.0),
+            (0.0, float("inf")),
+            (float("-inf"), 50.0),
+            (float("nan"), float("inf")),
+        ):
+            with pytest.raises(ValueError, match="finite"):
+                validate_mde_config(bad, 0.8, 0.5)
+
+    def test_non_finite_tolerance_rejected(self):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with pytest.raises(ValueError, match="finite"):
+                validate_mde_config((0.0, 50.0), 0.8, bad)
+
+    def test_non_finite_target_power_rejected(self):
+        for bad in (float("nan"), float("inf")):
+            with pytest.raises(ValueError, match="target_power"):
+                validate_mde_config((0.0, 50.0), bad, 0.5)
+
+    def test_service_rejects_non_finite_bounds_before_simulation(self):
+        case = _case()
+        with pytest.raises(ValueError, match="finite"):
+            run_power_analysis(case.df, N_PRE, _config(mde_bounds=(0.0, float("inf"))))
+
     def test_service_rejects_invalid_bounds_before_simulation(self):
         case = _case()
         with pytest.raises(ValueError, match="non-negative"):

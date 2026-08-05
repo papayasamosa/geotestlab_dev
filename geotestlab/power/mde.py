@@ -20,23 +20,33 @@ def validate_mde_config(
     """Validate the MDE-search configuration before any simulation.
 
     MDE is a non-negative magnitude, so negative bounds are rejected; the
-    upper bound must be strictly above the lower bound; the tolerance must be
-    positive; target power and alpha must lie strictly inside ``(0, 1)``; and
-    the simulation count, when provided, must be positive.
+    upper bound must be strictly above the lower bound; bounds, tolerance,
+    target power and alpha must be finite (a non-finite bound would otherwise
+    produce a meaningless effect grid); the tolerance must be positive;
+    target power and alpha must lie strictly inside ``(0, 1)``; and the
+    simulation count, when provided, must be positive.
     """
     lower, upper = float(mde_bounds[0]), float(mde_bounds[1])
+    if not (np.isfinite(lower) and np.isfinite(upper)):
+        raise ValueError(f"MDE bounds must be finite; got bounds ({lower}, {upper})")
     if lower < 0.0:
         raise ValueError(
             f"MDE lower bound must be >= 0 (MDE is a non-negative magnitude); got {lower}"
         )
     if upper <= lower:
         raise ValueError(f"MDE upper bound must be > lower bound; got bounds ({lower}, {upper})")
-    if float(mde_tolerance) <= 0.0:
+    tolerance = float(mde_tolerance)
+    if not np.isfinite(tolerance):
+        raise ValueError(f"MDE tolerance must be finite; got {mde_tolerance}")
+    if tolerance <= 0.0:
         raise ValueError(f"MDE tolerance must be > 0; got {mde_tolerance}")
-    if not 0.0 < float(target_power) < 1.0:
+    target = float(target_power)
+    if not np.isfinite(target) or not 0.0 < target < 1.0:
         raise ValueError(f"target_power must be in (0, 1); got {target_power}")
-    if alpha is not None and not 0.0 < float(alpha) < 1.0:
-        raise ValueError(f"alpha must be in (0, 1); got {alpha}")
+    if alpha is not None:
+        a = float(alpha)
+        if not np.isfinite(a) or not 0.0 < a < 1.0:
+            raise ValueError(f"alpha must be in (0, 1); got {alpha}")
     if n_simulations is not None and int(n_simulations) <= 0:
         raise ValueError(f"n_simulations must be > 0; got {n_simulations}")
 
