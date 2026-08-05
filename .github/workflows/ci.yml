@@ -169,4 +169,4 @@ jobs:
 
       - name: Skip review gate (non-PR event)
         if: github.event_name != 'pull_request'
-        run: echo "review-gate: not a pull_request event; skipping."
+        run: 'echo "review-gate: not a pull_request event; skipping."'
