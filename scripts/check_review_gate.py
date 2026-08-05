@@ -34,19 +34,34 @@ def has_p1_p2_marker(body: str) -> bool:
     return bool(_P1_P2_RE.search(body or ""))
 
 
+def _comment_bodies(thread) -> list:
+    """Comment bodies of a review thread, tolerant of both API shapes.
+
+    The GraphQL ``comments`` connection returns a dict ``{"nodes": [...]}``;
+    accept that shape (and a bare list for the unit-test form).
+    """
+    comments = thread.get("comments") or {}
+    if isinstance(comments, dict):
+        nodes = comments.get("nodes") or []
+        return [c.get("body") or "" for c in nodes if isinstance(c, dict)]
+    if isinstance(comments, list):
+        return [c.get("body") or "" for c in comments if isinstance(c, dict)]
+    return []
+
+
 def find_blocking_threads(threads) -> list:
     """Threads that must block a merge: unresolved, not outdated, P1/P2 marker.
 
     ``threads`` is a list of dicts with keys ``isResolved``, ``isOutdated``,
-    ``id`` and ``comments`` (a list of ``{"body": str}`` dicts). Pure and
-    deterministic, so it is unit-tested directly.
+    ``id`` and ``comments`` (a ``{"nodes": [{"body": str}]}`` dict, matching the
+    GraphQL connection shape). Pure and deterministic, so it is unit-tested
+    directly.
     """
     blocking = []
     for thread in threads or []:
         if thread.get("isResolved") or thread.get("isOutdated"):
             continue
-        bodies = [c.get("body") or "" for c in thread.get("comments") or []]
-        if any(has_p1_p2_marker(b) for b in bodies):
+        if any(has_p1_p2_marker(b) for b in _comment_bodies(thread)):
             blocking.append(thread)
     return blocking
 

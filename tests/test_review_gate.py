@@ -15,11 +15,12 @@ from check_review_gate import find_blocking_threads, has_p1_p2_marker  # noqa: E
 
 
 def _thread(thread_id="t1", is_resolved=False, is_outdated=False, bodies=("no marker",)):
+    # comments uses the real GraphQL connection shape: {"nodes": [{"body": ...}]}
     return {
         "id": thread_id,
         "isResolved": is_resolved,
         "isOutdated": is_outdated,
-        "comments": [{"body": b} for b in bodies],
+        "comments": {"nodes": [{"body": b} for b in bodies]},
     }
 
 
@@ -89,6 +90,27 @@ class TestFindBlockingThreads:
     def test_thread_without_comments(self):
         threads = [{"id": "t1", "isResolved": False, "isOutdated": False, "comments": []}]
         assert find_blocking_threads(threads) == []
+
+    def test_unresolved_p2_with_real_api_comments_shape_blocks(self):
+        # Regression: the GraphQL comments connection returns {nodes: [...]};
+        # iterating the dict directly crashed with "'str' object has no
+        # attribute 'get'" (dict iteration yields the key 'nodes').
+        thread = {
+            "id": "t1",
+            "isResolved": False,
+            "isOutdated": False,
+            "comments": {"nodes": [{"body": "**P2 Badge**  some finding"}]},
+        }
+        assert [t["id"] for t in find_blocking_threads([thread])] == ["t1"]
+
+    def test_bare_list_comments_shape_tolerated(self):
+        thread = {
+            "id": "t1",
+            "isResolved": False,
+            "isOutdated": False,
+            "comments": [{"body": "**P1 Badge**  x"}],
+        }
+        assert [t["id"] for t in find_blocking_threads([thread])] == ["t1"]
 
 
 class TestMain:
