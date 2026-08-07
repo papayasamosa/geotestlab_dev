@@ -1,0 +1,70 @@
+name: Review Gate
+
+# Split out of ci.yml so that review activity never shares a concurrency
+# group with code CI (test/locks/numerical/bayesian-smoke). Previously all
+# jobs lived in one workflow keyed by `${{ github.workflow }}-${{ github.ref
+# }}` with cancel-in-progress: true, so a pull_request_review event could
+# cancel an in-progress code CI run for the same PR (observed on PR #33).
+# This workflow re-runs on review submission/edit so the gate re-evaluates
+# the latest review threads (a P1/P2 added after the previous green run is
+# detected on the current head SHA), without touching code CI at all.
+on:
+  pull_request:
+    branches: [main]
+  pull_request_review:
+    branches: [main]
+
+concurrency:
+  group: review-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Review-completeness merge gate: fails when an unresolved, non-outdated
+  # review thread on the PR carries a P1 or P2 marker. Resolved threads,
+  # outdated threads and lower-priority (P3+/no-marker) threads never block.
+  # Least-privilege: read-only pull-requests/issues/contents scopes. The gate
+  # runs a TRUSTED copy of the script from the protected base branch (never the
+  # PR's own copy, so a PR cannot neuter the gate). The same logic is also
+  # available as a tested maintainer-side script (scripts/check_review_gate.py)
+  # that the automatic merge workflow MUST run from a trusted checkout before
+  # merging, so a P1/P2 arriving after the last CI run is still caught.
+  review-gate:
+    name: review-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Trusted copy of the gate script from the protected base branch.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: gate-base
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run review completeness gate (trusted base script)
+        if: github.event.pull_request != null
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f gate-base/scripts/check_review_gate.py ]; then
+            python gate-base/scripts/check_review_gate.py \
+              --repo "${{ github.repository }}" \
+              --pr "${{ github.event.pull_request.number }}"
+          else
+            echo "review-gate: trusted gate script not yet on the base branch (bootstrap PR); running the head copy for this one-time transition."
+            python scripts/check_review_gate.py \
+              --repo "${{ github.repository }}" \
+              --pr "${{ github.event.pull_request.number }}"
+          fi
+
+      - name: Skip review gate (non-PR event)
+        if: github.event.pull_request == null
+        run: 'echo "review-gate: not a pull_request event; skipping."'

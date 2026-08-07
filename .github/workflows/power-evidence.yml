@@ -1,0 +1,82 @@
+name: Power Evidence Consistency
+
+# The full power-methodology evidence matrix
+# (docs/spikes/evidence/power-methodology-evidence.json) is deliberately
+# regenerated outside normal CI (scripts/update_market_evidence.py is a
+# maintainer-run script, never invoked automatically) so that a maintainer
+# reviews the diff before committing new evidence. That means methodology
+# code and the committed evidence artefact can silently drift with no CI
+# signal. This workflow closes that gap: it regenerates the report to a
+# scratch path, diffs it against the committed artefact, and fails with an
+# uploaded diff if they disagree. It NEVER writes back to the committed path.
+#
+# Path-filtered so it only runs when power methodology, the generator
+# script, or the committed evidence itself change.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "geotestlab/power/**"
+      - "scripts/update_market_evidence.py"
+      - "tests/test_market_evidence.py"
+      - "docs/spikes/evidence/power-methodology-evidence.json"
+      - "docs/spikes/power-analysis-methodology.md"
+  pull_request:
+    branches: [main]
+    paths:
+      - "geotestlab/power/**"
+      - "scripts/update_market_evidence.py"
+      - "tests/test_market_evidence.py"
+      - "docs/spikes/evidence/power-methodology-evidence.json"
+      - "docs/spikes/power-analysis-methodology.md"
+
+concurrency:
+  group: power-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence-consistency:
+    name: power-evidence-consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+
+      - name: Regenerate evidence to a scratch path (never overwrites committed evidence)
+        run: python scripts/update_market_evidence.py --approve --out evidence-generated.json
+
+      - name: Compare generated evidence to committed evidence
+        id: compare
+        run: |
+          if diff -u docs/spikes/evidence/power-methodology-evidence.json evidence-generated.json > evidence-diff.patch; then
+            echo "match=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload evidence diff artefact
+        if: steps.compare.outputs.match == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: power-evidence-diff
+          path: evidence-diff.patch
+
+      - name: Fail on evidence drift
+        if: steps.compare.outputs.match == 'false'
+        run: |
+          echo "::error::Committed power-methodology evidence is out of date. Regenerate deliberately with: python scripts/update_market_evidence.py --approve, review the diff (uploaded as the power-evidence-diff artefact), and commit it explicitly."
+          exit 1

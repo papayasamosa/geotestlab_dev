@@ -39,7 +39,27 @@ reconciles current, partially implemented and planned work.
 # 1. Create a Python 3.11 virtual environment
 python3.11 -m venv .venv
 source .venv/bin/activate   # Linux/macOS
-.venv\Scripts\activate      # Windows
+
+# 2. Install runtime dependencies
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
+# 3. Run the app
+streamlit run geotestmatch.py
+```
+
+**Windows (PowerShell).** Do not create the environment with a bare relative
+`.venv` — on a shared or work-managed machine that silently lands on `C:` and
+mixes with system state. Create it explicitly on a non-system drive instead
+(adjust the drive letter if `D:` is unavailable on your machine):
+
+```powershell
+# 1. Create a Python 3.11 virtual environment on a non-system drive
+py -3.11 -m venv D:\GeoTestLabDev\venvs\geotestlab
+D:\GeoTestLabDev\venvs\geotestlab\Scripts\Activate.ps1
+
+# Keep the pip cache off C: too
+$env:PIP_CACHE_DIR = "D:\GeoTestLabDev\cache\pip"
 
 # 2. Install runtime dependencies
 python -m pip install --upgrade pip
@@ -55,7 +75,24 @@ streamlit run geotestmatch.py
 # 1. Create a Python 3.11 virtual environment
 python3.11 -m venv .venv
 source .venv/bin/activate   # Linux/macOS
-.venv\Scripts\activate      # Windows
+
+# 2. Install all dependencies (runtime + test + lint tools)
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
+
+# 3. Verify
+ruff format --check .
+ruff check .
+pytest --cov=geotestlab --cov-report=term-missing --cov-fail-under=90 -q -m "not slow"
+```
+
+**Windows (PowerShell).** Same non-system-drive rule as above:
+
+```powershell
+# 1. Create a Python 3.11 virtual environment on a non-system drive
+py -3.11 -m venv D:\GeoTestLabDev\venvs\geotestlab
+D:\GeoTestLabDev\venvs\geotestlab\Scripts\Activate.ps1
+$env:PIP_CACHE_DIR = "D:\GeoTestLabDev\cache\pip"
 
 # 2. Install all dependencies (runtime + test + lint tools)
 python -m pip install --upgrade pip
