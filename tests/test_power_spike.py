@@ -517,7 +517,11 @@ class TestEffectShapeGating:
 # Independent calibration / alternative / diagnostics streams
 # ---------------------------------------------------------------------------
 class TestIndependentStreams:
-    def test_alt_samples_independent_across_effect_calls(self):
+    def test_alt_samples_identical_across_repeated_effect_calls(self):
+        # Common random numbers (defect-5 fix): the alternative no-effect
+        # sample is drawn ONCE per run and reused across every effect via a
+        # deterministic shift, so two calls with the SAME effect must be
+        # byte-identical, not merely close.
         case = _case()
         pre_df = case.df[case.df["date"] < case.df["date"].unique()[N_PRE]]
         test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
@@ -526,7 +530,23 @@ class TestIndependentStreams:
         )
         alt1, _ = alt_fn(0.5, "relative", "one_sided_positive")
         alt2, _ = alt_fn(0.5, "relative", "one_sided_positive")
-        assert not np.array_equal(alt1, alt2)
+        assert np.array_equal(alt1, alt2)
+
+    def test_alt_samples_are_deterministic_shift_of_shared_base(self):
+        # Two different effects must be a pure additive/multiplicative shift
+        # of the SAME underlying noise draw, not independently resampled
+        # noise -- i.e. (alt(effect2) - alt(effect1)) is constant across
+        # every simulated draw for a relative effect.
+        case = _case()
+        pre_df = case.df[case.df["date"] < case.df["date"].unique()[N_PRE]]
+        test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
+        cal_null, alt_fn, meta = model_simulation(
+            pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 1000, 11
+        )
+        alt1, _ = alt_fn(0.5, "relative", "one_sided_positive")
+        alt2, _ = alt_fn(2.0, "relative", "one_sided_positive")
+        diffs = alt2 - alt1
+        assert np.allclose(diffs, diffs[0])
 
     def test_meta_reports_diagnostics_stream(self):
         case = _case()
@@ -664,12 +684,41 @@ class TestDateAlignment:
         assert diag["dates_removed"] == 0  # test region stays complete
         assert res.completed is True
 
-    def test_duplicate_region_date_keys_reported(self):
+    def test_duplicate_region_date_keys_blocked(self):
+        # Duplicate (region, date) keys among the SELECTED regions must
+        # block the analysis rather than being silently resolved by whichever
+        # row the pivot's aggfunc="first" happens to keep.
         case = _case()
         dup = case.df.iloc[:5].copy()
         df = pd.concat([case.df, dup], ignore_index=True)
         res = run_power_analysis(df, N_PRE, _config())
-        assert res.matrix_diagnostics["duplicate_region_date_keys"] >= 5
+        assert res.completed is False
+        assert res.mde is None
+        assert any("duplicate" in b.lower() for b in res.blockers)
+
+    def test_duplicate_keys_blocked_regardless_of_row_order(self):
+        # Row order must never decide the analytical value: shuffling the
+        # duplicate-containing frame still blocks (never silently completes
+        # with a different value depending on which duplicate row landed
+        # first in the pivot).
+        case = _case()
+        dup = case.df.iloc[:5].copy()
+        df = pd.concat([case.df, dup], ignore_index=True)
+        shuffled = df.sample(frac=1.0, random_state=7).reset_index(drop=True)
+        res_a = run_power_analysis(df, N_PRE, _config())
+        res_b = run_power_analysis(shuffled, N_PRE, _config())
+        assert res_a.completed is False
+        assert res_b.completed is False
+
+    def test_duplicate_keys_outside_selected_regions_do_not_block(self):
+        # A duplicate key on a region that is NOT selected as test or control
+        # is irrelevant to this analysis and must not block it.
+        case = _case()
+        other = case.df[case.df["region"] == "C2"].iloc[:3].copy()
+        other["region"] = "UNRELATED"
+        dup_of_other = other.iloc[:2].copy()
+        df = pd.concat([case.df, other, dup_of_other], ignore_index=True)
+        res = run_power_analysis(df, N_PRE, _config())
         assert res.completed is True
 
     def test_shuffled_rows_identical_result(self):
@@ -1149,9 +1198,12 @@ class TestServiceValidationBranches:
         assert len(res.power_curve) == 0
         assert any("at least one date" in b for b in res.blockers)
 
-    def test_all_alternative_values_nan_gives_zero_power(self):
-        # A case whose counterfactual total is negative makes every relative
-        # alternative total NaN (low-volume guard) -> power 0 with a 0 CI.
+    def test_negative_baseline_blocks_relative_injection(self):
+        # A case whose counterfactual test-window total is negative makes
+        # "effect/100 of the baseline" undefined for a relative effect. This
+        # must block explicitly rather than silently censoring individual
+        # simulated draws by their own sign (which used to report a
+        # misleadingly well-formed power=0 result).
         case = generate_synthetic_case(
             n_pre=N_PRE,
             n_test=N_TEST,
@@ -1166,14 +1218,44 @@ class TestServiceValidationBranches:
             sd_control_noise=1.0,
         )
         res = run_power_analysis(
-            case.df, N_PRE, _config(n_simulations=300, control_regions=("C1",))
+            case.df,
+            N_PRE,
+            _config(n_simulations=300, control_regions=("C1",), effect_injection="relative"),
+        )
+        assert res.completed is False
+        assert res.mde is None
+        assert len(res.power_curve) == 0
+        assert any("baseline" in b.lower() for b in res.blockers)
+
+    def test_negative_baseline_absolute_injection_still_completes(self):
+        # The same non-positive-baseline case is well-defined under absolute
+        # injection (a flat per-period shift never references the baseline
+        # sign), so it must NOT be blocked.
+        case = generate_synthetic_case(
+            n_pre=N_PRE,
+            n_test=N_TEST,
+            rho=0.0,
+            sigma=2.0,
+            control_betas={"C1": 1.0},
+            test_coeffs={"C1": -2.0},
+            b0=5.0,
+            effect_pct=0.0,
+            seed=3,
+            base_controls={"C1": 10.0},
+            sd_control_noise=1.0,
+        )
+        res = run_power_analysis(
+            case.df,
+            N_PRE,
+            _config(
+                n_simulations=300,
+                control_regions=("C1",),
+                effect_injection="absolute",
+                mde_bounds=(0.0, 50.0),
+            ),
         )
         assert res.completed is True
-        assert res.failures > 0
-        i = int(np.argmin(np.abs(res.effect_grid - 1.0)))
-        assert res.power_curve[i] == 0.0
-        assert res.power_ci_lower[i] == 0.0
-        assert res.power_ci_upper[i] == 0.0
+        assert res.failures == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1333,11 +1415,29 @@ class TestAnalyticAndGeneratorBranches:
         assert abs(rel[0]) < 0.05
         assert 0.05 < rel[-1] - rel[0] < 0.18
 
-    def test_shift_low_volume_all_nan(self):
-        null = np.full(10, -5.0)  # non-positive null totals
-        alt, fail = _shift(null, -60.0, 1.0, "relative", 3, "one_sided_positive")
-        assert np.isnan(alt).all()
-        assert fail == 10
+    def test_shift_does_not_censor_by_realised_draw_sign(self):
+        # A non-positive INDIVIDUAL null draw must NOT be censored to NaN --
+        # only a non-positive BASELINE (cf_test_sum) makes the relative shift
+        # undefined, and that is a caller-level block (see service.py),
+        # never a per-draw decision made from the realised simulated value.
+        null = np.full(10, -5.0)  # non-positive null totals, positive baseline
+        alt, fail = _shift(null, 60.0, 1.0, "relative", 3, "one_sided_positive")
+        assert not np.isnan(alt).any()
+        assert fail == 0
+        assert np.allclose(alt, -5.0 + 60.0 * 0.01)
+
+    def test_shift_relative_is_deterministic_constant_shift(self):
+        null = np.array([10.0, -20.0, 35.0, 0.0])
+        alt, fail = _shift(null, 200.0, 5.0, "relative", 3, "one_sided_positive")
+        expected_shift = 200.0 * (5.0 / 100.0)
+        assert np.allclose(alt, null + expected_shift)
+        assert fail == 0
+
+    def test_shift_relative_negative_side_flips_direction(self):
+        null = np.array([10.0, -20.0, 35.0])
+        alt, _ = _shift(null, 200.0, 5.0, "relative", 3, "one_sided_negative")
+        expected_shift = -200.0 * (5.0 / 100.0)
+        assert np.allclose(alt, null + expected_shift)
 
     def test_clopper_pearson_zero_sample(self):
         lo, hi = clopper_pearson(0, 0, 0.05)
@@ -1410,3 +1510,197 @@ class TestFitComparisonBranches:
     def test_unknown_scenario_rejected(self):
         with pytest.raises(ValueError, match="unknown fit scenario"):
             build_fit_scenario("bogus")
+
+
+# ---------------------------------------------------------------------------
+# Fixed test-region composition (defect 3): a date where SOME but not all
+# selected test regions report must never be silently summed as if the
+# missing region contributed zero -- it must be excluded, with the missing
+# region(s) recorded.
+# ---------------------------------------------------------------------------
+class TestFixedTestRegionComposition:
+    def _two_test_region_df(self):
+        case = _case()
+        df = case.df.copy()
+        t = df[df["region"] == TEST_REGION].copy()
+        t2 = t.copy()
+        t2["region"] = "T2"
+        t2["kpi"] = t2["kpi"] + 7.0
+        return pd.concat([df, t2], ignore_index=True)
+
+    def test_partial_test_region_presence_excludes_date(self):
+        df = self._two_test_region_df()
+        t2_mask = df["region"] == "T2"
+        drop_dates = list(sorted(df.loc[t2_mask, "date"].unique())[:3])
+        df = df[~(t2_mask & df["date"].isin(drop_dates))]
+        test, controls, diag = build_date_keyed_matrix(df, ("T", "T2"), ("C1", "C2"))
+        assert test.isna().sum() == 3
+        for d in drop_dates:
+            assert pd.isna(test.loc[pd.Timestamp(d)])
+        for d in drop_dates:
+            assert diag["missing_test_regions_by_date"][str(pd.Timestamp(d).date())] == ["T2"]
+
+    def test_partial_presence_never_sums_available_subset(self):
+        # Explicitly guard against the OLD behavior (min_count=1): a date
+        # where T2 is missing must NOT equal T's own value that date (which
+        # is what a silent "sum whichever is available" would produce).
+        df = self._two_test_region_df()
+        t2_mask = df["region"] == "T2"
+        one_date = sorted(df.loc[df["region"] == "T", "date"].unique())[50]
+        df = df[~(t2_mask & (df["date"] == one_date))]
+        test, controls, diag = build_date_keyed_matrix(df, ("T", "T2"), ("C1", "C2"))
+        assert pd.isna(test.loc[pd.Timestamp(one_date)])
+
+    def test_multiple_test_regions_different_missing_dates_reduce_effective_periods(self):
+        df = self._two_test_region_df()
+        test_dates = sorted(df["date"].unique())[N_PRE:]
+        drop_t, drop_t2 = test_dates[0], test_dates[1]
+        df = df[~((df["region"] == "T") & (df["date"] == drop_t))]
+        df = df[~((df["region"] == "T2") & (df["date"] == drop_t2))]
+        pre_df = df[df["date"] < test_dates[0]]
+        test_df = df[df["date"].isin(test_dates)]
+        _, _, meta = model_simulation(pre_df, test_df, ("T", "T2"), ("C1", "C2"), N_TEST, 500, 3)
+        assert meta["effective_test_periods"] == N_TEST - 2
+        assert meta["requested_test_periods"] == N_TEST
+
+
+# ---------------------------------------------------------------------------
+# One authoritative aligned test window (defect 1): the counterfactual
+# projection, the AR(1)/bootstrap noise horizon and the reported effective
+# duration must all come from the SAME jointly-complete (test AND every
+# control present) date set.
+# ---------------------------------------------------------------------------
+class TestAlignedTestWindow:
+    def test_missing_control_date_in_test_window_reduces_effective_periods(self):
+        # The test region itself is present on every test date; only a
+        # CONTROL is missing on one date. The old code derived the AR(1)
+        # horizon from test-only availability, so this case used to leave
+        # the horizon at N_TEST while the counterfactual projection silently
+        # dropped a row -- a mismatch. It must now reduce together.
+        case = _case()
+        df = case.df.copy()
+        test_dates = sorted(df["date"].unique())[N_PRE:]
+        missing_date = test_dates[2]
+        df = df[~((df["region"] == "C1") & (df["date"] == missing_date))]
+        pre_df = df[df["date"] < test_dates[0]]
+        test_df = df[df["date"].isin(test_dates)]
+        _, _, meta = model_simulation(pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 500, 3)
+        assert meta["effective_test_periods"] == N_TEST - 1
+        assert meta["requested_test_periods"] == N_TEST
+        reasons = meta["matrix_diagnostics"]["test_window"]["removal_reasons"]
+        assert reasons[str(pd.Timestamp(missing_date).date())] == "control_missing:C1"
+
+    def test_control_missing_segment_reduces_effective_periods(self):
+        case = _case()
+        df = case.df.copy()
+        test_dates = sorted(df["date"].unique())[N_PRE:]
+        segment = test_dates[2:5]
+        df = df[~((df["region"] == "C2") & (df["date"].isin(segment)))]
+        pre_df = df[df["date"] < test_dates[0]]
+        test_df = df[df["date"].isin(test_dates)]
+        _, _, meta = model_simulation(pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 500, 3)
+        assert meta["effective_test_periods"] == N_TEST - len(segment)
+
+    def test_all_test_regions_outage_date_excluded(self):
+        case = _case()
+        df = case.df.copy()
+        t = df[df["region"] == TEST_REGION].copy()
+        t2 = t.copy()
+        t2["region"] = "T2"
+        t2["kpi"] = t2["kpi"] + 7.0
+        df = pd.concat([df, t2], ignore_index=True)
+        test_dates = sorted(df["date"].unique())[N_PRE:]
+        outage_date = test_dates[4]
+        df = df[~(df["region"].isin(("T", "T2")) & (df["date"] == outage_date))]
+        pre_df = df[df["date"] < test_dates[0]]
+        test_df = df[df["date"].isin(test_dates)]
+        _, _, meta = model_simulation(pre_df, test_df, ("T", "T2"), ("C1", "C2"), N_TEST, 500, 3)
+        assert meta["effective_test_periods"] == N_TEST - 1
+        reasons = meta["matrix_diagnostics"]["test_window"]["removal_reasons"]
+        assert reasons[str(pd.Timestamp(outage_date).date())] == "test_missing"
+
+    def test_effective_test_periods_reported_end_to_end(self):
+        case = _case()
+        df = case.df.copy()
+        test_dates = sorted(df["date"].unique())[N_PRE:]
+        missing_date = test_dates[0]
+        df = df[~((df["region"] == "C1") & (df["date"] == missing_date))]
+        res = run_power_analysis(df, N_PRE, _config())
+        assert res.completed is True
+        assert res.effective_test_periods == N_TEST - 1
+        assert res.requested_test_periods == N_TEST
+
+    def test_zero_jointly_complete_test_dates_blocks(self):
+        # Every test-window date has a missing control -> no jointly
+        # complete row exists to project a counterfactual or a horizon over.
+        case = _case()
+        df = case.df.copy()
+        test_dates = sorted(df["date"].unique())[N_PRE:]
+        df = df[~((df["region"] == "C1") & (df["date"].isin(test_dates)))]
+        res = run_power_analysis(df, N_PRE, _config())
+        assert res.completed is False
+        assert res.mde is None
+        assert any("jointly complete" in b for b in res.blockers)
+
+    def test_residual_simulation_effective_periods_matches_model_simulation(self):
+        case = _case()
+        df = case.df.copy()
+        test_dates = sorted(df["date"].unique())[N_PRE:]
+        missing_date = test_dates[3]
+        df = df[~((df["region"] == "C2") & (df["date"] == missing_date))]
+        res = run_power_analysis(
+            df, N_PRE, _config(method="residual_simulation", min_placebo_windows=1)
+        )
+        assert res.completed is True
+        assert res.effective_test_periods == N_TEST - 1
+
+
+# ---------------------------------------------------------------------------
+# Common random numbers (defect 5): reusing one alternative no-effect sample
+# across every requested effect via a deterministic shift makes the power
+# curve invariant to effect-grid order/density and guarantees one-sided
+# monotonicity and grid-density-stable MDE.
+# ---------------------------------------------------------------------------
+class TestCommonRandomNumbersGrid:
+    def test_effect_grid_order_invariance(self):
+        case = _case()
+        forward = _config(effect_grid=(0.0, 1.0, 2.0, 5.0, 10.0))
+        backward = _config(effect_grid=(10.0, 5.0, 2.0, 1.0, 0.0))
+        res_fwd = run_power_analysis(case.df, N_PRE, forward)
+        res_bwd = run_power_analysis(case.df, N_PRE, backward)
+        order_fwd = np.argsort(res_fwd.effect_grid)
+        order_bwd = np.argsort(res_bwd.effect_grid)
+        assert np.array_equal(res_fwd.power_curve[order_fwd], res_bwd.power_curve[order_bwd])
+
+    def test_sparse_and_dense_grid_agree_at_shared_effect(self):
+        case = _case()
+        sparse = _config(effect_grid=(0.0, 5.0, 10.0))
+        dense = _config(effect_grid=tuple(np.linspace(0.0, 10.0, 21)))
+        res_sparse = run_power_analysis(case.df, N_PRE, sparse)
+        res_dense = run_power_analysis(case.df, N_PRE, dense)
+        i_sparse = int(np.argmin(np.abs(res_sparse.effect_grid - 5.0)))
+        i_dense = int(np.argmin(np.abs(res_dense.effect_grid - 5.0)))
+        assert res_sparse.power_curve[i_sparse] == res_dense.power_curve[i_dense]
+
+    def test_one_sided_power_monotonic_in_effect(self):
+        case = _case()
+        res = run_power_analysis(
+            case.df, N_PRE, _config(effect_grid=tuple(np.linspace(0.0, 20.0, 15)))
+        )
+        assert np.all(np.diff(res.power_curve) >= 0.0)
+
+    def test_mde_stable_across_grid_density(self):
+        case = _case(effect_pct=8.0)
+        dense = _config()
+        sparse = _config(effect_grid=(0.0, 10.0, 20.0, 30.0, 40.0, 50.0))
+        res_dense = run_power_analysis(case.df, N_PRE, dense)
+        res_sparse = run_power_analysis(case.df, N_PRE, sparse)
+        assert res_dense.mde_reached and res_sparse.mde_reached
+        assert abs(res_dense.mde - res_sparse.mde) <= 1.5
+
+    def test_seed_reproducibility(self):
+        case = _case()
+        res_a = run_power_analysis(case.df, N_PRE, _config(random_seed=99))
+        res_b = run_power_analysis(case.df, N_PRE, _config(random_seed=99))
+        assert np.array_equal(res_a.power_curve, res_b.power_curve)
+        assert res_a.mde == res_b.mde

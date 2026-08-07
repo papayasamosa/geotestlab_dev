@@ -30,7 +30,7 @@ SIDES = ("one_sided_positive", "one_sided_negative", "two_sided")
 
 # Methodology version for the corrected spike contract (bumped when the result
 # contract or methodology rule set changes).
-METHODOLOGY_VERSION = "0.2.0"
+METHODOLOGY_VERSION = "0.3.0"
 
 
 def validate_effect_shape(shape: str) -> None:
@@ -110,6 +110,14 @@ class PowerResult:
     mde_bounds: tuple = (0.0, 0.0)
     windows_available: int = 0
     windows_used: int = 0
+    # The jointly-complete (test AND every control present) test-window date
+    # count actually used for the counterfactual projection and the
+    # simulated/bootstrapped noise horizon -- the single authoritative
+    # duration behind the reported power/MDE. May be less than
+    # requested_test_periods when some test-window dates are excluded
+    # (missing test region, missing control, or a blocked duplicate key).
+    effective_test_periods: int = 0
+    requested_test_periods: int = 0
     failures: int = 0
     warnings: tuple = field(default_factory=tuple)
     # Structured completion / fit / policy contract (PA-FR5). Critical states
@@ -150,6 +158,8 @@ class PowerResult:
             "mde_bounds": [float(v) for v in self.mde_bounds],
             "windows_available": int(self.windows_available),
             "windows_used": int(self.windows_used),
+            "effective_test_periods": int(self.effective_test_periods),
+            "requested_test_periods": int(self.requested_test_periods),
             "failures": int(self.failures),
             "warnings": list(self.warnings),
             "completed": bool(self.completed),

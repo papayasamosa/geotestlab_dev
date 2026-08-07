@@ -86,21 +86,45 @@ class CounterfactualFit:
 
 
 def _design_from_aligned(test, controls):
-    """Return ``(X_const, X_no_const, y, retained_dates)`` for the pairwise-
-    complete rows of an aligned test series and control matrix."""
+    """Return ``(X_const, X_no_const, y, retained_dates, removal_diag)`` for
+    the pairwise-complete rows of an aligned test series and control matrix.
+
+    ``retained_dates`` is the single authoritative "jointly complete" date
+    set (test AND every control present) for this window -- the same set
+    that must drive the counterfactual projection, the simulated-noise
+    horizon and the reported effective duration, so they cannot silently
+    diverge. ``removal_diag`` records why every non-retained expected date
+    was dropped, so the removed set is auditable rather than absorbed into a
+    bare row count.
+    """
     frame = pd.DataFrame({"y": test})
     cols = list(controls.columns)
     for c in cols:
         frame[c] = controls[c].to_numpy()
-    frame = frame.dropna()
-    y = frame["y"].to_numpy()
-    X_no_const = frame[cols].to_numpy() if cols else np.empty((len(frame), 0))
+    complete = frame.notna().all(axis=1)
+    reasons = {}
+    for date, row in frame[~complete].iterrows():
+        if pd.isna(row["y"]):
+            reasons[str(pd.Timestamp(date).date())] = "test_missing"
+        else:
+            missing_controls = [c for c in cols if pd.isna(row[c])]
+            reasons[str(pd.Timestamp(date).date())] = "control_missing:" + ",".join(
+                missing_controls
+            )
+    kept = frame[complete]
+    y = kept["y"].to_numpy()
+    X_no_const = kept[cols].to_numpy() if cols else np.empty((len(kept), 0))
     X_const = (
-        np.column_stack([np.ones(len(frame)), X_no_const])
+        np.column_stack([np.ones(len(kept)), X_no_const])
         if X_no_const.shape[1]
-        else np.ones((len(frame), 1))
+        else np.ones((len(kept), 1))
     )
-    return X_const, X_no_const, y, pd.DatetimeIndex(frame.index)
+    removal_diag = {
+        "dates_jointly_complete": int(len(kept)),
+        "dates_removed_joint": int(len(frame) - len(kept)),
+        "removal_reasons": reasons,
+    }
+    return X_const, X_no_const, y, pd.DatetimeIndex(kept.index), removal_diag
 
 
 def _constant_or_duplicate_columns(X):
@@ -132,7 +156,7 @@ def fit_counterfactual(
     structured warning emitted.
     """
     test, controls, align_diag = build_date_keyed_matrix(pre_df, test_regions, control_regions)
-    X_const, X_no_const, y, retained_dates = _design_from_aligned(test, controls)
+    X_const, X_no_const, y, retained_dates, removal_diag = _design_from_aligned(test, controls)
 
     n_obs = int(X_const.shape[0])
     n_predictors = int(X_const.shape[1])
@@ -153,6 +177,7 @@ def fit_counterfactual(
         "fallback_reason": None,
         "fit_method": fit_method,
         **align_diag,
+        **removal_diag,
     }
 
     warnings = []
@@ -247,10 +272,26 @@ def _simulate_ar1_paths(rho, sigma, n_periods, n_sim, rng, e_start=0.0):
 
 
 def project_counterfactual(fit, test_df, test_regions, control_regions):
-    """Project a fitted counterfactual over the test window (date-keyed)."""
-    test_test, controls_test, _ = build_date_keyed_matrix(test_df, test_regions, control_regions)
-    X_const, X_no_const, _, _ = _design_from_aligned(test_test, controls_test)
-    return fit.project(X_const, X_no_const)
+    """Project a fitted counterfactual over the test window (date-keyed).
+
+    Returns ``(projected, retained_dates, window_diag)``. ``retained_dates``
+    is the jointly-complete test-window date set (test AND every control
+    present that date) -- the single authoritative set that
+    ``model_simulation``/``residual_simulation`` must also use for the
+    simulated-noise horizon, so the counterfactual projection and the noise
+    horizon can never silently diverge. ``window_diag`` merges the alignment
+    diagnostics (including ``duplicate_keys_blocking``) with the joint-row
+    removal diagnostics for this window.
+    """
+    test_test, controls_test, align_diag = build_date_keyed_matrix(
+        test_df, test_regions, control_regions
+    )
+    X_const, X_no_const, _, retained_dates, removal_diag = _design_from_aligned(
+        test_test, controls_test
+    )
+    projected = fit.project(X_const, X_no_const)
+    window_diag = {**align_diag, **removal_diag}
+    return projected, retained_dates, window_diag
 
 
 def _shift(null, cf_test_sum, effect, injection, n_test, side):
@@ -259,18 +300,50 @@ def _shift(null, cf_test_sum, effect, injection, n_test, side):
     The effect magnitude is always non-negative; the direction is controlled by
     ``side`` (``one_sided_negative`` injects a negative shift from the positive
     magnitude). Absolute effects shift every test period by a constant; relative
-    effects scale the counterfactual total by ``effect/100``. Non-positive null
-    totals under a relative effect are marked NaN (low-volume guard) and counted
-    as failures.
+    effects scale the FIXED counterfactual baseline (``cf_test_sum``) by
+    ``effect/100`` and add that constant shift to every simulated draw -- the
+    shift depends only on the fixed baseline, never on the realised value of
+    an individual draw. Callers must validate the baseline BEFORE calling this
+    (a non-positive ``cf_test_sum`` makes a relative effect undefined and must
+    block relative injection or require absolute injection at the caller,
+    not censor individual draws by their own simulated sign here).
     """
+    null = np.asarray(null, dtype=float)
     direction = -1.0 if side == "one_sided_negative" else 1.0
     if injection == "absolute":
         return null + direction * effect * n_test, 0
     shift = direction * cf_test_sum * (effect / 100.0)
-    alt = null + shift
-    bad = null <= 0
-    alt = np.where(bad, np.nan, alt)
-    return alt, int(np.sum(bad))
+    return null + shift, 0
+
+
+def _blocked_result(reason, matrix_diagnostics=None, fit_method="n/a", fit_status="blocked"):
+    """A method result that refuses to produce a completed power estimate.
+
+    Used when the aligned window cannot support analysis at all (duplicate
+    selected-region keys, or zero jointly-complete test-window dates) --
+    letting arbitrary row order or a silent fallback horizon decide the
+    answer is unacceptable, so the service must surface this as a blocker.
+    """
+
+    def alt_fn(effect, injection, side):
+        return np.array([], dtype=float), 0
+
+    meta = {
+        "windows_available": 0,
+        "windows_used": 0,
+        "null_mean": float("nan"),
+        "null_sd": float("nan"),
+        "fit_method": fit_method,
+        "fit_status": fit_status,
+        "matrix_diagnostics": matrix_diagnostics or {},
+        "calibration_simulations": 0,
+        "detection_simulations": 0,
+        "failures": 0,
+        "warnings": [],
+        "blocked": True,
+        "block_reason": reason,
+    }
+    return np.array([], dtype=float), alt_fn, meta
 
 
 # ---------------------------------------------------------------------------
@@ -286,13 +359,36 @@ def model_simulation(
     which is NumPy >= 1.24 compatible.
     """
     fit = fit_counterfactual(pre_df, test_regions, control_regions, fit_method=fit_method)
+    if fit.diagnostics.get("duplicate_keys_blocking"):
+        return _blocked_result(
+            "duplicate (region, date) keys among selected regions in the pre-period; "
+            "refusing to resolve by row order",
+            matrix_diagnostics=fit.diagnostics,
+            fit_method=fit.fit_method,
+        )
     rho, sigma = fit_ar1(fit.residuals)
     e_start = float(fit.residuals[-1]) if len(fit.residuals) else 0.0
 
-    test_test, _, _ = build_date_keyed_matrix(test_df, test_regions, control_regions)
-    n_test_use = int(test_test.notna().sum()) if int(test_test.notna().sum()) > 0 else int(n_test)
-    cf_test = project_counterfactual(fit, test_df, test_regions, control_regions)
+    cf_test, retained_test_dates, test_align_diag = project_counterfactual(
+        fit, test_df, test_regions, control_regions
+    )
+    matrix_diagnostics = {**fit.diagnostics, "test_window": test_align_diag}
+    if test_align_diag.get("duplicate_keys_blocking"):
+        return _blocked_result(
+            "duplicate (region, date) keys among selected regions in the test window; "
+            "refusing to resolve by row order",
+            matrix_diagnostics=matrix_diagnostics,
+            fit_method=fit.fit_method,
+        )
+    n_test_use = int(len(retained_test_dates))
     cf_test_sum = float(np.sum(cf_test))
+    if n_test_use == 0:
+        return _blocked_result(
+            "no jointly complete test-window dates (test and every control present) "
+            "available to project the counterfactual or simulate a horizon",
+            matrix_diagnostics=matrix_diagnostics,
+            fit_method=fit.fit_method,
+        )
 
     cal_rng, alt_rng, diag_rng = child_rngs(seed, 3)
 
@@ -304,11 +400,15 @@ def model_simulation(
     diag_paths = _simulate_ar1_paths(rho, sigma, n_test_use, n_sim, diag_rng, e_start=e_start)
     diag_null = cf_test_sum + diag_paths.sum(axis=1)
 
-    # 3) independent alternative stream (fresh paths per effect call)
+    # 3) independent alternative stream: ONE no-effect draw per run (common
+    # random numbers), reused across every requested effect magnitude via a
+    # deterministic shift. Adding/reordering effect-grid points can no longer
+    # change the underlying noise a given effect is evaluated against.
+    alt_paths = _simulate_ar1_paths(rho, sigma, n_test_use, n_sim, alt_rng, e_start=e_start)
+    alt_null_fixed = cf_test_sum + alt_paths.sum(axis=1)
+
     def alt_fn(effect, injection, side):
-        alt_paths = _simulate_ar1_paths(rho, sigma, n_test_use, n_sim, alt_rng, e_start=e_start)
-        alt_null = cf_test_sum + alt_paths.sum(axis=1)
-        return _shift(alt_null, cf_test_sum, effect, injection, n_test_use, side)
+        return _shift(alt_null_fixed, cf_test_sum, effect, injection, n_test_use, side)
 
     meta = {
         "windows_available": int(len(fit.residuals)),
@@ -319,11 +419,16 @@ def model_simulation(
         "null_sd": float(np.nanstd(diag_null)),
         "fit_method": fit.fit_method,
         "fit_status": fit.fit_status,
-        "matrix_diagnostics": fit.diagnostics,
+        "matrix_diagnostics": matrix_diagnostics,
         "calibration_simulations": int(n_sim),
         "detection_simulations": int(n_sim),
         "failures": 0,
         "warnings": list(fit.warnings),
+        "effective_test_periods": n_test_use,
+        "requested_test_periods": int(n_test),
+        "cf_test_sum": cf_test_sum,
+        "blocked": False,
+        "block_reason": None,
     }
     return cal_null, alt_fn, meta
 
@@ -341,7 +446,7 @@ def build_placebo_windows(pre_df, test_regions, control_regions, window_len):
     """
     test, controls, _ = build_date_keyed_matrix(pre_df, test_regions, control_regions)
     fit = fit_counterfactual(pre_df, test_regions, control_regions)
-    _, _, y, _ = _design_from_aligned(test, controls)
+    _, _, y, _, _ = _design_from_aligned(test, controls)
     cf_fit = fit.cf_fit
     n = len(y)
     pcts = []
@@ -369,6 +474,14 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
     with two-tailed detection). ``seed`` is unused (the method is
     deterministic) and is kept only to share the method-dispatch signature.
     """
+    pre_fit_diag = fit_counterfactual(pre_df, test_regions, control_regions).diagnostics
+    if pre_fit_diag.get("duplicate_keys_blocking"):
+        return _blocked_result(
+            "duplicate (region, date) keys among selected regions in the pre-period; "
+            "refusing to resolve by row order",
+            matrix_diagnostics=pre_fit_diag,
+            fit_method="n/a",
+        )
     pcts = build_placebo_windows(pre_df, test_regions, control_regions, n_test)
     null = pcts
 
@@ -393,6 +506,8 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
         "detection_simulations": 0,
         "failures": 0,
         "warnings": [],
+        "blocked": False,
+        "block_reason": None,
     }
     return null, alt_fn, meta
 
@@ -411,23 +526,54 @@ def residual_simulation(
     window count and returns an explicit incomplete result.
     """
     fit = fit_counterfactual(pre_df, test_regions, control_regions, fit_method=fit_method)
+    if fit.diagnostics.get("duplicate_keys_blocking"):
+        return _blocked_result(
+            "duplicate (region, date) keys among selected regions in the pre-period; "
+            "refusing to resolve by row order",
+            matrix_diagnostics=fit.diagnostics,
+            fit_method=fit.fit_method,
+        )
     resid = fit.residuals
-    cf_test = project_counterfactual(fit, test_df, test_regions, control_regions)
+    cf_test, retained_test_dates, test_align_diag = project_counterfactual(
+        fit, test_df, test_regions, control_regions
+    )
+    matrix_diagnostics = {**fit.diagnostics, "test_window": test_align_diag}
+    if test_align_diag.get("duplicate_keys_blocking"):
+        return _blocked_result(
+            "duplicate (region, date) keys among selected regions in the test window; "
+            "refusing to resolve by row order",
+            matrix_diagnostics=matrix_diagnostics,
+            fit_method=fit.fit_method,
+        )
+    n_test_use = int(len(retained_test_dates))
     cf_test_sum = float(np.sum(cf_test))
+    if n_test_use == 0:
+        return _blocked_result(
+            "no jointly complete test-window dates (test and every control present) "
+            "available to project the counterfactual or bootstrap a horizon",
+            matrix_diagnostics=matrix_diagnostics,
+            fit_method=fit.fit_method,
+        )
 
     cal_rng, alt_rng, diag_rng = child_rngs(seed, 3)
 
     def _bootstrap(stream):
         if len(resid) == 0:
             return np.zeros(n_sim)
-        return cf_test_sum + stream.choice(resid, size=(n_sim, n_test), replace=True).sum(axis=1)
+        return cf_test_sum + stream.choice(resid, size=(n_sim, n_test_use), replace=True).sum(
+            axis=1
+        )
 
     cal_null = _bootstrap(cal_rng)
     diag_null = _bootstrap(diag_rng)
 
+    # Common random numbers: ONE alternative no-effect bootstrap draw per run,
+    # reused across every requested effect magnitude via a deterministic
+    # shift (see model_simulation's alt_fn for the same rationale).
+    alt_null_fixed = _bootstrap(alt_rng)
+
     def alt_fn(effect, injection, side):
-        alt_null = _bootstrap(alt_rng)
-        return _shift(alt_null, cf_test_sum, effect, injection, n_test, side)
+        return _shift(alt_null_fixed, cf_test_sum, effect, injection, n_test_use, side)
 
     meta = {
         "windows_available": int(len(resid)),
@@ -436,11 +582,16 @@ def residual_simulation(
         "null_sd": float(np.nanstd(diag_null)),
         "fit_method": fit.fit_method,
         "fit_status": fit.fit_status,
-        "matrix_diagnostics": fit.diagnostics,
+        "matrix_diagnostics": matrix_diagnostics,
         "calibration_simulations": int(n_sim),
         "detection_simulations": int(n_sim),
         "failures": 0,
         "warnings": list(fit.warnings),
+        "effective_test_periods": n_test_use,
+        "requested_test_periods": int(n_test),
+        "cf_test_sum": cf_test_sum,
+        "blocked": False,
+        "block_reason": None,
     }
     return cal_null, alt_fn, meta
 
