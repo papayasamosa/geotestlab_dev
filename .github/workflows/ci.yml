@@ -1,18 +1,18 @@
 name: CI
 
+# Code CI (test/locks/numerical/bayesian-smoke) intentionally does NOT trigger
+# on pull_request_review. Review activity is handled by the separate
+# review-gate.yml workflow, which has its own concurrency group, so a review
+# submission can no longer cancel an in-progress code CI run for the same PR
+# (see docs/spikes/ or PR history for the incident that motivated this split).
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  # Re-run CI when a review is submitted/edited so the review-gate re-evaluates
-  # the latest review threads (a P1/P2 added after the previous green run is
-  # detected on the new head SHA).
-  pull_request_review:
-    branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -42,11 +42,19 @@ jobs:
       - name: Lint with Ruff
         run: ruff check .
 
-      - name: Test with coverage (package gate)
-        run: pytest --cov=geotestlab --cov-report=term-missing --cov-fail-under=90 -q -m "not slow"
+      # Single fast-suite execution collects coverage for both geotestlab and
+      # geotestmatch.py in one run; the package gate and the informational
+      # app report below both read the same .coverage data rather than
+      # re-running the tests a second time.
+      - name: Test with coverage (single execution)
+        run: pytest --cov=geotestlab --cov=geotestmatch --cov-report=term-missing -q -m "not slow"
+
+      - name: Enforce package coverage gate (geotestlab >= 90%)
+        run: coverage report --include="geotestlab/*" --fail-under=90
 
       - name: Report geotestmatch.py coverage (informational)
-        run: pytest --cov=geotestmatch --cov-report=term-missing -q -m "not slow"
+        continue-on-error: true
+        run: coverage report --include="geotestmatch.py" -m
 
       - name: Log environment
         if: always()
@@ -141,53 +149,3 @@ jobs:
         run: |
           pytest tests/test_bayesian_core.py::TestReducedSamplingSmoke -q
           pytest tests/test_bayesian_state_app.py::TestBayesianTraceCreation -q
-
-  # Review-completeness merge gate: fails when an unresolved, non-outdated
-  # review thread on the PR carries a P1 or P2 marker. Resolved threads,
-  # outdated threads and lower-priority (P3+/no-marker) threads never block.
-  # Least-privilege: read-only pull-requests/issues/contents scopes. The gate
-  # runs a TRUSTED copy of the script from the protected base branch (never the
-  # PR's own copy, so a PR cannot neuter the gate). The same logic is also
-  # available as a tested maintainer-side script (scripts/check_review_gate.py)
-  # that the automatic merge workflow MUST run from a trusted checkout before
-  # merging, so a P1/P2 arriving after the last CI run is still caught.
-  review-gate:
-    name: review-gate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-    steps:
-      - uses: actions/checkout@v4
-
-      # Trusted copy of the gate script from the protected base branch.
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: gate-base
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Run review completeness gate (trusted base script)
-        if: github.event.pull_request != null
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -f gate-base/scripts/check_review_gate.py ]; then
-            python gate-base/scripts/check_review_gate.py \
-              --repo "${{ github.repository }}" \
-              --pr "${{ github.event.pull_request.number }}"
-          else
-            echo "review-gate: trusted gate script not yet on the base branch (bootstrap PR); running the head copy for this one-time transition."
-            python scripts/check_review_gate.py \
-              --repo "${{ github.repository }}" \
-              --pr "${{ github.event.pull_request.number }}"
-          fi
-
-      - name: Skip review gate (non-PR event)
-        if: github.event.pull_request == null
-        run: 'echo "review-gate: not a pull_request event; skipping."'
