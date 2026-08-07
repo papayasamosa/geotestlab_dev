@@ -2,9 +2,24 @@
 
 **Document type:** Methodology spike report (decision evidence)
 **Stage:** 5 — `spike/power-analysis-methodology` (evidence strengthened by
-`test/power-methodology-realistic-evidence`, see section 9)
-**Date:** 5 August 2026 (original 4 August 2026)
+`test/power-methodology-realistic-evidence`, see section 9; further strengthened
+by `test/power-methodology-evidence-v2`, see section 10)
+**Date:** 5 August 2026 (original 4 August 2026); section 10 added 7 August 2026
 **Status:** For methodology approval (does **not** authorise production implementation)
+
+> **Reading note (added with section 10):** sections 7–9 describe the
+> methodology as evidenced up to PR #33. Several of section 9.8's
+> recommendations have SINCE been implemented as safety gates (a
+> `fix/power-window-and-simulation-correctness` → `refactor/power-
+> counterfactual-fit-alignment` PR sequence, see the repository PR history):
+> duplicate/constant controls are now sanitised before falling back
+> (section 9.7's `duplicate_controls` fallback example no longer occurs);
+> near-unit-root persistence and sub-104-period weekly history now BLOCK
+> outright rather than merely being "recommended" to flag; daily-frequency
+> data is blocked outright. Section 9's numbers are historical evidence from
+> the state at the time; section 10 reports current, evidence-v2-generation
+> behaviour. A full reconciliation of this document's older sections against
+> current code is Stage 6 scope, not repeated here.
 
 ## 1. Purpose
 
@@ -387,3 +402,132 @@ production method is selected, no ADR is created. The evidence file
 `docs/spikes/evidence/power-methodology-evidence.json` is the source of the numbers
 above and must be regenerated deliberately (script, not CI) if the methodology or
 scenario definitions change.
+
+## 10. Evidence version 2 — multi-seed statistical study (Stage 5 —
+`test/power-methodology-evidence-v2`)
+
+Section 9's evidence used a single, fixed data-generation seed per scenario
+(the Monte-Carlo simulation seed varied, the underlying synthetic market did
+not). This stage adds a genuinely **multi-seed** statistical study —
+independent data-generation seeds crossed with independent simulation
+seeds — plus five scenarios covering categories section 9's suite did not
+exercise, on top of the safety gates added by
+`fix/power-methodology-safety-gates` and the fit-policy alignment added by
+`refactor/power-counterfactual-fit-alignment`.
+
+Module: `geotestlab/power/evidence_v2.py`. Script: `scripts/generate_evidence_v2.py`.
+Full report: `docs/spikes/evidence/power-methodology-evidence-v2.json`.
+Concise machine-readable summary (methodology version, scenario-suite
+version, generating commit, settings, proposed thresholds, summary metrics,
+blocked scenarios, open decisions):
+`docs/spikes/evidence/power-methodology-evidence-v2-summary.json`. Neither
+file is byte-compared in CI (unlike the v1 report) because both record
+wall-clock runtime and a generation timestamp; a maintainer regenerates and
+reviews the diff deliberately, same convention as v1.
+
+### 10.1 Suite and settings
+
+- **Core scenarios (12, from section 9):** run across 3 independent
+  data-generation seeds × 2 simulation seeds × `model_simulation` +
+  `residual_simulation` × OLS = **144 runs**, `n_simulations=500`.
+- **Additional safety scenarios (5, new):** `test_region_partial_missingness`,
+  `duplicate_keys`, `irrelevant_controls_market`,
+  `nonlinear_counterfactual_market`, `structural_break_market` — evaluated as
+  pass/fail safety-gate checks (does the result correctly block or
+  complete), not power-bias evidence, across the same 3 data-generation
+  seeds = **15 runs**. Reference power/MDE is not meaningful for these
+  (the defect is injected into the observed data, not the generative
+  truth), so they are scored on whether the safety policy's decision
+  (block vs complete) matches what is expected, not on bias.
+
+### 10.2 Aggregate statistics (core suite, 144 runs, 88 completed / 56 blocked)
+
+| Statistic | Value |
+|---|---|
+| Null calibration, mean \|power_at_zero − α\| | 0.009 |
+| Power bias, mean / median | +0.191 / +0.208 |
+| Power bias, P10 / P90 | −0.047 / +0.395 |
+| Power bias (abs), worst-case supported scenario | 0.661 |
+| MDE bias (relative), mean / median | 0.283 / 0.252 |
+| False-supported rate | 4 / 60 = **6.7%** |
+| False-MDE rate | 0 / 88 = **0%** |
+| Blocker rate (all core runs) | 38.9% |
+| Fallback rate (all core runs) | 0% |
+| Seed sensitivity, mean power-std across seeds | 0.074 |
+| Runtime, median / P95 (this suite's `n_sim=500`, not production count) | 0.063 s / 0.109 s |
+| Additional safety-scenario pass rate | 5/5 scenarios × 3 seeds = **15/15 (100%)** |
+
+The 0% fallback rate confirms the `fix/power-methodology-safety-gates`
+control-sanitisation fix holds across seeds, not just the one scenario seed
+section 9.7 evidenced. The 0% false-MDE rate confirms the persistence
+safety gate now prevents the section-9.8-recommended-but-not-yet-implemented
+false-MDE failure mode across every core-suite run, not only the single
+`mde_not_reached` seed evidenced in section 9.
+
+**Finding — the heteroskedasticity diagnostic is not seed-robust.** All 4
+false-supported runs are `heteroskedastic` at data-generation seed 2 (both
+`model_simulation` and `residual_simulation`, both simulation seeds): the
+Stage-3 split-half variance-ratio diagnostic, calibrated against a single
+scenario seed, does not reliably flag material heteroskedasticity when the
+underlying synthetic market is regenerated with a different seed. This is
+the false-positive/false-negative characterisation Stage 3's own code
+comments call out as outstanding ("a coarse first-pass diagnostic ... Stage
+5 measures its false-supported/false-blocked rate properly across many
+data-generation seeds") — now measured. It is reported here as an **open
+finding**, not silently re-tuned away: a materially better-powered
+heteroskedasticity test (e.g. a proper Breusch-Pagan/White-type test rather
+than a two-group split-variance ratio) is future work, tracked as an open
+decision below.
+
+### 10.3 Proposed (NOT approved) acceptance thresholds
+
+Defined in `geotestlab.power.evidence_v2.PROPOSED_ACCEPTANCE_THRESHOLDS` and
+echoed in the summary artifact. These are decision evidence for the
+methodology-approval gate; they carry no authority until an explicit
+product-owner approval converts the corresponding ADR (see section 11 / the
+decision pack) from Proposed to Approved.
+
+| Threshold | Proposed value | This suite's actual |
+|---|---|---|
+| Null calibration, abs error | 0.02 | 0.009 (pass) |
+| Power bias, abs mean (supported scenarios) | 0.05 | 0.216 (**fail** — see 10.4) |
+| Power bias, abs worst case | 0.15 | 0.661 (**fail** — see 10.4) |
+| MDE bias, relative | 0.25 | 0.283 (borderline fail) |
+| False-supported rate | 0.00 | 0.067 (**fail** — see 10.2 finding) |
+| False-MDE rate | 0.05 | 0.000 (pass) |
+| Seed sensitivity, power std | 0.05 | 0.074 (fail) |
+| Runtime, P95 seconds | 5.0 | 0.109 (pass, at this suite's reduced `n_sim`) |
+
+### 10.4 Why the power-bias thresholds fail here (and what that does — and does not — mean)
+
+The aggregate power-bias statistics mix scenarios with very different
+truth-effect magnitudes and shapes (e.g. `low_volume`'s small absolute
+truth effect vs `high_autocorrelation`'s larger relative one); a single
+mean/worst-case bias across the whole heterogeneous suite is a blunt
+instrument. This failure does **not** mean the safety-gated core method is
+unsafe — every scenario the safety policy blocks is excluded from this bias
+calculation by construction (bias is only computed on `completed=True`
+runs), and the false-MDE rate (the failure mode that matters most for a
+go/no-go MDE decision) is 0%. It means the FLAT thresholds proposed above
+are too blunt for the suite's scenario diversity and should be
+scenario-weighted or scenario-specific before any approval decision — an
+explicit open decision below, not resolved in this stage.
+
+### 10.5 Open decisions
+
+1. Primary power simulation method (`model_simulation` vs
+   `residual_simulation` vs `placebo_empirical`) — ADR-001.
+2. Whether `false_mde_rate` / `power_bias_abs_worst_case` should be
+   scenario-weighted rather than flat across a heterogeneous suite — ADR-013
+   / ADR-014.
+3. Whether `irrelevant_controls_market` / `nonlinear_counterfactual_market` /
+   `structural_break_market` warrant their own safety gates (currently
+   evidence only, never blocking) — ADR-005.
+4. A better-powered heteroskedasticity diagnostic (see the 10.2 finding) —
+   ADR-012.
+5. Production simulation count and duration/market-share scenario grids
+   (this suite uses `n_sim=500` for tractable local runtime, not a
+   production count) — ADR-015 / ADR-016.
+
+Status remains **For methodology approval**; this section adds evidence
+only — no production method is selected, no ADR is approved.

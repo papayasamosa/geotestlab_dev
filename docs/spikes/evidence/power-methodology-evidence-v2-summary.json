@@ -1,0 +1,265 @@
+{
+  "blocked_scenarios": [
+    "daily_weekday",
+    "duplicate_keys",
+    "heteroskedastic",
+    "mde_not_reached",
+    "seasonal_residuals",
+    "weekly_52"
+  ],
+  "code_commit": "479a056fdc50dc054731e7d6bea0b19fe0aafbed",
+  "generated_at": "2026-08-07T13:23:30.174066+00:00",
+  "methodology_version": "0.5.0",
+  "open_decisions": [
+    "Primary power simulation method (model_simulation vs residual_simulation vs placebo_empirical) -- see ADR-001.",
+    "Whether the false_mde_rate / power_bias_abs_worst_case proposed thresholds above are the right bars, or need scenario-weighted adjustment -- see ADR-013/014.",
+    "Whether irrelevant_controls_market / nonlinear_counterfactual_market / structural_break_market warrant their own safety gates (currently reported as evidence only, never blocking) -- see ADR-005.",
+    "Production simulation count and duration/market-share scenario grids (this suite uses a reduced n_sim for tractable CI runtime) -- see ADR-015/016."
+  ],
+  "proposed_acceptance_thresholds": {
+    "false_mde_rate": 0.05,
+    "false_supported_rate": 0.0,
+    "mde_bias_relative": 0.25,
+    "null_calibration_abs_error": 0.02,
+    "power_bias_abs_mean": 0.05,
+    "power_bias_abs_worst_case": 0.15,
+    "runtime_p95_seconds": 5.0,
+    "seed_sensitivity_power_std": 0.05
+  },
+  "scenario_suite_version": "2.0.0",
+  "simulation_settings": {
+    "additional_scenario_names": [
+      "test_region_partial_missingness",
+      "duplicate_keys",
+      "irrelevant_controls_market",
+      "nonlinear_counterfactual_market",
+      "structural_break_market"
+    ],
+    "alpha": 0.05,
+    "core_scenario_names": [
+      "weekly_52",
+      "weekly_104",
+      "weekly_156",
+      "daily_weekday",
+      "low_volume",
+      "high_autocorrelation",
+      "heteroskedastic",
+      "seasonal_residuals",
+      "collinear_controls",
+      "many_weak_controls",
+      "duplicate_controls",
+      "mde_not_reached"
+    ],
+    "data_seeds": [
+      0,
+      1,
+      2
+    ],
+    "fit_methods": [
+      "ols"
+    ],
+    "methods": [
+      "model_simulation",
+      "residual_simulation"
+    ],
+    "n_simulations": 500,
+    "side": "one_sided_positive",
+    "sim_seeds": [
+      0,
+      1
+    ],
+    "target_power": 0.8
+  },
+  "status": "For methodology approval -- this summary is decision evidence, not an approval record.",
+  "summary_metrics": {
+    "additional_safety_scenarios": {
+      "n_correct": 15,
+      "n_scenarios": 15,
+      "pass_rate": 1.0,
+      "results": [
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 0,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "test_region_partial_missingness"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 1,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "test_region_partial_missingness"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 2,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "test_region_partial_missingness"
+        },
+        {
+          "blockers": [
+            "duplicate (region, date) keys among selected regions in the pre-period; refusing to resolve by row order"
+          ],
+          "completed": false,
+          "data_seed": 0,
+          "expected_blocked": true,
+          "safety_correct": true,
+          "scenario": "duplicate_keys"
+        },
+        {
+          "blockers": [
+            "duplicate (region, date) keys among selected regions in the pre-period; refusing to resolve by row order"
+          ],
+          "completed": false,
+          "data_seed": 1,
+          "expected_blocked": true,
+          "safety_correct": true,
+          "scenario": "duplicate_keys"
+        },
+        {
+          "blockers": [
+            "duplicate (region, date) keys among selected regions in the pre-period; refusing to resolve by row order"
+          ],
+          "completed": false,
+          "data_seed": 2,
+          "expected_blocked": true,
+          "safety_correct": true,
+          "scenario": "duplicate_keys"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 0,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "irrelevant_controls_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 1,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "irrelevant_controls_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 2,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "irrelevant_controls_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 0,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "nonlinear_counterfactual_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 1,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "nonlinear_counterfactual_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 2,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "nonlinear_counterfactual_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 0,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "structural_break_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 1,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "structural_break_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 2,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "structural_break_market"
+        }
+      ]
+    },
+    "blocker_rate": 0.3888888888888889,
+    "fallback_rate": 0.0,
+    "false_mde_count": 0,
+    "false_mde_denominator": 88,
+    "false_mde_rate": 0.0,
+    "false_supported_count": 4,
+    "false_supported_denominator": 60,
+    "false_supported_rate": 0.06666666666666667,
+    "mde_bias_relative": {
+      "mean": 0.283199453351638,
+      "n": 88,
+      "p10": 0.15463793103448287,
+      "p50": 0.25187499999999996,
+      "p90": 0.442934615384615
+    },
+    "n_blocked": 56,
+    "n_completed": 88,
+    "n_errored": 0,
+    "n_fallback": 0,
+    "n_incomplete": 56,
+    "null_calibration": {
+      "mean": 0.009068181818181817,
+      "n": 88,
+      "p10": 0.0,
+      "p50": 0.005999999999999998,
+      "p90": 0.023199999999999988
+    },
+    "power_bias": {
+      "mean": 0.19051094373870595,
+      "n": 88,
+      "p10": -0.04682730240897532,
+      "p50": 0.2082196116326468,
+      "p90": 0.39545178366722356
+    },
+    "power_bias_abs": {
+      "mean": 0.21574315601176705,
+      "n": 88,
+      "p10": 0.023218999030829014,
+      "p50": 0.2094275143169833,
+      "p90": 0.39545178366722356
+    },
+    "power_bias_worst_case_supported": 0.6610508359859255,
+    "runtime_seconds": {
+      "mean": 0.06103042847250132,
+      "n": 144,
+      "p50": 0.06341095000243513,
+      "p95": 0.10891021999268559
+    },
+    "seed_sensitivity_power_std": {
+      "mean": 0.073837801025667,
+      "n": 16,
+      "p10": 0.02639598747299816,
+      "p50": 0.05847428572931181,
+      "p90": 0.1315535377766776
+    },
+    "total_runs": 144
+  }
+}
