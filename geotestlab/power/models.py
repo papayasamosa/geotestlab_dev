@@ -28,9 +28,16 @@ EFFECT_SHAPES = ("step", "ramp")
 # Test sides.
 SIDES = ("one_sided_positive", "one_sided_negative", "two_sided")
 
+# KPI frequencies the spike can be told about (PA-FR frequency contract). Only
+# "weekly" is SUPPORTED by the current constant-sigma AR(1) residual model;
+# "daily" is a recognised, typed value that the methodology safety policy
+# blocks (see geotestlab.power.safety) until an approved daily seasonal
+# process exists -- it is not silently coerced or ignored.
+FREQUENCIES = ("daily", "weekly")
+
 # Methodology version for the corrected spike contract (bumped when the result
 # contract or methodology rule set changes).
-METHODOLOGY_VERSION = "0.3.0"
+METHODOLOGY_VERSION = "0.4.0"
 
 
 def validate_effect_shape(shape: str) -> None:
@@ -57,6 +64,11 @@ class PowerConfig:
     effect_injection: str = "relative"
     effect_shape: str = "step"
     side: str = "one_sided_positive"
+    # Typed KPI frequency (PA-FR frequency contract): required so
+    # frequency-specific history/seasonality policy can be enforced rather
+    # than assumed. Validated against FREQUENCIES; only "weekly" is
+    # SUPPORTED by the current method (see geotestlab.power.safety).
+    frequency: str = "weekly"
     alpha: float = 0.05
     target_power: float = 0.80
     n_simulations: int = 1000
@@ -94,6 +106,7 @@ class PowerResult:
     effect_injection: str
     effect_shape: str
     side: str
+    frequency: str
     alpha: float
     target_power: float
     n_simulations: int
@@ -131,6 +144,15 @@ class PowerResult:
     minimum_history_status: str = "not_applicable"  # "ok" | "insufficient"
     minimum_window_status: str = "not_applicable"  # "ok" | "insufficient"
     methodology_version: str = METHODOLOGY_VERSION
+    # Structured methodology-safety verdict (PA safety policy):
+    # "supported" | "supported_with_warning" | "unsupported" | "blocked",
+    # combining frequency, history, persistence, seasonality,
+    # heteroskedasticity and control-matrix sub-statuses. See
+    # geotestlab.power.safety.evaluate_safety(); safety_diagnostics carries
+    # the full per-category breakdown and reasons.
+    support_status: str = "not_applicable"
+    safety_diagnostics: dict = field(default_factory=dict)
+    safety_policy_version: str = ""
     errors: tuple = field(default_factory=tuple)
     blockers: tuple = field(default_factory=tuple)
 
@@ -142,6 +164,7 @@ class PowerResult:
             "effect_injection": self.effect_injection,
             "effect_shape": self.effect_shape,
             "side": self.side,
+            "frequency": self.frequency,
             "alpha": self.alpha,
             "target_power": self.target_power,
             "n_simulations": self.n_simulations,
@@ -171,6 +194,9 @@ class PowerResult:
             "minimum_history_status": self.minimum_history_status,
             "minimum_window_status": self.minimum_window_status,
             "methodology_version": self.methodology_version,
+            "support_status": self.support_status,
+            "safety_diagnostics": dict(self.safety_diagnostics),
+            "safety_policy_version": self.safety_policy_version,
             "errors": list(self.errors),
             "blockers": list(self.blockers),
         }

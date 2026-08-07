@@ -43,6 +43,21 @@ import pandas as pd
 
 from geotestlab.power.alignment import build_date_keyed_matrix
 from geotestlab.power.random import child_rngs
+from geotestlab.power.safety import (
+    BLOCKED as SAFETY_BLOCKED,
+)
+from geotestlab.power.safety import (
+    DEFAULT_SAFETY_POLICY,
+    evaluate_safety,
+)
+
+# Only BLOCKED refuses a completed result. UNSUPPORTED is deliberately NOT
+# treated as blocking here: in this policy it only arises from defensive/
+# unreachable branches (e.g. an already-validated frequency), and conflating
+# it with BLOCKED would also block the long-accepted constant-mean-fallback
+# degraded mode, which control_matrix_support reports as
+# SUPPORTED_WITH_WARNING, not BLOCKED.
+_SAFETY_BLOCKING_STATUSES = (SAFETY_BLOCKED,)
 
 # Counterfactual fit methods compared for PA-FR2 evidence (see fit_comparison).
 FIT_METHOD_NAMES = ("ols", "elastic_net", "lasso")
@@ -76,6 +91,12 @@ class CounterfactualFit:
     retained_dates: pd.DatetimeIndex
     cf_mean: float = 0.0
     model: object | None = None
+    # The control regions actually used by this fit AFTER sanitisation
+    # (constant/exact-duplicate columns removed). project_counterfactual()
+    # MUST build the test-window design from this set, not the originally
+    # requested control_regions, or the projection's column meanings would
+    # no longer match the fitted coefficients/model.
+    retained_control_regions: tuple = ()
 
     def project(self, X_const, X_no_const):
         if self.fit_method == FALLBACK_FIT_METHOD:
@@ -138,6 +159,39 @@ def _constant_or_duplicate_columns(X):
     return constant, duplicate
 
 
+def _sanitize_controls(X_no_const, cols):
+    """Remove constant and exact-duplicate control columns BEFORE rank/
+    condition assessment, so one uninformative or duplicated control never
+    triggers a full constant-mean fallback that throws away every other,
+    still-informative control.
+
+    Returns ``(X_sanitized, cols_sanitized, removed)`` where ``removed`` is a
+    JSON-safe list of ``{"region": ..., "reason": ...}`` records ("constant"
+    or "duplicate_of:<region>"). Column order among retained controls is
+    preserved.
+    """
+    if X_no_const.shape[1] == 0 or X_no_const.shape[0] == 0:
+        return X_no_const, list(cols), []
+    constant_mask = np.ptp(X_no_const, axis=0) == 0
+    keep_idx = []
+    removed = []
+    for j, name in enumerate(cols):
+        if constant_mask[j]:
+            removed.append({"region": name, "reason": "constant"})
+            continue
+        dup_of = next(
+            (cols[k] for k in keep_idx if np.allclose(X_no_const[:, j], X_no_const[:, k])),
+            None,
+        )
+        if dup_of is not None:
+            removed.append({"region": name, "reason": f"duplicate_of:{dup_of}"})
+            continue
+        keep_idx.append(j)
+    X_sanitized = X_no_const[:, keep_idx]
+    cols_sanitized = [cols[j] for j in keep_idx]
+    return X_sanitized, cols_sanitized, removed
+
+
 def fit_counterfactual(
     pre_df,
     test_regions,
@@ -156,9 +210,24 @@ def fit_counterfactual(
     structured warning emitted.
     """
     test, controls, align_diag = build_date_keyed_matrix(pre_df, test_regions, control_regions)
-    X_const, X_no_const, y, retained_dates, removal_diag = _design_from_aligned(test, controls)
+    X_const_raw, X_no_const_raw, y, retained_dates, removal_diag = _design_from_aligned(
+        test, controls
+    )
+    cols = list(controls.columns)
 
-    n_obs = int(X_const.shape[0])
+    # Sanitise BEFORE rank/condition assessment: an exact-duplicate or
+    # constant control must not throw away every other, still-informative
+    # control via a full fallback. Removed columns are recorded; the
+    # projection MUST later use the same sanitised control set (see
+    # CounterfactualFit.retained_control_regions / project_counterfactual()).
+    X_no_const, cols_sanitized, removed_controls = _sanitize_controls(X_no_const_raw, cols)
+    n_obs = int(X_const_raw.shape[0])
+    X_const = (
+        np.column_stack([np.ones(n_obs), X_no_const])
+        if X_no_const.shape[1]
+        else np.ones((n_obs, 1))
+    )
+
     n_predictors = int(X_const.shape[1])
     rank = int(np.linalg.matrix_rank(X_const)) if n_obs > 0 else 0
     cond = float(np.linalg.cond(X_const)) if n_obs > 0 else float("inf")
@@ -173,6 +242,8 @@ def fit_counterfactual(
         "condition_number": cond if np.isfinite(cond) else None,
         "constant_predictors": constant_cols,
         "duplicate_predictor_pairs": [list(p) for p in duplicate_pairs],
+        "removed_controls": removed_controls,
+        "retained_control_regions": list(cols_sanitized),
         "fallback_used": False,
         "fallback_reason": None,
         "fit_method": fit_method,
@@ -181,10 +252,18 @@ def fit_counterfactual(
     }
 
     warnings = []
+    if removed_controls:
+        warnings.append(
+            "sanitised "
+            + ", ".join(f"{r['region']} ({r['reason']})" for r in removed_controls)
+            + " before fitting; remaining informative controls preserved"
+        )
 
     fallback_reason = None
     if n_obs == 0:
         fallback_reason = "no_observations"
+    elif cols and not cols_sanitized:
+        fallback_reason = "no_informative_controls_after_sanitisation"
     elif n_predictors > n_obs:
         fallback_reason = "underdetermined"
     elif rank < n_predictors:
@@ -212,6 +291,7 @@ def fit_counterfactual(
             warnings=tuple(warnings),
             retained_dates=retained_dates,
             cf_mean=mean,
+            retained_control_regions=(),
         )
 
     if fit_method == "ols":
@@ -247,6 +327,7 @@ def fit_counterfactual(
         warnings=tuple(warnings),
         retained_dates=retained_dates,
         model=model,
+        retained_control_regions=tuple(cols_sanitized),
     )
 
 
@@ -262,6 +343,32 @@ def fit_ar1(residuals):
     return rho, sigma
 
 
+def _safety_diagnostics(fit, frequency, policy=DEFAULT_SAFETY_POLICY):
+    """Evaluate the methodology safety policy against a pre-period fit.
+
+    Computed once per fit (regardless of which simulation method is used
+    downstream) so persistence/heteroskedasticity/history checks are
+    consistent across model_simulation, residual_simulation and
+    placebo_empirical -- they are properties of the retained pre-period
+    data and the fit, not of the simulation approach.
+    """
+    rho, _sigma = fit_ar1(fit.residuals)
+    retained_periods = int(fit.diagnostics.get("dates_jointly_complete", len(fit.residuals)))
+    continuity = str(fit.diagnostics.get("continuity", "unknown"))
+    n_predictors = int(fit.diagnostics.get("n_predictors", 0))
+    return evaluate_safety(
+        frequency=frequency,
+        retained_periods=retained_periods,
+        continuity=continuity,
+        n_predictors=n_predictors,
+        rho=rho,
+        fit_diagnostics=fit.diagnostics,
+        residuals=fit.residuals,
+        level=fit.cf_fit,
+        policy=policy,
+    )
+
+
 def _simulate_ar1_paths(rho, sigma, n_periods, n_sim, rng, e_start=0.0):
     out = np.empty((n_sim, n_periods))
     prev = np.full(n_sim, e_start, dtype=float)
@@ -274,17 +381,24 @@ def _simulate_ar1_paths(rho, sigma, n_periods, n_sim, rng, e_start=0.0):
 def project_counterfactual(fit, test_df, test_regions, control_regions):
     """Project a fitted counterfactual over the test window (date-keyed).
 
+    Uses ``fit.retained_control_regions`` (the SANITISED control set the fit
+    was actually trained on), not the raw ``control_regions`` argument -- a
+    control dropped as constant/exact-duplicate before fitting must also be
+    dropped from the test-window design, or the projected columns would no
+    longer match the fitted coefficients/model.
+
     Returns ``(projected, retained_dates, window_diag)``. ``retained_dates``
-    is the jointly-complete test-window date set (test AND every control
-    present that date) -- the single authoritative set that
+    is the jointly-complete test-window date set (test AND every retained
+    control present that date) -- the single authoritative set that
     ``model_simulation``/``residual_simulation`` must also use for the
     simulated-noise horizon, so the counterfactual projection and the noise
     horizon can never silently diverge. ``window_diag`` merges the alignment
     diagnostics (including ``duplicate_keys_blocking``) with the joint-row
     removal diagnostics for this window.
     """
+    used_controls = fit.retained_control_regions
     test_test, controls_test, align_diag = build_date_keyed_matrix(
-        test_df, test_regions, control_regions
+        test_df, test_regions, used_controls
     )
     X_const, X_no_const, _, retained_dates, removal_diag = _design_from_aligned(
         test_test, controls_test
@@ -350,13 +464,29 @@ def _blocked_result(reason, matrix_diagnostics=None, fit_method="n/a", fit_statu
 # 1. Model-based counterfactual simulation
 # ---------------------------------------------------------------------------
 def model_simulation(
-    pre_df, test_df, test_regions, control_regions, n_test, n_sim, seed, fit_method="ols"
+    pre_df,
+    test_df,
+    test_regions,
+    control_regions,
+    n_test,
+    n_sim,
+    seed,
+    fit_method="ols",
+    frequency="weekly",
+    safety_policy=DEFAULT_SAFETY_POLICY,
+    enforce_safety=True,
 ):
     """Model-based counterfactual simulation with independent streams.
 
     Threshold calibration, alternative simulation and diagnostics each use an
     independent random stream derived from ``seed`` (``child_rngs(seed, 3)``),
     which is NumPy >= 1.24 compatible.
+
+    ``enforce_safety=False`` skips the methodology safety policy (still
+    computed as ``None`` in ``meta["safety"]``) -- used by
+    ``fit_comparison.compare_fit_methods``, a fit-method EVIDENCE pathway
+    that deliberately exercises short-history/rank-deficient scenarios and
+    does not go through ``run_power_analysis``'s safety-gated contract.
     """
     fit = fit_counterfactual(pre_df, test_regions, control_regions, fit_method=fit_method)
     if fit.diagnostics.get("duplicate_keys_blocking"):
@@ -366,13 +496,20 @@ def model_simulation(
             matrix_diagnostics=fit.diagnostics,
             fit_method=fit.fit_method,
         )
+    safety = _safety_diagnostics(fit, frequency, safety_policy) if enforce_safety else None
+    if safety is not None and safety["overall_status"] in _SAFETY_BLOCKING_STATUSES:
+        return _blocked_result(
+            "; ".join(safety["reasons"]) or "methodology safety policy blocked this analysis",
+            matrix_diagnostics={**fit.diagnostics, "safety": safety},
+            fit_method=fit.fit_method,
+        )
     rho, sigma = fit_ar1(fit.residuals)
     e_start = float(fit.residuals[-1]) if len(fit.residuals) else 0.0
 
     cf_test, retained_test_dates, test_align_diag = project_counterfactual(
         fit, test_df, test_regions, control_regions
     )
-    matrix_diagnostics = {**fit.diagnostics, "test_window": test_align_diag}
+    matrix_diagnostics = {**fit.diagnostics, "safety": safety, "test_window": test_align_diag}
     if test_align_diag.get("duplicate_keys_blocking"):
         return _blocked_result(
             "duplicate (region, date) keys among selected regions in the test window; "
@@ -427,6 +564,7 @@ def model_simulation(
         "effective_test_periods": n_test_use,
         "requested_test_periods": int(n_test),
         "cf_test_sum": cf_test_sum,
+        "safety": safety,
         "blocked": False,
         "block_reason": None,
     }
@@ -457,7 +595,18 @@ def build_placebo_windows(pre_df, test_regions, control_regions, window_len):
     return np.array(pcts, dtype=float)
 
 
-def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_sim, seed):
+def placebo_empirical(
+    pre_df,
+    test_df,
+    test_regions,
+    control_regions,
+    n_test,
+    n_sim,
+    seed,
+    frequency="weekly",
+    safety_policy=DEFAULT_SAFETY_POLICY,
+    enforce_safety=True,
+):
     """Placebo uplift-% null; alt = legacy closed-form shift (relative only).
 
     Deterministic: there is no Monte-Carlo sampling stream, so the
@@ -474,12 +623,19 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
     with two-tailed detection). ``seed`` is unused (the method is
     deterministic) and is kept only to share the method-dispatch signature.
     """
-    pre_fit_diag = fit_counterfactual(pre_df, test_regions, control_regions).diagnostics
-    if pre_fit_diag.get("duplicate_keys_blocking"):
+    pre_fit = fit_counterfactual(pre_df, test_regions, control_regions)
+    if pre_fit.diagnostics.get("duplicate_keys_blocking"):
         return _blocked_result(
             "duplicate (region, date) keys among selected regions in the pre-period; "
             "refusing to resolve by row order",
-            matrix_diagnostics=pre_fit_diag,
+            matrix_diagnostics=pre_fit.diagnostics,
+            fit_method="n/a",
+        )
+    safety = _safety_diagnostics(pre_fit, frequency, safety_policy) if enforce_safety else None
+    if safety is not None and safety["overall_status"] in _SAFETY_BLOCKING_STATUSES:
+        return _blocked_result(
+            "; ".join(safety["reasons"]) or "methodology safety policy blocked this analysis",
+            matrix_diagnostics={**pre_fit.diagnostics, "safety": safety},
             fit_method="n/a",
         )
     pcts = build_placebo_windows(pre_df, test_regions, control_regions, n_test)
@@ -501,11 +657,12 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
         "null_sd": float(np.std(pcts)) if len(pcts) else float("nan"),
         "fit_method": "n/a",
         "fit_status": "n/a",
-        "matrix_diagnostics": {},
+        "matrix_diagnostics": {"safety": safety},
         "calibration_simulations": 0,
         "detection_simulations": 0,
         "failures": 0,
         "warnings": [],
+        "safety": safety,
         "blocked": False,
         "block_reason": None,
     }
@@ -516,7 +673,17 @@ def placebo_empirical(pre_df, test_df, test_regions, control_regions, n_test, n_
 # 3. Historical residual simulation (bootstrap)
 # ---------------------------------------------------------------------------
 def residual_simulation(
-    pre_df, test_df, test_regions, control_regions, n_test, n_sim, seed, fit_method="ols"
+    pre_df,
+    test_df,
+    test_regions,
+    control_regions,
+    n_test,
+    n_sim,
+    seed,
+    fit_method="ols",
+    frequency="weekly",
+    safety_policy=DEFAULT_SAFETY_POLICY,
+    enforce_safety=True,
 ):
     """Null totals by resampling pre-period residuals (with replacement).
 
@@ -533,11 +700,18 @@ def residual_simulation(
             matrix_diagnostics=fit.diagnostics,
             fit_method=fit.fit_method,
         )
+    safety = _safety_diagnostics(fit, frequency, safety_policy) if enforce_safety else None
+    if safety is not None and safety["overall_status"] in _SAFETY_BLOCKING_STATUSES:
+        return _blocked_result(
+            "; ".join(safety["reasons"]) or "methodology safety policy blocked this analysis",
+            matrix_diagnostics={**fit.diagnostics, "safety": safety},
+            fit_method=fit.fit_method,
+        )
     resid = fit.residuals
     cf_test, retained_test_dates, test_align_diag = project_counterfactual(
         fit, test_df, test_regions, control_regions
     )
-    matrix_diagnostics = {**fit.diagnostics, "test_window": test_align_diag}
+    matrix_diagnostics = {**fit.diagnostics, "safety": safety, "test_window": test_align_diag}
     if test_align_diag.get("duplicate_keys_blocking"):
         return _blocked_result(
             "duplicate (region, date) keys among selected regions in the test window; "
@@ -590,6 +764,7 @@ def residual_simulation(
         "effective_test_periods": n_test_use,
         "requested_test_periods": int(n_test),
         "cf_test_sum": cf_test_sum,
+        "safety": safety,
         "blocked": False,
         "block_reason": None,
     }

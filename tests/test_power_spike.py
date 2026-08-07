@@ -45,6 +45,7 @@ from geotestlab.power import (
     model_simulation,
     placebo_empirical,
     power_from_totals,
+    project_counterfactual,
     residual_simulation,
     run_power_analysis,
     validate_detection_criterion,
@@ -613,10 +614,10 @@ class TestRankDeficiency:
 # Empty placebo evidence: explicit incomplete result, never [0.0]
 # ---------------------------------------------------------------------------
 class TestEmptyPlacebo:
-    def _run_placebo(self, n_pre):
+    def _run_placebo(self, n_pre, n_test=N_TEST, **config_over):
         case = generate_synthetic_case(
             n_pre=n_pre,
-            n_test=N_TEST,
+            n_test=n_test,
             rho=RHO,
             sigma=SIGMA,
             control_betas={"C1": 1.0, "C2": 2.0},
@@ -627,28 +628,54 @@ class TestEmptyPlacebo:
             sd_control_noise=1.0,
         )
         return run_power_analysis(
-            case.df, n_pre, _config(method="placebo_empirical", control_regions=("C1", "C2"))
+            case.df,
+            n_pre,
+            _config(method="placebo_empirical", control_regions=("C1", "C2"), **config_over),
         )
 
     def test_empty_placebo_incomplete_no_mde(self):
-        # 10 pre periods with 12-period windows -> zero placebo windows.
-        res = self._run_placebo(10)
+        # 104 pre periods (>= the weekly history floor, so history_status
+        # stays "supported") with a 110-period window -> zero placebo
+        # windows, isolating the windows-insufficient gate from the
+        # Stage-3 history gate.
+        res = self._run_placebo(104, n_test=110)
         assert res.completed is False
         assert res.mde is None
         assert res.mde_reached is False
+        assert res.safety_diagnostics.get("history_status") == "supported"
         assert res.minimum_window_status == "insufficient"
         assert any("windows" in e for e in res.errors)
         assert any("windows" in b for b in res.blockers)
         assert len(res.power_curve) == 0
 
     def test_placebo_min_windows_enforced(self):
-        # 24 pre periods with 12-period windows -> 2 windows < minimum 5.
-        res = self._run_placebo(24)
+        # 104 pre periods with 30-period windows -> floor(104/30)=3 windows
+        # < minimum 5, again with history_status "supported".
+        res = self._run_placebo(104, n_test=30)
         assert res.completed is False
         assert res.mde is None
+        assert res.safety_diagnostics.get("history_status") == "supported"
         assert res.minimum_window_status == "insufficient"
 
-    def test_residual_simulation_empty_evidence_incomplete(self):
+    def test_short_history_blocked_before_windows_check(self):
+        # Below the weekly history floor, the Stage-3 history gate blocks
+        # BEFORE the windows-insufficient check is ever reached (10 periods
+        # would also yield zero placebo windows, but history is checked
+        # first and is the more specific/informative reason here).
+        res = self._run_placebo(10)
+        assert res.completed is False
+        assert res.mde is None
+        assert res.support_status == "blocked"
+        assert res.safety_diagnostics.get("history_status") == "blocked"
+        assert res.minimum_window_status == "not_applicable"
+
+    def test_residual_simulation_short_history_blocked(self):
+        # For residual_simulation, "windows available" IS the retained
+        # pre-period observation count -- the same quantity the Stage-3
+        # history floor (104) gates. Below that floor, the history gate is
+        # always the binding constraint (it is stricter than the default
+        # min_placebo_windows=5), so this now blocks via history rather
+        # than the old minimum_window_status path.
         case = generate_synthetic_case(
             n_pre=2,
             n_test=N_TEST,
@@ -666,6 +693,24 @@ class TestEmptyPlacebo:
         )
         assert res.completed is False
         assert res.mde is None
+        assert res.support_status == "blocked"
+        assert res.safety_diagnostics.get("history_status") == "blocked"
+        assert res.minimum_window_status == "not_applicable"
+
+    def test_residual_simulation_windows_gate_reachable_above_history_floor(self):
+        # The windows-insufficient gate for residual_simulation IS still
+        # reachable when min_placebo_windows is configured ABOVE the
+        # history floor (104): 120 retained periods passes history but is
+        # still fewer than a min_placebo_windows=150 requirement.
+        case = _case()
+        res = run_power_analysis(
+            case.df,
+            N_PRE,
+            _config(method="residual_simulation", min_placebo_windows=150),
+        )
+        assert res.completed is False
+        assert res.mde is None
+        assert res.safety_diagnostics.get("history_status") == "supported"
         assert res.minimum_window_status == "insufficient"
 
 
@@ -875,11 +920,28 @@ class TestResultContract:
             assert key in res.matrix_diagnostics
 
     def test_minimum_history_status(self):
+        # The legacy pre_count-based minimum_history_status field remains a
+        # warning-level, informational signal (unchanged): it never blocks by
+        # itself. But 8 retained periods is also far below the Stage-3
+        # methodology-safety history floor (104 for weekly), which DOES block
+        # -- history sufficiency must be a hard gate, not a warning, per the
+        # evidence showing an unacceptable power bias below that floor.
         case = _case()
         res = run_power_analysis(case.df, 8, _config(min_historical_periods=12))
         assert res.minimum_history_status == "insufficient"
-        assert res.completed is True  # warning-level, not a critical failure
-        assert res.errors == ()
+        assert res.completed is False
+        assert res.support_status == "blocked"
+        assert res.safety_diagnostics["history_status"] == "blocked"
+
+    def test_history_at_or_above_weekly_floor_not_blocked_by_safety(self):
+        # 104 retained weekly periods is the floor itself: history_status must
+        # be "supported" (not blocked), isolating the legacy
+        # minimum_history_status warning from the new hard safety gate.
+        case = _case()
+        res = run_power_analysis(case.df, N_PRE, _config(min_historical_periods=12))
+        assert res.minimum_history_status == "ok"
+        assert res.safety_diagnostics["history_status"] == "supported"
+        assert res.completed is True
 
     def test_to_dict_includes_structured_fields(self):
         case = _case()
@@ -1302,7 +1364,10 @@ class TestFitCounterfactualBranches:
         assert fit.fit_status == "fallback_constant_mean"
         assert fit.diagnostics["fallback_reason"] == "ill_conditioned"
 
-    def test_duplicate_columns_reported(self):
+    def test_duplicate_columns_sanitised_not_fallback(self):
+        # An exact-duplicate control is removed BEFORE the rank/condition
+        # check, not left to trigger a full constant-mean fallback -- the
+        # remaining (here, zero other) informative controls are preserved.
         case = _case()
         df = case.df.copy()
         c1 = df[df["region"] == "C1"][["date", "kpi"]].copy()
@@ -1310,8 +1375,76 @@ class TestFitCounterfactualBranches:
         c3["region"] = "C3"  # exact duplicate of C1
         df = pd.concat([df, c3], ignore_index=True)
         fit = fit_counterfactual(self._pre_df(df), ("T",), ("C1", "C3"))
-        dup = fit.diagnostics["duplicate_predictor_pairs"]
-        assert [1, 2] in [sorted(p) for p in dup]
+        removed = fit.diagnostics["removed_controls"]
+        assert {"region": "C3", "reason": "duplicate_of:C1"} in removed
+        assert fit.diagnostics["retained_control_regions"] == ["C1"]
+        assert fit.fit_status == "ok"
+        assert fit.fit_method == "ols"
+        # No unsanitised duplicate pair should remain in the design actually
+        # fitted.
+        assert fit.diagnostics["duplicate_predictor_pairs"] == []
+
+    def test_duplicate_control_with_other_informative_controls_preserved(self):
+        # Two informative controls plus one exact duplicate of one of them:
+        # the duplicate is dropped, C1 and C2 are both still fitted (never a
+        # full fallback just because ONE control was redundant).
+        case = _case()
+        df = case.df.copy()
+        c1 = df[df["region"] == "C1"][["date", "kpi"]].copy()
+        c1_dup = c1.copy()
+        c1_dup["region"] = "C1_DUP"
+        df = pd.concat([df, c1_dup], ignore_index=True)
+        fit = fit_counterfactual(self._pre_df(df), ("T",), ("C1", "C2", "C1_DUP"))
+        assert fit.fit_status == "ok"
+        assert sorted(fit.diagnostics["retained_control_regions"]) == ["C1", "C2"]
+        assert {"region": "C1_DUP", "reason": "duplicate_of:C1"} in fit.diagnostics[
+            "removed_controls"
+        ]
+
+    def test_constant_control_sanitised(self):
+        case = _case()
+        df = case.df.copy()
+        const_col = df[df["region"] == "C1"][["date"]].copy()
+        const_col["region"] = "FLAT"
+        const_col["kpi"] = 5.0
+        df = pd.concat([df, const_col], ignore_index=True)
+        fit = fit_counterfactual(self._pre_df(df), ("T",), ("C1", "C2", "FLAT"))
+        assert fit.fit_status == "ok"
+        assert "FLAT" not in fit.diagnostics["retained_control_regions"]
+        assert {"region": "FLAT", "reason": "constant"} in fit.diagnostics["removed_controls"]
+
+    def test_only_constant_controls_falls_back_with_explicit_reason(self):
+        case = _case()
+        df = case.df.copy()
+        flat1 = df[df["region"] == "C1"][["date"]].copy()
+        flat1["region"] = "FLAT1"
+        flat1["kpi"] = 5.0
+        flat2 = flat1.copy()
+        flat2["region"] = "FLAT2"
+        flat2["kpi"] = 9.0
+        df = pd.concat([df, flat1, flat2], ignore_index=True)
+        fit = fit_counterfactual(self._pre_df(df), ("T",), ("FLAT1", "FLAT2"))
+        assert fit.fit_status == "fallback_constant_mean"
+        assert fit.diagnostics["fallback_reason"] == "no_informative_controls_after_sanitisation"
+
+    def test_projection_uses_sanitised_control_set(self):
+        # The test-window projection must use the SAME sanitised control set
+        # the fit was trained on; a stale duplicate column reference would
+        # otherwise mismatch the fitted coefficients/model.
+        case = _case()
+        df = case.df.copy()
+        c1 = df[df["region"] == "C1"][["date", "kpi"]].copy()
+        c3 = c1.copy()
+        c3["region"] = "C3"
+        df = pd.concat([df, c3], ignore_index=True)
+        pre_df = self._pre_df(df)
+        test_df = df[df["date"] >= df["date"].unique()[N_PRE]]
+        fit = fit_counterfactual(pre_df, ("T",), ("C1", "C3"))
+        projected, retained_dates, window_diag = project_counterfactual(
+            fit, test_df, ("T",), ("C1", "C3")
+        )
+        assert len(projected) == len(retained_dates) == N_TEST
+        assert np.all(np.isfinite(projected))
 
     def test_unknown_fit_method_rejected(self):
         case = _case()
@@ -1336,6 +1469,11 @@ class TestFitCounterfactualBranches:
         assert sigma == 0.0
 
     def test_residual_simulation_no_observations(self):
+        # 0 retained pre-period observations is far below the weekly history
+        # floor (104): the methodology safety policy now blocks explicitly
+        # instead of silently bootstrapping n_sim zeros from an empty
+        # residual array (which would have reported a well-formed but
+        # meaningless zero-variance null).
         case = _case()
         empty_pre = self._pre_df(case.df)[
             self._pre_df(case.df)["date"].isin(pd.to_datetime(["2020-01-01"]))
@@ -1343,8 +1481,10 @@ class TestFitCounterfactualBranches:
         null, alt_fn, meta = residual_simulation(
             empty_pre, case.df, ("T",), ("C1", "C2"), N_TEST, 100, 0
         )
-        assert len(null) == 100
+        assert len(null) == 0
         assert meta["windows_available"] == 0
+        assert meta["blocked"] is True
+        assert "history" in meta["matrix_diagnostics"]["safety"]["reasons"][0]
 
 
 # ---------------------------------------------------------------------------

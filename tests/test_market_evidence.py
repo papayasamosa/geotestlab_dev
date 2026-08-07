@@ -139,13 +139,19 @@ class TestScenarioStructure:
         assert fit.diagnostics["condition_number"] is not None
         assert fit.diagnostics["condition_number"] > 1e3
 
-    def test_duplicate_controls_triggers_rank_fallback(self):
+    def test_duplicate_controls_sanitised_and_fitted(self):
+        # The exact-duplicate control (C2 == C1) is sanitised away BEFORE the
+        # rank/condition check, so the fit proceeds on the remaining
+        # informative controls instead of falling back to a constant mean.
         sc = build_market_scenario("duplicate_controls")
         dates = sorted(pd.to_datetime(pd.Series(sc.df["date"].unique())))
         pre_df = sc.df[sc.df["date"].isin(set(dates[: sc.pre_count]))]
         fit = fit_counterfactual(pre_df, sc.test_regions, sc.control_regions, fit_method="ols")
-        assert fit.fit_status == "fallback_constant_mean"
-        assert fit.diagnostics["fallback_reason"] == "rank_deficient"
+        assert fit.fit_status == "ok"
+        assert fit.diagnostics["fallback_reason"] is None
+        assert {"region": "C2", "reason": "duplicate_of:C1"} in fit.diagnostics["removed_controls"]
+        assert "C2" not in fit.diagnostics["retained_control_regions"]
+        assert "C1" in fit.diagnostics["retained_control_regions"]
 
     def test_mde_not_reached_reference_unreached(self):
         sc = build_market_scenario("mde_not_reached")
@@ -231,6 +237,57 @@ class TestNoiseSimulator:
 # ---------------------------------------------------------------------------
 # Evidence harness
 # ---------------------------------------------------------------------------
+class TestMethodologySafetyExpectedStates:
+    """Stage 3: the expected support state per market scenario, in one place
+    for direct traceability to the sequential-plan acceptance table."""
+
+    EXPECTED_BLOCKED = {
+        "weekly_52",
+        "daily_weekday",
+        "seasonal_residuals",  # daily frequency -> blocked, same as daily_weekday
+        "heteroskedastic",
+        "mde_not_reached",
+    }
+    EXPECTED_SUPPORTED = {
+        "weekly_104",
+        "weekly_156",
+        "low_volume",
+        "high_autocorrelation",
+        "collinear_controls",
+        "many_weak_controls",
+        "duplicate_controls",
+    }
+
+    def test_expected_states_at_evidence_seeds(self):
+        from geotestlab.power.market_evidence import _evidence_grid, _run_one
+
+        assert self.EXPECTED_BLOCKED | self.EXPECTED_SUPPORTED == set(MARKET_SCENARIOS)
+        for name in MARKET_SCENARIOS:
+            sc = build_market_scenario(name)
+            grid = _evidence_grid(sc.truth["mde_bounds"])
+            for seed in (0, 1):
+                rec = _run_one(
+                    sc, "model_simulation", "ols", "one_sided_positive", seed, 300, grid, 0.05, 0.80
+                )
+                if name in self.EXPECTED_BLOCKED:
+                    assert rec["completed"] is False, f"{name} seed={seed} expected blocked"
+                    assert rec["n_blockers"] >= 1
+                else:
+                    assert rec["completed"] is True, f"{name} seed={seed} expected supported"
+
+    def test_duplicate_controls_sanitised_and_fitted(self):
+        from geotestlab.power.market_evidence import _evidence_grid, _run_one
+
+        sc = build_market_scenario("duplicate_controls")
+        grid = _evidence_grid(sc.truth["mde_bounds"])
+        rec = _run_one(
+            sc, "model_simulation", "ols", "one_sided_positive", 0, 300, grid, 0.05, 0.80
+        )
+        assert rec["completed"] is True
+        assert rec["fit_status"] == "ok"
+        assert rec["fallback_reason"] is None
+
+
 class TestMarketEvidenceHarness:
     def test_runs_all_requested_cells(self):
         ev = run_market_evidence(
@@ -344,11 +401,15 @@ class TestMarketEvidenceHarness:
         assert r["n_blockers"] >= 1
 
     def test_mde_not_reached_result(self):
-        # The TRUE generative process never reaches target power within bounds,
-        # but the fitted AR(1) under near-unit-root autocorrelation
-        # underestimates persistence (rho_hat ~0.90 vs truth 0.99) and the null
-        # width, so the METHOD falsely reports a reachable MDE. The evidence
-        # surfaces this disagreement rather than hiding it.
+        # The TRUE generative process never reaches target power within
+        # bounds. Before Stage 3, the fitted AR(1) under near-unit-root
+        # autocorrelation underestimated persistence (rho_hat ~0.90 vs truth
+        # 0.99) and the null width, so the METHOD used to falsely report a
+        # reachable MDE -- exactly the false-MDE failure mode the
+        # persistence-uncertainty safety gate exists to catch. The fitted
+        # rho's own estimation uncertainty puts a plausible near-unit-root
+        # process well within reach, so this must now BLOCK rather than
+        # report a misleadingly well-formed (but false) MDE.
         ev = run_market_evidence(
             scenario_names=["mde_not_reached"],
             methods=["model_simulation"],
@@ -360,14 +421,12 @@ class TestMarketEvidenceHarness:
         _, ref_reached = reference_mde(sc)
         assert ref_reached is False
         for r in ev["runs"]:
-            assert r["completed"] is True
-            assert r["mde_reached"] is True  # method disagrees with the truth
-            assert r["mde"] is not None
-            # The method's null sd grossly underestimates the true null sd.
-            assert r["null_sd"] < reference_null_sd(sc) * 0.5
-            assert r["noise_diagnostics"]["rho_estimate"] < sc.truth["rho"] - 0.05
+            assert r["completed"] is False
+            assert r["mde"] is None
+            assert r["mde_reached"] is False
+            assert r["n_blockers"] >= 1
 
-    def test_duplicate_controls_fallback_recorded(self):
+    def test_duplicate_controls_sanitised_not_fallback_recorded(self):
         ev = run_market_evidence(
             scenario_names=["duplicate_controls"],
             methods=["model_simulation"],
@@ -376,7 +435,8 @@ class TestMarketEvidenceHarness:
             n_sim=200,
         )
         for r in ev["runs"]:
-            assert r["fallback_reason"] == "rank_deficient"
+            assert r["fallback_reason"] is None
+            assert r["fit_status"] == "ok"
 
     def test_low_volume_placebo_error_recorded(self):
         # Placebo-empirical supports relative injection only -> NotImplementedError
@@ -413,13 +473,19 @@ class TestMarketEvidenceHarness:
             n_sim=300,
         )
         # 104/156-week histories estimate rho within a wide band of the truth
-        # (0.4); the 52-week history is materially biased low (fewer periods ->
-        # noisier AR(1) fit) — the history-sensitivity evidence.
+        # (0.4) and remain "supported" under the Stage-3 weekly history
+        # floor (104 retained periods).
         for name in ("weekly_104", "weekly_156"):
             cell = ev["summaries"][name]["cells"]["model_simulation|ols"]
             assert abs(cell["rho_hat_mean"] - 0.4) < 0.2
-        cell52 = ev["summaries"]["weekly_52"]["cells"]["model_simulation|ols"]
-        assert cell52["rho_hat_mean"] < 0.35
+        # 52 weekly periods is below the history floor -- the evidence that
+        # motivated the floor (+0.306 power bias below 104 periods for the
+        # current method) -- and is now BLOCKED outright rather than
+        # producing a (biased) completed rho estimate.
+        for r in ev["runs"]:
+            if r["scenario"] == "weekly_52":
+                assert r["completed"] is False
+                assert r["n_blockers"] >= 1
 
     def test_side_matrix_reported(self):
         ev = run_market_evidence(
@@ -545,8 +611,20 @@ def test_full_evidence_report_matches_committed():
     # seeds = 12. Total = 180.
     assert totals["total_runs"] == 168 + 12
     assert totals["n_errored"] == 2  # placebo x absolute-injection (low_volume), 2 seeds
-    assert totals["n_fallback"] >= 12  # duplicate_controls x (3+3) fits x 2 seeds
-    assert totals["n_incomplete"] == 2  # weekly_52 placebo, 2 seeds
+    # Stage 3: duplicate/constant controls are sanitised BEFORE the rank
+    # check, so duplicate_controls no longer falls back to a constant mean
+    # (was >= 12 before the fix; the methodology-safety fallback rate is now
+    # driven only by genuinely non-sanitisable rank deficiency, which none
+    # of the current scenarios trigger).
+    assert totals["n_fallback"] == 0
+    # Stage 3: the methodology safety policy now blocks weekly_52 (history
+    # floor), daily_weekday/seasonal_residuals (daily frequency/seasonality),
+    # heteroskedastic (material heteroskedasticity) and mde_not_reached
+    # (near-unit-root persistence) across every method/fit-method/seed cell
+    # that reaches a fit, in addition to the pre-existing weekly_52 placebo
+    # minimum-window incompleteness -- a large, deliberate increase from the
+    # pre-Stage-3 count of 2.
+    assert totals["n_incomplete"] >= 60
     sc104 = report["summaries"]["weekly_104"]
     model_ols = sc104["cells"]["model_simulation|ols"]
     assert abs(model_ols["null_calibration_mean"] - 0.05) < 0.04

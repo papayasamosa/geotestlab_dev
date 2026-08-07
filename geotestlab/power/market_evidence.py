@@ -801,18 +801,23 @@ def run_market_evidence(
     }
 
 
+_PANDAS_FREQ_TO_TYPED = {"W": "weekly", "D": "daily"}
+
+
 def _run_one(scenario, method, fit_method, side, seed, n_sim, effect_grid, alpha, target_power):
     bounds = tuple(scenario.truth["mde_bounds"])
     # placebo_empirical never uses a fit method; the service still requires a
     # valid FIT_METHOD_NAMES entry, so the default OLS is passed internally
     # while the recorded fit_method stays ``n/a``.
     config_fit = "ols" if method == "placebo_empirical" else fit_method
+    frequency = _PANDAS_FREQ_TO_TYPED.get(scenario.truth.get("freq"), "weekly")
     config = PowerConfig(
         method=method,
         detection_criterion="interval_excludes_zero",
         effect_injection=scenario.truth["injection"],
         effect_shape="step",
         side=side,
+        frequency=frequency,
         alpha=alpha,
         target_power=target_power,
         n_simulations=n_sim,
