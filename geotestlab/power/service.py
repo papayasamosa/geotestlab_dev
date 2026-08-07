@@ -115,6 +115,52 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
         )
     cal_null = np.asarray(cal_null, dtype=float)
 
+    # A method can refuse to produce a completed result outright (duplicate
+    # selected-region keys that would otherwise be resolved by row order, or
+    # zero jointly-complete test-window dates to project/simulate a horizon
+    # over). This is checked before anything else: an unusable aligned window
+    # must never reach the effect grid.
+    if meta.get("blocked"):
+        msg = str(meta.get("block_reason") or f"{config.method} could not produce a result")
+        errors.append(msg)
+        blockers.append(msg)
+        return _incomplete_result(
+            config,
+            warnings,
+            errors,
+            blockers,
+            minimum_history_status,
+            "not_applicable",
+            windows_available=int(meta.get("windows_available", 0)),
+            windows_used=int(meta.get("windows_used", 0)),
+        )
+
+    # A relative effect scales the FIXED counterfactual baseline
+    # (cf_test_sum); a non-positive baseline makes "effect/100 of the
+    # baseline" undefined. Block rather than silently censoring individual
+    # simulated draws by their own realised sign (which would make detected
+    # power depend on Monte-Carlo noise instead of the design).
+    if config.effect_injection == "relative":
+        cf_baseline = meta.get("cf_test_sum")
+        if cf_baseline is not None and (not np.isfinite(cf_baseline) or cf_baseline <= 0):
+            msg = (
+                "relative effect injection is undefined: the counterfactual test-window "
+                f"baseline total is non-positive (cf_test_sum={cf_baseline:.6g}); use "
+                "effect_injection='absolute' instead"
+            )
+            errors.append(msg)
+            blockers.append(msg)
+            return _incomplete_result(
+                config,
+                warnings,
+                errors,
+                blockers,
+                minimum_history_status,
+                "not_applicable",
+                windows_available=int(meta.get("windows_available", 0)),
+                windows_used=int(meta.get("windows_used", 0)),
+            )
+
     # Minimum-window enforcement for empirical/bootstrap methods: insufficient
     # placebo/residual evidence must produce an explicit incomplete result.
     minimum_window_status = "not_applicable"
@@ -227,6 +273,8 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
         mde_bounds=tuple(config.mde_bounds),
         windows_available=int(meta.get("windows_available", 0)),
         windows_used=int(meta.get("windows_used", 0)),
+        effective_test_periods=int(meta.get("effective_test_periods", n_test)),
+        requested_test_periods=int(meta.get("requested_test_periods", n_test)),
         failures=int(failures_total),
         warnings=tuple(warnings),
         completed=True,
@@ -328,6 +376,8 @@ def _incomplete_result(
         mde_bounds=tuple(config.mde_bounds),
         windows_available=int(windows_available),
         windows_used=int(windows_used),
+        effective_test_periods=0,
+        requested_test_periods=0,
         failures=0,
         warnings=tuple(warnings),
         completed=False,

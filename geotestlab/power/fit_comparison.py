@@ -169,7 +169,7 @@ def compare_fit_methods(
     }
     for m in fit_methods:
         fit = fit_counterfactual(pre_df, test_regions, fit_control_regions, fit_method=m)
-        cf_test = project_counterfactual(fit, test_df, test_regions, fit_control_regions)
+        cf_test, _, _ = project_counterfactual(fit, test_df, test_regions, fit_control_regions)
         cf_sum = float(np.sum(cf_test))
         cf_err = (cf_sum - truth_cf) / truth_cf * 100.0 if truth_cf else float("nan")
 
