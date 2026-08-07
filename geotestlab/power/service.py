@@ -30,12 +30,14 @@ from geotestlab.power.mde import find_mde, validate_mde_config
 from geotestlab.power.methods import FIT_METHOD_NAMES, METHODS
 from geotestlab.power.models import (
     EFFECT_INJECTIONS,
+    FREQUENCIES,
     METHODOLOGY_VERSION,
     SIDES,
     PowerConfig,
     PowerResult,
     validate_effect_shape,
 )
+from geotestlab.power.safety import DEFAULT_SAFETY_POLICY
 from geotestlab.power.uncertainty import power_with_ci
 
 
@@ -52,6 +54,8 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
         raise ValueError(f"Unknown effect injection {config.effect_injection!r}")
     if config.side not in SIDES:
         raise ValueError(f"Unknown side {config.side!r}")
+    if config.frequency not in FREQUENCIES:
+        raise ValueError(f"Unknown frequency {config.frequency!r}; expected one of {FREQUENCIES}")
     validate_effect_shape(config.effect_shape)
     if not config.test_regions:
         raise ValueError("PowerConfig.test_regions must name the test region(s)")
@@ -102,6 +106,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             config.n_simulations,
             config.random_seed,
             fit_method=config.fit_method,
+            frequency=config.frequency,
         )
     else:
         cal_null, alt_fn, meta = method_fn(
@@ -112,6 +117,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             n_test,
             config.n_simulations,
             config.random_seed,
+            frequency=config.frequency,
         )
     cal_null = np.asarray(cal_null, dtype=float)
 
@@ -124,6 +130,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
         msg = str(meta.get("block_reason") or f"{config.method} could not produce a result")
         errors.append(msg)
         blockers.append(msg)
+        matrix_diag = meta.get("matrix_diagnostics") or {}
         return _incomplete_result(
             config,
             warnings,
@@ -133,6 +140,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             "not_applicable",
             windows_available=int(meta.get("windows_available", 0)),
             windows_used=int(meta.get("windows_used", 0)),
+            safety=matrix_diag.get("safety"),
         )
 
     # A relative effect scales the FIXED counterfactual baseline
@@ -159,6 +167,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
                 "not_applicable",
                 windows_available=int(meta.get("windows_available", 0)),
                 windows_used=int(meta.get("windows_used", 0)),
+                safety=meta.get("safety"),
             )
 
     # Minimum-window enforcement for empirical/bootstrap methods: insufficient
@@ -183,6 +192,7 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
                 minimum_window_status,
                 windows_available=windows,
                 windows_used=int(meta.get("windows_used", 0)),
+                safety=meta.get("safety"),
             )
         minimum_window_status = "ok"
 
@@ -251,12 +261,26 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
             f"target power {config.target_power:.0%}"
         )
 
+    safety = meta.get("safety") or {}
+    for category in (
+        "frequency",
+        "history",
+        "persistence",
+        "seasonality",
+        "heteroskedasticity",
+        "control_matrix",
+    ):
+        if safety.get(f"{category}_status") == "supported_with_warning":
+            for reason in safety.get(f"{category}_reasons", []):
+                warnings.append(f"methodology safety ({category}): {reason}")
+
     return PowerResult(
         method=config.method,
         detection_criterion=config.detection_criterion,
         effect_injection=config.effect_injection,
         effect_shape=config.effect_shape,
         side=config.side,
+        frequency=config.frequency,
         alpha=config.alpha,
         target_power=config.target_power,
         n_simulations=config.n_simulations,
@@ -286,6 +310,9 @@ def run_power_analysis(case_df, pre_count, config: PowerConfig) -> PowerResult:
         minimum_history_status=minimum_history_status,
         minimum_window_status=minimum_window_status,
         methodology_version=METHODOLOGY_VERSION,
+        support_status=str(safety.get("overall_status", "not_applicable")),
+        safety_diagnostics=safety,
+        safety_policy_version=str(safety.get("policy_version", DEFAULT_SAFETY_POLICY.version)),
         errors=tuple(errors),
         blockers=tuple(blockers),
     )
@@ -353,13 +380,16 @@ def _incomplete_result(
     minimum_window_status,
     windows_available=0,
     windows_used=0,
+    safety=None,
 ):
+    safety = safety or {}
     return PowerResult(
         method=config.method,
         detection_criterion=config.detection_criterion,
         effect_injection=config.effect_injection,
         effect_shape=config.effect_shape,
         side=config.side,
+        frequency=config.frequency,
         alpha=config.alpha,
         target_power=config.target_power,
         n_simulations=config.n_simulations,
@@ -389,6 +419,11 @@ def _incomplete_result(
         minimum_history_status=minimum_history_status,
         minimum_window_status=minimum_window_status,
         methodology_version=METHODOLOGY_VERSION,
+        support_status=str(safety.get("overall_status", "not_applicable")),
+        safety_diagnostics=safety,
+        safety_policy_version=str(safety.get("policy_version", DEFAULT_SAFETY_POLICY.version))
+        if safety
+        else "",
         errors=tuple(errors),
         blockers=tuple(blockers),
     )
