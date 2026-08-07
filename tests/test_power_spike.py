@@ -36,6 +36,7 @@ from geotestlab.power import (
     build_placebo_windows,
     child_rngs,
     clopper_pearson,
+    compare_bayesian_evidence,
     compare_fit_methods,
     critical_values,
     find_mde,
@@ -1650,6 +1651,163 @@ class TestFitComparisonBranches:
     def test_unknown_scenario_rejected(self):
         with pytest.raises(ValueError, match="unknown fit scenario"):
             build_fit_scenario("bogus")
+
+    def test_all_registered_scenarios_buildable_and_comparable(self):
+        for name in CONTROLLED_FIT_SCENARIOS:
+            case, test_regions, fit_controls = build_fit_scenario(name, seed=0)
+            out = compare_fit_methods(case, test_regions, fit_controls, scenario=name, n_sim=100)
+            assert len(out["results"]) == 3
+            for r in out["results"]:
+                assert np.isfinite(r["cf_sum_error_pct"])
+
+    def test_misspecification_scenarios_registered(self):
+        expected = {
+            "irrelevant_controls",
+            "nonlinear_relation",
+            "time_varying_coefficients",
+            "trend_seasonal_misspecification",
+            "measurement_noise",
+            "structural_breaks",
+            "signal_to_noise_shifts",
+        }
+        assert expected <= set(CONTROLLED_FIT_SCENARIOS)
+
+    def test_misspecification_error_exceeds_baseline(self):
+        # A misspecified counterfactual (here: an independent trend/seasonal
+        # component no control spans) must produce a materially larger
+        # counterfactual error than the correctly specified baseline for
+        # every fit method -- confirming the scenario actually stresses the
+        # linear fit rather than being a no-op.
+        base_case, base_regions, base_controls = build_fit_scenario("baseline", seed=0)
+        base_out = compare_fit_methods(
+            base_case, base_regions, base_controls, scenario="baseline", n_sim=200
+        )
+        mis_case, mis_regions, mis_controls = build_fit_scenario(
+            "trend_seasonal_misspecification", seed=0
+        )
+        mis_out = compare_fit_methods(
+            mis_case,
+            mis_regions,
+            mis_controls,
+            scenario="trend_seasonal_misspecification",
+            n_sim=200,
+        )
+        for base_r, mis_r in zip(base_out["results"], mis_out["results"], strict=True):
+            assert abs(mis_r["cf_sum_error_pct"]) > abs(base_r["cf_sum_error_pct"])
+
+    def test_irrelevant_controls_included_alongside_real_ones(self):
+        case, test_regions, fit_controls = build_fit_scenario("irrelevant_controls", seed=0)
+        assert set(fit_controls) == {"C1", "C2", "J1", "J2", "J3"}
+
+
+# ---------------------------------------------------------------------------
+# Fit-policy alignment with validation (Stage 4): elastic_net/lasso now use
+# geotestlab.validation.regularisation.build_regularized_model (TimeSeriesSplit
+# CV when history allows, exploratory fixed-alpha fallback otherwise) on
+# StandardScaler-scaled controls, instead of a silently fixed alpha=0.1.
+# ---------------------------------------------------------------------------
+class TestFitPolicyAlignment:
+    def _pre_df(self, df, n_pre=N_PRE):
+        return df[df["date"] < df["date"].unique()[n_pre]]
+
+    def test_elastic_net_uses_cross_validation_with_enough_history(self):
+        case = _case()
+        fit = fit_counterfactual(
+            self._pre_df(case.df), ("T",), ("C1", "C2"), fit_method="elastic_net"
+        )
+        assert fit.fit_status == "ok"
+        assert fit.diagnostics["used_cv"] is True
+        assert fit.diagnostics["cv_folds"] is not None and fit.diagnostics["cv_folds"] >= 2
+        assert fit.diagnostics["selected_alpha"] is not None
+        assert fit.diagnostics["selected_l1_ratio"] is not None
+        assert "matches the production evaluation" in fit.diagnostics["evaluation_alignment"]
+
+    def test_lasso_uses_cross_validation_with_enough_history(self):
+        case = _case()
+        fit = fit_counterfactual(self._pre_df(case.df), ("T",), ("C1", "C2"), fit_method="lasso")
+        assert fit.fit_status == "ok"
+        assert fit.diagnostics["used_cv"] is True
+        assert fit.diagnostics["selected_l1_ratio"] == pytest.approx(1.0)
+
+    def test_elastic_net_short_history_uses_exploratory_fallback(self):
+        # Below geotestlab.validation.regularisation.safe_tscv's minimum (6
+        # periods), the SAME exploratory fixed-alpha fallback the app itself
+        # uses and labels as not cross-validated.
+        case = generate_synthetic_case(
+            n_pre=5,
+            n_test=N_TEST,
+            rho=RHO,
+            sigma=SIGMA,
+            control_betas={"C1": 1.0, "C2": 2.0},
+            test_coeffs={"C1": 1.5, "C2": 0.5},
+            b0=100.0,
+            seed=0,
+            base_controls={"C1": 10.0, "C2": 10.0},
+            sd_control_noise=1.0,
+        )
+        fit = fit_counterfactual(
+            case.df[case.df["date"] < case.df["date"].unique()[5]],
+            ("T",),
+            ("C1", "C2"),
+            fit_method="elastic_net",
+        )
+        assert fit.diagnostics["used_cv"] is False
+        assert "exploratory" in fit.diagnostics["evaluation_alignment"]
+        assert "not cross-validated" in fit.diagnostics["evaluation_alignment"].lower()
+
+    def test_ols_labelled_as_not_the_production_evaluation_path(self):
+        case = _case()
+        fit = fit_counterfactual(self._pre_df(case.df), ("T",), ("C1", "C2"), fit_method="ols")
+        assert fit.diagnostics["used_cv"] is False
+        assert "NOT the production evaluation" in fit.diagnostics["evaluation_alignment"]
+        assert fit.diagnostics["selected_alpha"] is None
+
+    def test_scaler_recorded_and_used_at_projection(self):
+        case = _case()
+        pre_df = self._pre_df(case.df)
+        test_df = case.df[case.df["date"] >= case.df["date"].unique()[N_PRE]]
+        fit = fit_counterfactual(pre_df, ("T",), ("C1", "C2"), fit_method="elastic_net")
+        assert fit.scaler is not None
+        projected, retained_dates, _ = project_counterfactual(fit, test_df, ("T",), ("C1", "C2"))
+        assert len(projected) == len(retained_dates) == N_TEST
+        assert np.all(np.isfinite(projected))
+
+    def test_ols_and_fallback_have_no_scaler(self):
+        case = _case()
+        fit_ols = fit_counterfactual(self._pre_df(case.df), ("T",), ("C1", "C2"), fit_method="ols")
+        assert fit_ols.scaler is None
+
+
+# ---------------------------------------------------------------------------
+# Bounded Bayesian comparison (Stage 4, item 7): evidence only, never
+# auto-selected. Real PyMC sampling (tiny profile) -> slow-marked, like the
+# existing Bayesian reduced-sampling smoke test.
+# ---------------------------------------------------------------------------
+class TestBoundedBayesianEvidence:
+    @pytest.mark.slow
+    def test_bayesian_comparison_completes_and_is_labelled_evidence_only(self):
+        case, test_regions, controls = build_fit_scenario("baseline", seed=0)
+        out = compare_bayesian_evidence(case, test_regions, controls, seed=42)
+        assert out["fit_method"] == "bayesian"
+        assert out["completed"] is True
+        assert np.isfinite(out["cf_sum_error_pct"])
+        assert out["n_divergences"] == 0
+        assert "evidence-only" in out["note"]
+        assert "not auto-selected" in out["note"].lower()
+
+    @pytest.mark.slow
+    def test_bayesian_sampling_profile_is_bounded(self):
+        from geotestlab.power.fit_comparison import (
+            BAYESIAN_EVIDENCE_CHAINS,
+            BAYESIAN_EVIDENCE_DRAWS,
+            BAYESIAN_EVIDENCE_TUNE,
+        )
+
+        # Deliberately tiny -- never the production MCMC profile
+        # (BayesianConfig defaults to draws=2000/tune=1000/chains=4).
+        assert BAYESIAN_EVIDENCE_DRAWS <= 50
+        assert BAYESIAN_EVIDENCE_TUNE <= 50
+        assert BAYESIAN_EVIDENCE_CHAINS == 1
 
 
 # ---------------------------------------------------------------------------

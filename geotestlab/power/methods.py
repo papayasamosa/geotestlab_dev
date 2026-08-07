@@ -97,12 +97,19 @@ class CounterfactualFit:
     # requested control_regions, or the projection's column meanings would
     # no longer match the fitted coefficients/model.
     retained_control_regions: tuple = ()
+    # StandardScaler fit on the training controls when fit_method is
+    # elastic_net/lasso (matches geotestlab.validation's scaling policy);
+    # None for OLS/constant-mean, which are never scaled.
+    scaler: object | None = None
 
     def project(self, X_const, X_no_const):
         if self.fit_method == FALLBACK_FIT_METHOD:
             return np.full(X_const.shape[0], self.cf_mean)
         if self.model is not None:
-            return np.asarray(self.model.predict(X_no_const), dtype=float)
+            X_for_model = (
+                self.scaler.transform(X_no_const) if self.scaler is not None else X_no_const
+            )
+            return np.asarray(self.model.predict(X_for_model), dtype=float)
         return X_const @ self.coef
 
 
@@ -277,6 +284,17 @@ def fit_counterfactual(
         diagnostics["fallback_used"] = True
         diagnostics["fallback_reason"] = fallback_reason
         diagnostics["fit_method"] = FALLBACK_FIT_METHOD
+        diagnostics["cv_status"] = "not applicable: constant-mean fallback"
+        diagnostics["used_cv"] = False
+        diagnostics["selected_alpha"] = None
+        diagnostics["selected_l1_ratio"] = None
+        diagnostics["cv_folds"] = None
+        diagnostics["training_periods"] = n_obs
+        diagnostics["evaluation_alignment"] = (
+            "constant-mean fallback -- approximates no regression-based evaluation "
+            "method; credible control information was not available for this design "
+            "(see fallback_reason)."
+        )
         warnings.append(
             f"counterfactual fit fell back to constant mean: {fallback_reason} "
             f"(rank {rank}/{n_predictors}, condition {cond:.2e}, observations {n_obs})"
@@ -294,26 +312,71 @@ def fit_counterfactual(
             retained_control_regions=(),
         )
 
+    scaler = None
     if fit_method == "ols":
         coef, *_ = np.linalg.lstsq(X_const, y, rcond=None)
         cf_fit = X_const @ coef
         model = None
+        diagnostics["cv_status"] = "not applicable: OLS is an unregularised baseline fit"
+        diagnostics["used_cv"] = False
+        diagnostics["selected_alpha"] = None
+        diagnostics["selected_l1_ratio"] = None
+        diagnostics["cv_folds"] = None
+        diagnostics["training_periods"] = n_obs
+        diagnostics["evaluation_alignment"] = (
+            "baseline OLS -- NOT the production evaluation fitting policy. The app's "
+            "Validate Test Design / Measure Test Impact evaluation "
+            "(geotestlab.validation.service) always fits a TimeSeriesSplit-CV-selected "
+            "or exploratory-fallback Elastic Net/LASSO on standardised controls, never "
+            "unregularised OLS."
+        )
     elif fit_method in ("elastic_net", "lasso"):
-        from sklearn.linear_model import ElasticNet, Lasso  # lazy import
+        from sklearn.preprocessing import StandardScaler  # lazy import
+
+        from geotestlab.validation.regularisation import build_regularized_model
 
         if X_no_const.shape[1] == 0:
             model = None
             coef = np.array([float(np.mean(y))])
             cf_fit = np.full(n_obs, float(np.mean(y)))
+            diagnostics["cv_status"] = "not applicable: no informative controls to regularise"
+            diagnostics["used_cv"] = False
+            diagnostics["selected_alpha"] = None
+            diagnostics["selected_l1_ratio"] = None
+            diagnostics["cv_folds"] = None
         else:
-            if fit_method == "elastic_net":
-                model = ElasticNet(alpha=0.1, l1_ratio=0.5, max_iter=10000, random_state=0).fit(
-                    X_no_const, y
-                )
-            else:
-                model = Lasso(alpha=0.1, max_iter=10000, random_state=0).fit(X_no_const, y)
-            cf_fit = np.asarray(model.predict(X_no_const), dtype=float)
+            # Matches geotestlab.validation's fitting policy exactly: the same
+            # build_regularized_model() (TimeSeriesSplit-CV ElasticNetCV when
+            # there is enough pre-period history, else an exploratory
+            # fixed-alpha ElasticNet explicitly labelled as such) on
+            # StandardScaler-scaled controls, never a silently fixed alpha.
+            method_key = "enet" if fit_method == "elastic_net" else "lasso"
+            model, cv_status, used_cv = build_regularized_model(method_key, n_obs)
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_no_const)
+            model.fit(X_scaled, y)
+            cf_fit = np.asarray(model.predict(X_scaled), dtype=float)
             coef = np.concatenate([[float(model.intercept_)], np.asarray(model.coef_, dtype=float)])
+            diagnostics["cv_status"] = cv_status
+            diagnostics["used_cv"] = bool(used_cv)
+            diagnostics["selected_alpha"] = float(model.alpha_) if used_cv else float(model.alpha)
+            diagnostics["selected_l1_ratio"] = (
+                float(model.l1_ratio_) if used_cv else float(model.l1_ratio)
+            )
+            diagnostics["cv_folds"] = int(model.cv.n_splits) if used_cv else None
+        diagnostics["training_periods"] = n_obs
+        diagnostics["evaluation_alignment"] = (
+            "matches the production evaluation fitting policy "
+            "(geotestlab.validation.regularisation.build_regularized_model): "
+            "TimeSeriesSplit-CV-selected regularisation when history is sufficient, "
+            "otherwise the SAME exploratory fixed-alpha fallback the app itself labels "
+            "as not cross-validated."
+            if diagnostics["used_cv"]
+            else "exploratory fixed-alpha fallback (insufficient history for "
+            "TimeSeriesSplit CV) -- NOT cross-validated, matching "
+            "geotestlab.validation's own exploratory-fallback labelling; excluded from "
+            "any comparison that assumes a cross-validated fit."
+        )
     else:
         raise ValueError(f"Unknown fit method {fit_method!r}; expected one of {FIT_METHOD_NAMES}")
 
@@ -328,6 +391,7 @@ def fit_counterfactual(
         retained_dates=retained_dates,
         model=model,
         retained_control_regions=tuple(cols_sanitized),
+        scaler=scaler,
     )
 
 
