@@ -16,6 +16,7 @@ from geotestlab.power.detection import (
 from geotestlab.power.fit_comparison import (
     CONTROLLED_FIT_SCENARIOS,
     build_fit_scenario,
+    compare_bayesian_evidence,
     compare_fit_methods,
 )
 from geotestlab.power.market_evidence import (
@@ -98,6 +99,7 @@ __all__ = [
     "child_rngs",
     "clopper_pearson",
     "combine_evidence",
+    "compare_bayesian_evidence",
     "compare_fit_methods",
     "critical_values",
     "find_mde",

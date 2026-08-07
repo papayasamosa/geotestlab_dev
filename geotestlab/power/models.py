@@ -37,7 +37,7 @@ FREQUENCIES = ("daily", "weekly")
 
 # Methodology version for the corrected spike contract (bumped when the result
 # contract or methodology rule set changes).
-METHODOLOGY_VERSION = "0.4.0"
+METHODOLOGY_VERSION = "0.5.0"
 
 
 def validate_effect_shape(shape: str) -> None:

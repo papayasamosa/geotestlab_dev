@@ -246,8 +246,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.056551582392035955,
-        "sigma_estimate": 2.5608326724608146
+        "rho_estimate": 0.07718573145425567,
+        "sigma_estimate": 2.5557887018353265
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -291,8 +291,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.056551582392035955,
-        "sigma_estimate": 2.5608326724608146
+        "rho_estimate": 0.07718573145425567,
+        "sigma_estimate": 2.5557887018353265
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -336,8 +336,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.0588302204329065,
-        "sigma_estimate": 2.558946951919654
+        "rho_estimate": 0.06864463759128146,
+        "sigma_estimate": 2.555831234349037
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -381,8 +381,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.0588302204329065,
-        "sigma_estimate": 2.558946951919654
+        "rho_estimate": 0.06864463759128146,
+        "sigma_estimate": 2.555831234349037
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -516,8 +516,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.056551582392035955,
-        "sigma_estimate": 2.5608326724608146
+        "rho_estimate": 0.07718573145425567,
+        "sigma_estimate": 2.5557887018353265
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -561,8 +561,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.056551582392035955,
-        "sigma_estimate": 2.5608326724608146
+        "rho_estimate": 0.07718573145425567,
+        "sigma_estimate": 2.5557887018353265
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -606,8 +606,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.0588302204329065,
-        "sigma_estimate": 2.558946951919654
+        "rho_estimate": 0.06864463759128146,
+        "sigma_estimate": 2.555831234349037
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -651,8 +651,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 52,
         "n_predictors": 5,
-        "rho_estimate": 0.0588302204329065,
-        "sigma_estimate": 2.558946951919654
+        "rho_estimate": 0.06864463759128146,
+        "sigma_estimate": 2.555831234349037
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -864,11 +864,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4043485137470901,
-        "sigma_estimate": 2.653167652084024
+        "rho_estimate": 0.4089663613449711,
+        "sigma_estimate": 2.6446829626669053
       },
-      "null_sd": 14.202737286532743,
-      "power_at_reference": 0.6208,
+      "null_sd": 14.254262139662995,
+      "power_at_reference": 0.6172,
       "power_at_zero": 0.05,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
@@ -905,11 +905,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4043485137470901,
-        "sigma_estimate": 2.653167652084024
+        "rho_estimate": 0.4089663613449711,
+        "sigma_estimate": 2.6446829626669053
       },
-      "null_sd": 14.87329246426511,
-      "power_at_reference": 0.6970000000000001,
+      "null_sd": 14.926005407898346,
+      "power_at_reference": 0.6964,
       "power_at_zero": 0.056,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
@@ -946,11 +946,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4056792885776009,
-        "sigma_estimate": 2.6500156347834887
+        "rho_estimate": 0.4089659329465383,
+        "sigma_estimate": 2.6446833495149447
       },
-      "null_sd": 14.213725592366806,
-      "power_at_reference": 0.619,
+      "null_sd": 14.25425517110617,
+      "power_at_reference": 0.6172,
       "power_at_zero": 0.05,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
@@ -987,11 +987,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4056792885776009,
-        "sigma_estimate": 2.6500156347834887
+        "rho_estimate": 0.4089659329465383,
+        "sigma_estimate": 2.6446833495149447
       },
-      "null_sd": 14.884443775919639,
-      "power_at_reference": 0.6968000000000001,
+      "null_sd": 14.925998227243246,
+      "power_at_reference": 0.6964,
       "power_at_zero": 0.056,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
@@ -1110,12 +1110,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4043485137470901,
-        "sigma_estimate": 2.653167652084024
+        "rho_estimate": 0.4089663613449711,
+        "sigma_estimate": 2.6446829626669053
       },
-      "null_sd": 9.966601474405806,
+      "null_sd": 9.98880304719212,
       "power_at_reference": 0.9352,
-      "power_at_zero": 0.076,
+      "power_at_zero": 0.084,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
       "scenario": "weekly_104",
@@ -1151,12 +1151,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4043485137470901,
-        "sigma_estimate": 2.653167652084024
+        "rho_estimate": 0.4089663613449711,
+        "sigma_estimate": 2.6446829626669053
       },
-      "null_sd": 10.363969432951098,
+      "null_sd": 10.370109289053996,
       "power_at_reference": 0.9478,
-      "power_at_zero": 0.054,
+      "power_at_zero": 0.06,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
       "scenario": "weekly_104",
@@ -1192,12 +1192,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4056792885776009,
-        "sigma_estimate": 2.6500156347834887
+        "rho_estimate": 0.4089659329465383,
+        "sigma_estimate": 2.6446833495149447
       },
-      "null_sd": 9.968627149004623,
+      "null_sd": 9.988803207915801,
       "power_at_reference": 0.9352,
-      "power_at_zero": 0.082,
+      "power_at_zero": 0.084,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
       "scenario": "weekly_104",
@@ -1233,12 +1233,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4056792885776009,
-        "sigma_estimate": 2.6500156347834887
+        "rho_estimate": 0.4089659329465383,
+        "sigma_estimate": 2.6446833495149447
       },
-      "null_sd": 10.369787766204427,
+      "null_sd": 10.370111886824883,
       "power_at_reference": 0.9478,
-      "power_at_zero": 0.054,
+      "power_at_zero": 0.06,
       "reference_power": 0.6440825232698124,
       "requested_test_periods": 12,
       "scenario": "weekly_104",
@@ -1438,11 +1438,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.34454051293459836,
-        "sigma_estimate": 2.7375816241947395
+        "rho_estimate": 0.3505768582302916,
+        "sigma_estimate": 2.733568459693947
       },
-      "null_sd": 13.465981456267777,
-      "power_at_reference": 0.6844,
+      "null_sd": 13.557398468090792,
+      "power_at_reference": 0.6766000000000001,
       "power_at_zero": 0.054,
       "reference_power": 0.6677983292068421,
       "requested_test_periods": 12,
@@ -1479,11 +1479,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.34454051293459836,
-        "sigma_estimate": 2.7375816241947395
+        "rho_estimate": 0.3505768582302916,
+        "sigma_estimate": 2.733568459693947
       },
-      "null_sd": 14.115536292225043,
-      "power_at_reference": 0.7352,
+      "null_sd": 14.210076829623953,
+      "power_at_reference": 0.7312,
       "power_at_zero": 0.054,
       "reference_power": 0.6677983292068421,
       "requested_test_periods": 12,
@@ -1520,11 +1520,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.3453594078666903,
-        "sigma_estimate": 2.735718993188518
+        "rho_estimate": 0.34716870477129325,
+        "sigma_estimate": 2.7345863866499274
       },
-      "null_sd": 13.471805785011671,
-      "power_at_reference": 0.6826000000000001,
+      "null_sd": 13.499442745019334,
+      "power_at_reference": 0.6824,
       "power_at_zero": 0.054,
       "reference_power": 0.6677983292068421,
       "requested_test_periods": 12,
@@ -1561,11 +1561,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.3453594078666903,
-        "sigma_estimate": 2.735718993188518
+        "rho_estimate": 0.34716870477129325,
+        "sigma_estimate": 2.7345863866499274
       },
-      "null_sd": 14.121469591399542,
-      "power_at_reference": 0.7352,
+      "null_sd": 14.150057009875539,
+      "power_at_reference": 0.7333999999999999,
       "power_at_zero": 0.054,
       "reference_power": 0.6677983292068421,
       "requested_test_periods": 12,
@@ -1684,12 +1684,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.34454051293459836,
-        "sigma_estimate": 2.7375816241947395
+        "rho_estimate": 0.3505768582302916,
+        "sigma_estimate": 2.733568459693947
       },
-      "null_sd": 9.755858504525582,
+      "null_sd": 9.72602687185722,
       "power_at_reference": 0.8992,
-      "power_at_zero": 0.028,
+      "power_at_zero": 0.026,
       "reference_power": 0.6677983292068421,
       "requested_test_periods": 12,
       "scenario": "weekly_156",
@@ -1725,12 +1725,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.34454051293459836,
-        "sigma_estimate": 2.7375816241947395
+        "rho_estimate": 0.3505768582302916,
+        "sigma_estimate": 2.733568459693947
       },
-      "null_sd": 9.588033890433879,
-      "power_at_reference": 0.9116000000000001,
-      "power_at_zero": 0.032,
+      "null_sd": 9.57969844736853,
+      "power_at_reference": 0.9098,
+      "power_at_zero": 0.034,
       "reference_power": 0.6677983292068421,
       "requested_test_periods": 12,
       "scenario": "weekly_156",
@@ -1766,11 +1766,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.3453594078666903,
-        "sigma_estimate": 2.735718993188518
+        "rho_estimate": 0.34716870477129325,
+        "sigma_estimate": 2.7345863866499274
       },
-      "null_sd": 9.741387222710179,
-      "power_at_reference": 0.9064,
+      "null_sd": 9.728109018404254,
+      "power_at_reference": 0.9028,
       "power_at_zero": 0.03,
       "reference_power": 0.6677983292068421,
       "requested_test_periods": 12,
@@ -1807,10 +1807,10 @@
         "matrix_rank": 5,
         "n_fit_observations": 156,
         "n_predictors": 5,
-        "rho_estimate": 0.3453594078666903,
-        "sigma_estimate": 2.735718993188518
+        "rho_estimate": 0.34716870477129325,
+        "sigma_estimate": 2.7345863866499274
       },
-      "null_sd": 9.5795700500357,
+      "null_sd": 9.573935303406492,
       "power_at_reference": 0.9098,
       "power_at_zero": 0.032,
       "reference_power": 0.6677983292068421,
@@ -2024,8 +2024,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.34102023528325387,
-        "sigma_estimate": 4.625142812377431
+        "rho_estimate": 0.3382958875494622,
+        "sigma_estimate": 4.628808085145082
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2069,8 +2069,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.34102023528325387,
-        "sigma_estimate": 4.625142812377431
+        "rho_estimate": 0.3382958875494622,
+        "sigma_estimate": 4.628808085145082
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2114,8 +2114,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.33958634059239406,
-        "sigma_estimate": 4.626549300118717
+        "rho_estimate": 0.3382955099671615,
+        "sigma_estimate": 4.628808915060805
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2159,8 +2159,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.33958634059239406,
-        "sigma_estimate": 4.626549300118717
+        "rho_estimate": 0.3382955099671615,
+        "sigma_estimate": 4.628808915060805
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2294,8 +2294,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.34102023528325387,
-        "sigma_estimate": 4.625142812377431
+        "rho_estimate": 0.3382958875494622,
+        "sigma_estimate": 4.628808085145082
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2339,8 +2339,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.34102023528325387,
-        "sigma_estimate": 4.625142812377431
+        "rho_estimate": 0.3382958875494622,
+        "sigma_estimate": 4.628808085145082
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2384,8 +2384,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.33958634059239406,
-        "sigma_estimate": 4.626549300118717
+        "rho_estimate": 0.3382955099671615,
+        "sigma_estimate": 4.628808915060805
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2429,8 +2429,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 358,
         "n_predictors": 5,
-        "rho_estimate": 0.33958634059239406,
-        "sigma_estimate": 4.626549300118717
+        "rho_estimate": 0.3382955099671615,
+        "sigma_estimate": 4.628808915060805
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -2642,11 +2642,11 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.19254288552702617,
-        "sigma_estimate": 0.7218955566431651
+        "rho_estimate": 0.20623331770504258,
+        "sigma_estimate": 0.7139665857224258
       },
-      "null_sd": 2.9418831038132116,
-      "power_at_reference": 0.576,
+      "null_sd": 2.955296874187315,
+      "power_at_reference": 0.568,
       "power_at_zero": 0.058,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
@@ -2683,11 +2683,11 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.19254288552702617,
-        "sigma_estimate": 0.7218955566431651
+        "rho_estimate": 0.20623331770504258,
+        "sigma_estimate": 0.7139665857224258
       },
-      "null_sd": 3.0893422822904077,
-      "power_at_reference": 0.624,
+      "null_sd": 3.1030281950727416,
+      "power_at_reference": 0.622,
       "power_at_zero": 0.048,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
@@ -2724,11 +2724,11 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.1944881405303032,
-        "sigma_estimate": 0.7196273060688366
+        "rho_estimate": 0.20623136092371114,
+        "sigma_estimate": 0.7139669053986655
       },
-      "null_sd": 2.93910134229678,
-      "power_at_reference": 0.576,
+      "null_sd": 2.9552915594767657,
+      "power_at_reference": 0.568,
       "power_at_zero": 0.058,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
@@ -2765,11 +2765,11 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.1944881405303032,
-        "sigma_estimate": 0.7196273060688366
+        "rho_estimate": 0.20623136092371114,
+        "sigma_estimate": 0.7139669053986655
       },
-      "null_sd": 3.0863656285426844,
-      "power_at_reference": 0.625,
+      "null_sd": 3.1030226731875743,
+      "power_at_reference": 0.622,
       "power_at_zero": 0.048,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
@@ -2888,12 +2888,12 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.19254288552702617,
-        "sigma_estimate": 0.7218955566431651
+        "rho_estimate": 0.20623331770504258,
+        "sigma_estimate": 0.7139665857224258
       },
-      "null_sd": 2.423177774763594,
-      "power_at_reference": 0.788,
-      "power_at_zero": 0.084,
+      "null_sd": 2.406400943337983,
+      "power_at_reference": 0.802,
+      "power_at_zero": 0.078,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
       "scenario": "low_volume",
@@ -2929,11 +2929,11 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.19254288552702617,
-        "sigma_estimate": 0.7218955566431651
+        "rho_estimate": 0.20623331770504258,
+        "sigma_estimate": 0.7139665857224258
       },
-      "null_sd": 2.6837455840702504,
-      "power_at_reference": 0.755,
+      "null_sd": 2.6693788220590973,
+      "power_at_reference": 0.769,
       "power_at_zero": 0.076,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
@@ -2970,12 +2970,12 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.1944881405303032,
-        "sigma_estimate": 0.7196273060688366
+        "rho_estimate": 0.20623136092371114,
+        "sigma_estimate": 0.7139669053986655
       },
-      "null_sd": 2.4170343761747306,
-      "power_at_reference": 0.791,
-      "power_at_zero": 0.076,
+      "null_sd": 2.4064036872303904,
+      "power_at_reference": 0.802,
+      "power_at_zero": 0.078,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
       "scenario": "low_volume",
@@ -3011,11 +3011,11 @@
         "matrix_rank": 3,
         "n_fit_observations": 104,
         "n_predictors": 3,
-        "rho_estimate": 0.1944881405303032,
-        "sigma_estimate": 0.7196273060688366
+        "rho_estimate": 0.20623136092371114,
+        "sigma_estimate": 0.7139669053986655
       },
-      "null_sd": 2.6783169210181543,
-      "power_at_reference": 0.749,
+      "null_sd": 2.6693830434609094,
+      "power_at_reference": 0.769,
       "power_at_zero": 0.076,
       "reference_power": 0.54439678465053,
       "requested_test_periods": 12,
@@ -3216,12 +3216,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8599325261225871,
-        "sigma_estimate": 2.8526194154083395
+        "rho_estimate": 0.8649938885148037,
+        "sigma_estimate": 2.8142589430306675
       },
-      "null_sd": 41.7479302980323,
+      "null_sd": 41.87943608322781,
       "power_at_reference": 0.554,
-      "power_at_zero": 0.058,
+      "power_at_zero": 0.062,
       "reference_power": 0.33620920471618687,
       "requested_test_periods": 12,
       "scenario": "high_autocorrelation",
@@ -3257,11 +3257,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8599325261225871,
-        "sigma_estimate": 2.8526194154083395
+        "rho_estimate": 0.8649938885148037,
+        "sigma_estimate": 2.8142589430306675
       },
-      "null_sd": 42.93301989971178,
-      "power_at_reference": 0.638,
+      "null_sd": 43.05230278833821,
+      "power_at_reference": 0.632,
       "power_at_zero": 0.056,
       "reference_power": 0.33620920471618687,
       "requested_test_periods": 12,
@@ -3298,11 +3298,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8567364015116087,
-        "sigma_estimate": 2.8817202428713795
+        "rho_estimate": 0.8588109998305785,
+        "sigma_estimate": 2.867867958155755
       },
-      "null_sd": 41.735313979003294,
-      "power_at_reference": 0.552,
+      "null_sd": 41.817132973152134,
+      "power_at_reference": 0.55,
       "power_at_zero": 0.058,
       "reference_power": 0.33620920471618687,
       "requested_test_periods": 12,
@@ -3339,11 +3339,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8567364015116087,
-        "sigma_estimate": 2.8817202428713795
+        "rho_estimate": 0.8588109998305785,
+        "sigma_estimate": 2.867867958155755
       },
-      "null_sd": 42.92998266414514,
-      "power_at_reference": 0.638,
+      "null_sd": 43.00769002514328,
+      "power_at_reference": 0.632,
       "power_at_zero": 0.056,
       "reference_power": 0.33620920471618687,
       "requested_test_periods": 12,
@@ -3462,12 +3462,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8599325261225871,
-        "sigma_estimate": 2.8526194154083395
+        "rho_estimate": 0.8649938885148037,
+        "sigma_estimate": 2.8142589430306675
       },
-      "null_sd": 19.42887352209212,
-      "power_at_reference": 0.986,
-      "power_at_zero": 0.05,
+      "null_sd": 19.5609274459234,
+      "power_at_reference": 0.984,
+      "power_at_zero": 0.044,
       "reference_power": 0.33620920471618687,
       "requested_test_periods": 12,
       "scenario": "high_autocorrelation",
@@ -3503,10 +3503,10 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8599325261225871,
-        "sigma_estimate": 2.8526194154083395
+        "rho_estimate": 0.8649938885148037,
+        "sigma_estimate": 2.8142589430306675
       },
-      "null_sd": 18.79150344369238,
+      "null_sd": 18.795334729407667,
       "power_at_reference": 0.99,
       "power_at_zero": 0.058,
       "reference_power": 0.33620920471618687,
@@ -3544,12 +3544,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8567364015116087,
-        "sigma_estimate": 2.8817202428713795
+        "rho_estimate": 0.8588109998305785,
+        "sigma_estimate": 2.867867958155755
       },
-      "null_sd": 19.429376932047106,
+      "null_sd": 19.44469523773004,
       "power_at_reference": 0.986,
-      "power_at_zero": 0.05,
+      "power_at_zero": 0.048,
       "reference_power": 0.33620920471618687,
       "requested_test_periods": 12,
       "scenario": "high_autocorrelation",
@@ -3585,12 +3585,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.8567364015116087,
-        "sigma_estimate": 2.8817202428713795
+        "rho_estimate": 0.8588109998305785,
+        "sigma_estimate": 2.867867958155755
       },
-      "null_sd": 18.80714676260076,
+      "null_sd": 18.85161295032304,
       "power_at_reference": 0.99,
-      "power_at_zero": 0.06,
+      "power_at_zero": 0.056,
       "reference_power": 0.33620920471618687,
       "requested_test_periods": 12,
       "scenario": "high_autocorrelation",
@@ -3773,14 +3773,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -3802,8 +3802,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3934264958448849,
-        "sigma_estimate": 3.7928134920428582
+        "rho_estimate": 0.39691196771463066,
+        "sigma_estimate": 3.7864202467749997
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -3818,14 +3818,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -3847,8 +3847,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3934264958448849,
-        "sigma_estimate": 3.7928134920428582
+        "rho_estimate": 0.39691196771463066,
+        "sigma_estimate": 3.7864202467749997
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -3863,14 +3863,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -3892,8 +3892,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3938596886835997,
-        "sigma_estimate": 3.7917085323206403
+        "rho_estimate": 0.395911578657459,
+        "sigma_estimate": 3.787950040128289
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -3908,14 +3908,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -3937,8 +3937,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3938596886835997,
-        "sigma_estimate": 3.7917085323206403
+        "rho_estimate": 0.395911578657459,
+        "sigma_estimate": 3.787950040128289
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4043,14 +4043,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -4072,8 +4072,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3934264958448849,
-        "sigma_estimate": 3.7928134920428582
+        "rho_estimate": 0.39691196771463066,
+        "sigma_estimate": 3.7864202467749997
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4088,14 +4088,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5624770884271633, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.5962063312057917, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -4117,8 +4117,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3934264958448849,
-        "sigma_estimate": 3.7928134920428582
+        "rho_estimate": 0.39691196771463066,
+        "sigma_estimate": 3.7864202467749997
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4133,14 +4133,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -4162,8 +4162,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3938596886835997,
-        "sigma_estimate": 3.7917085323206403
+        "rho_estimate": 0.395911578657459,
+        "sigma_estimate": 3.787950040128289
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4178,14 +4178,14 @@
     },
     {
       "blockers": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.569109881023414, outside the constant-sigma AR(1) support band [0.43, 2.30]"
+        "heteroskedasticity: residual variance ratio (high-level half / low-level half) = 2.589462372056006, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -4207,8 +4207,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.3938596886835997,
-        "sigma_estimate": 3.7917085323206403
+        "rho_estimate": 0.395911578657459,
+        "sigma_estimate": 3.787950040128289
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4432,8 +4432,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38549168627959596,
-        "sigma_estimate": 3.317710560264474
+        "rho_estimate": 0.3866235253937463,
+        "sigma_estimate": 3.3149758214808895
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4477,8 +4477,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38549168627959596,
-        "sigma_estimate": 3.317710560264474
+        "rho_estimate": 0.3866235253937463,
+        "sigma_estimate": 3.3149758214808895
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4522,8 +4522,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38562334257409486,
-        "sigma_estimate": 3.3170486481820283
+        "rho_estimate": 0.3866218576184635,
+        "sigma_estimate": 3.3149783280766156
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4567,8 +4567,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38562334257409486,
-        "sigma_estimate": 3.3170486481820283
+        "rho_estimate": 0.3866218576184635,
+        "sigma_estimate": 3.3149783280766156
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4702,8 +4702,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38549168627959596,
-        "sigma_estimate": 3.317710560264474
+        "rho_estimate": 0.3866235253937463,
+        "sigma_estimate": 3.3149758214808895
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4747,8 +4747,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38549168627959596,
-        "sigma_estimate": 3.317710560264474
+        "rho_estimate": 0.3866235253937463,
+        "sigma_estimate": 3.3149758214808895
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4792,8 +4792,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38562334257409486,
-        "sigma_estimate": 3.3170486481820283
+        "rho_estimate": 0.3866218576184635,
+        "sigma_estimate": 3.3149783280766156
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -4837,8 +4837,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 364,
         "n_predictors": 5,
-        "rho_estimate": 0.38562334257409486,
-        "sigma_estimate": 3.3170486481820283
+        "rho_estimate": 0.3866218576184635,
+        "sigma_estimate": 3.3149783280766156
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -5050,11 +5050,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4296569035398389,
-        "sigma_estimate": 2.7485818387785446
+        "rho_estimate": 0.424780621159425,
+        "sigma_estimate": 2.753770037221341
       },
-      "null_sd": 15.282689057424818,
-      "power_at_reference": 0.5494,
+      "null_sd": 15.198347119460601,
+      "power_at_reference": 0.5588000000000001,
       "power_at_zero": 0.05,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
@@ -5091,11 +5091,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4296569035398389,
-        "sigma_estimate": 2.7485818387785446
+        "rho_estimate": 0.424780621159425,
+        "sigma_estimate": 2.753770037221341
       },
-      "null_sd": 15.996674263642628,
-      "power_at_reference": 0.6274,
+      "null_sd": 15.90988731646161,
+      "power_at_reference": 0.6332,
       "power_at_zero": 0.054,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
@@ -5132,11 +5132,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4282730102850424,
-        "sigma_estimate": 2.7496761391995346
+        "rho_estimate": 0.4247816970613564,
+        "sigma_estimate": 2.7537683517543265
       },
-      "null_sd": 15.256532082268981,
-      "power_at_reference": 0.5532,
+      "null_sd": 15.198362611712225,
+      "power_at_reference": 0.5588000000000001,
       "power_at_zero": 0.05,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
@@ -5173,11 +5173,11 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4282730102850424,
-        "sigma_estimate": 2.7496761391995346
+        "rho_estimate": 0.4247816970613564,
+        "sigma_estimate": 2.7537683517543265
       },
-      "null_sd": 15.969723629586047,
-      "power_at_reference": 0.6292,
+      "null_sd": 15.90990320662436,
+      "power_at_reference": 0.6332,
       "power_at_zero": 0.054,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
@@ -5296,12 +5296,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4296569035398389,
-        "sigma_estimate": 2.7485818387785446
+        "rho_estimate": 0.424780621159425,
+        "sigma_estimate": 2.753770037221341
       },
-      "null_sd": 10.181510546252488,
-      "power_at_reference": 0.883,
-      "power_at_zero": 0.044,
+      "null_sd": 10.184947966970187,
+      "power_at_reference": 0.8848,
+      "power_at_zero": 0.042,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
       "scenario": "collinear_controls",
@@ -5337,12 +5337,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4296569035398389,
-        "sigma_estimate": 2.7485818387785446
+        "rho_estimate": 0.424780621159425,
+        "sigma_estimate": 2.753770037221341
       },
-      "null_sd": 10.770894692497981,
-      "power_at_reference": 0.928,
-      "power_at_zero": 0.072,
+      "null_sd": 10.77503049024696,
+      "power_at_reference": 0.9298000000000001,
+      "power_at_zero": 0.07,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
       "scenario": "collinear_controls",
@@ -5378,12 +5378,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4282730102850424,
-        "sigma_estimate": 2.7496761391995346
+        "rho_estimate": 0.4247816970613564,
+        "sigma_estimate": 2.7537683517543265
       },
-      "null_sd": 10.181277061203915,
+      "null_sd": 10.184952413466247,
       "power_at_reference": 0.8848,
-      "power_at_zero": 0.044,
+      "power_at_zero": 0.042,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
       "scenario": "collinear_controls",
@@ -5419,12 +5419,12 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.4282730102850424,
-        "sigma_estimate": 2.7496761391995346
+        "rho_estimate": 0.4247816970613564,
+        "sigma_estimate": 2.7537683517543265
       },
-      "null_sd": 10.77063385830991,
-      "power_at_reference": 0.9262,
-      "power_at_zero": 0.072,
+      "null_sd": 10.775034315970514,
+      "power_at_reference": 0.9298000000000001,
+      "power_at_zero": 0.07,
       "reference_power": 0.6315776180023106,
       "requested_test_periods": 12,
       "scenario": "collinear_controls",
@@ -5624,11 +5624,11 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.4305347997566975,
-        "sigma_estimate": 2.8759546769408155
+        "rho_estimate": 0.4422394980630388,
+        "sigma_estimate": 2.8633361860422504
       },
-      "null_sd": 16.012372815572924,
-      "power_at_reference": 0.40780000000000005,
+      "null_sd": 16.232455224419144,
+      "power_at_reference": 0.403,
       "power_at_zero": 0.05,
       "reference_power": 0.5046037961892793,
       "requested_test_periods": 12,
@@ -5665,11 +5665,11 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.4305347997566975,
-        "sigma_estimate": 2.8759546769408155
+        "rho_estimate": 0.4422394980630388,
+        "sigma_estimate": 2.8633361860422504
       },
-      "null_sd": 16.760161573868803,
-      "power_at_reference": 0.4796,
+      "null_sd": 16.986575288020138,
+      "power_at_reference": 0.4696,
       "power_at_zero": 0.054,
       "reference_power": 0.5046037961892793,
       "requested_test_periods": 12,
@@ -5706,11 +5706,11 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.42827228494305203,
-        "sigma_estimate": 2.881002169281899
+        "rho_estimate": 0.4330364099074191,
+        "sigma_estimate": 2.8784780223746083
       },
-      "null_sd": 15.985174694776925,
-      "power_at_reference": 0.4082,
+      "null_sd": 16.087947502971577,
+      "power_at_reference": 0.4076,
       "power_at_zero": 0.05,
       "reference_power": 0.5046037961892793,
       "requested_test_periods": 12,
@@ -5747,10 +5747,10 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.42827228494305203,
-        "sigma_estimate": 2.881002169281899
+        "rho_estimate": 0.4330364099074191,
+        "sigma_estimate": 2.8784780223746083
       },
-      "null_sd": 16.73242806758027,
+      "null_sd": 16.83844179791008,
       "power_at_reference": 0.4796,
       "power_at_zero": 0.054,
       "reference_power": 0.5046037961892793,
@@ -5870,12 +5870,12 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.4305347997566975,
-        "sigma_estimate": 2.8759546769408155
+        "rho_estimate": 0.4422394980630388,
+        "sigma_estimate": 2.8633361860422504
       },
-      "null_sd": 10.090341325824363,
-      "power_at_reference": 0.684,
-      "power_at_zero": 0.03,
+      "null_sd": 10.15537181225762,
+      "power_at_reference": 0.6766000000000001,
+      "power_at_zero": 0.024,
       "reference_power": 0.5046037961892793,
       "requested_test_periods": 12,
       "scenario": "many_weak_controls",
@@ -5911,11 +5911,11 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.4305347997566975,
-        "sigma_estimate": 2.8759546769408155
+        "rho_estimate": 0.4422394980630388,
+        "sigma_estimate": 2.8633361860422504
       },
-      "null_sd": 10.842317954804967,
-      "power_at_reference": 0.6572,
+      "null_sd": 10.886043936145226,
+      "power_at_reference": 0.6556000000000001,
       "power_at_zero": 0.046,
       "reference_power": 0.5046037961892793,
       "requested_test_periods": 12,
@@ -5952,12 +5952,12 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.42827228494305203,
-        "sigma_estimate": 2.881002169281899
+        "rho_estimate": 0.4330364099074191,
+        "sigma_estimate": 2.8784780223746083
       },
-      "null_sd": 10.094267476842083,
-      "power_at_reference": 0.6786000000000001,
-      "power_at_zero": 0.03,
+      "null_sd": 10.134436834377693,
+      "power_at_reference": 0.6606000000000001,
+      "power_at_zero": 0.026,
       "reference_power": 0.5046037961892793,
       "requested_test_periods": 12,
       "scenario": "many_weak_controls",
@@ -5993,12 +5993,12 @@
         "matrix_rank": 9,
         "n_fit_observations": 104,
         "n_predictors": 9,
-        "rho_estimate": 0.42827228494305203,
-        "sigma_estimate": 2.881002169281899
+        "rho_estimate": 0.4330364099074191,
+        "sigma_estimate": 2.8784780223746083
       },
-      "null_sd": 10.842197863280973,
-      "power_at_reference": 0.659,
-      "power_at_zero": 0.044,
+      "null_sd": 10.87192318421891,
+      "power_at_reference": 0.6734,
+      "power_at_zero": 0.048,
       "reference_power": 0.5046037961892793,
       "requested_test_periods": 12,
       "scenario": "many_weak_controls",
@@ -6198,10 +6198,10 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.41149281690056905,
-        "sigma_estimate": 2.6566740435768077
+        "rho_estimate": 0.41454250751294075,
+        "sigma_estimate": 2.6462951904159815
       },
-      "null_sd": 14.372723073161966,
+      "null_sd": 14.381825077563196,
       "power_at_reference": 0.5920000000000001,
       "power_at_zero": 0.05,
       "reference_power": 0.6315773904761489,
@@ -6239,10 +6239,10 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.41149281690056905,
-        "sigma_estimate": 2.6566740435768077
+        "rho_estimate": 0.41454250751294075,
+        "sigma_estimate": 2.6462951904159815
       },
-      "null_sd": 15.049354565600565,
+      "null_sd": 15.058038983900614,
       "power_at_reference": 0.6768000000000001,
       "power_at_zero": 0.056,
       "reference_power": 0.6315773904761489,
@@ -6280,10 +6280,10 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.4138526524067496,
-        "sigma_estimate": 2.648192978102134
+        "rho_estimate": 0.4145430412557417,
+        "sigma_estimate": 2.646294060409276
       },
-      "null_sd": 14.377317365999897,
+      "null_sd": 14.381830407137002,
       "power_at_reference": 0.5920000000000001,
       "power_at_zero": 0.05,
       "reference_power": 0.6315773904761489,
@@ -6321,10 +6321,10 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.4138526524067496,
-        "sigma_estimate": 2.648192978102134
+        "rho_estimate": 0.4145430412557417,
+        "sigma_estimate": 2.646294060409276
       },
-      "null_sd": 15.053511368123816,
+      "null_sd": 15.058044415271347,
       "power_at_reference": 0.6768000000000001,
       "power_at_zero": 0.056,
       "reference_power": 0.6315773904761489,
@@ -6444,12 +6444,12 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.41149281690056905,
-        "sigma_estimate": 2.6566740435768077
+        "rho_estimate": 0.41454250751294075,
+        "sigma_estimate": 2.6462951904159815
       },
-      "null_sd": 10.055619905702647,
-      "power_at_reference": 0.9226000000000001,
-      "power_at_zero": 0.084,
+      "null_sd": 10.068116840952621,
+      "power_at_reference": 0.919,
+      "power_at_zero": 0.078,
       "reference_power": 0.6315773904761489,
       "requested_test_periods": 12,
       "scenario": "duplicate_controls",
@@ -6485,12 +6485,12 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.41149281690056905,
-        "sigma_estimate": 2.6566740435768077
+        "rho_estimate": 0.41454250751294075,
+        "sigma_estimate": 2.6462951904159815
       },
-      "null_sd": 10.363282333638173,
-      "power_at_reference": 0.9334,
-      "power_at_zero": 0.052,
+      "null_sd": 10.393155263762335,
+      "power_at_reference": 0.937,
+      "power_at_zero": 0.056,
       "reference_power": 0.6315773904761489,
       "requested_test_periods": 12,
       "scenario": "duplicate_controls",
@@ -6526,12 +6526,12 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.4138526524067496,
-        "sigma_estimate": 2.648192978102134
+        "rho_estimate": 0.4145430412557417,
+        "sigma_estimate": 2.646294060409276
       },
-      "null_sd": 10.053496617492886,
-      "power_at_reference": 0.9226000000000001,
-      "power_at_zero": 0.08,
+      "null_sd": 10.06812275800494,
+      "power_at_reference": 0.919,
+      "power_at_zero": 0.078,
       "reference_power": 0.6315773904761489,
       "requested_test_periods": 12,
       "scenario": "duplicate_controls",
@@ -6567,12 +6567,12 @@
         "matrix_rank": 4,
         "n_fit_observations": 104,
         "n_predictors": 4,
-        "rho_estimate": 0.4138526524067496,
-        "sigma_estimate": 2.648192978102134
+        "rho_estimate": 0.4145430412557417,
+        "sigma_estimate": 2.646294060409276
       },
-      "null_sd": 10.389936203496326,
-      "power_at_reference": 0.9352,
-      "power_at_zero": 0.054,
+      "null_sd": 10.39316373131046,
+      "power_at_reference": 0.937,
+      "power_at_zero": 0.056,
       "reference_power": 0.6315773904761489,
       "requested_test_periods": 12,
       "scenario": "duplicate_controls",
@@ -6755,14 +6755,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -6784,8 +6784,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.905257179530998,
-        "sigma_estimate": 15.326996936341759
+        "rho_estimate": 0.9587662272931428,
+        "sigma_estimate": 11.802508975452618
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -6800,14 +6800,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -6829,8 +6829,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.905257179530998,
-        "sigma_estimate": 15.326996936341759
+        "rho_estimate": 0.9587662272931428,
+        "sigma_estimate": 11.802508975452618
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -6845,14 +6845,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -6874,8 +6874,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.900542228353643,
-        "sigma_estimate": 15.681661581373115
+        "rho_estimate": 0.95717539908492,
+        "sigma_estimate": 11.537869475556322
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -6890,14 +6890,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -6919,8 +6919,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.900542228353643,
-        "sigma_estimate": 15.681661581373115
+        "rho_estimate": 0.95717539908492,
+        "sigma_estimate": 11.537869475556322
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -7025,14 +7025,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -7054,8 +7054,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.905257179530998,
-        "sigma_estimate": 15.326996936341759
+        "rho_estimate": 0.9587662272931428,
+        "sigma_estimate": 11.802508975452618
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -7070,14 +7070,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.905 (se~0.042) has an approximate upper bound 0.989 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: residual variance ratio (high-level half / low-level half) = 0.34725131139759996, outside the constant-sigma AR(1) support band [0.43, 2.30]"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -7099,8 +7099,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.905257179530998,
-        "sigma_estimate": 15.326996936341759
+        "rho_estimate": 0.9587662272931428,
+        "sigma_estimate": 11.802508975452618
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -7115,14 +7115,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -7144,8 +7144,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.900542228353643,
-        "sigma_estimate": 15.681661581373115
+        "rho_estimate": 0.95717539908492,
+        "sigma_estimate": 11.537869475556322
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -7160,14 +7160,14 @@
     },
     {
       "blockers": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "completed": false,
       "condition_number": null,
       "effective_test_periods": 0,
       "error": null,
       "errors": [
-        "persistence: persistence rho=0.901 (se~0.043) has an approximate upper bound 0.986 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.97); a plausible near-unit-root process would make the reported power/MDE unreliable"
       ],
       "failures": 0,
       "fallback_reason": null,
@@ -7189,8 +7189,8 @@
         "matrix_rank": 5,
         "n_fit_observations": 104,
         "n_predictors": 5,
-        "rho_estimate": 0.900542228353643,
-        "sigma_estimate": 15.681661581373115
+        "rho_estimate": 0.95717539908492,
+        "sigma_estimate": 11.537869475556322
       },
       "null_sd": null,
       "power_at_reference": null,
@@ -8143,13 +8143,13 @@
           "null_calibration_deviation": 0.001999999999999995,
           "null_calibration_mean": 0.052,
           "null_calibration_std": 0.0021908902300206627,
-          "null_sd_mean": 15.604659029941173,
-          "power_at_reference_mean": 0.5918333333333333,
-          "power_at_reference_std": 0.04180974368094911,
-          "power_bias_vs_reference": -0.03974428466897728,
+          "null_sd_mean": 15.556472566830562,
+          "power_at_reference_mean": 0.5959666666666668,
+          "power_at_reference_std": 0.04071410893863039,
+          "power_bias_vs_reference": -0.03561095133564385,
           "reference_power": 0.6315776180023106,
-          "rho_hat_mean": 0.4282172105989633,
-          "sigma_hat_mean": 2.7484067949597417
+          "rho_hat_mean": 0.4254280120642633,
+          "sigma_hat_mean": 2.7515002652922704
         },
         "one_sided_positive|placebo_empirical": {
           "fallback_rate": 0.0,
@@ -8180,16 +8180,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 6,
-          "null_calibration_deviation": 0.008999999999999994,
-          "null_calibration_mean": 0.059,
-          "null_calibration_std": 0.01578606980853689,
-          "null_sd_mean": 10.476421579866942,
-          "power_at_reference_mean": 0.9060999999999999,
-          "power_at_reference_std": 0.024026235660211122,
-          "power_bias_vs_reference": 0.2745223819976893,
+          "null_calibration_deviation": 0.007666666666666669,
+          "null_calibration_mean": 0.05766666666666667,
+          "null_calibration_std": 0.015920636503188767,
+          "null_sd_mean": 10.47902975126521,
+          "power_at_reference_mean": 0.9073000000000001,
+          "power_at_reference_std": 0.0246475150877325,
+          "power_bias_vs_reference": 0.2757223819976895,
           "reference_power": 0.6315776180023106,
-          "rho_hat_mean": 0.4282172105989633,
-          "sigma_hat_mean": 2.7484067949597417
+          "rho_hat_mean": 0.4254280120642633,
+          "sigma_hat_mean": 2.7515002652922704
         }
       },
       "cells": {
@@ -8205,13 +8205,13 @@
           "null_calibration_deviation": 0.0020000000000000018,
           "null_calibration_mean": 0.052000000000000005,
           "null_calibration_std": 0.002828427124746188,
-          "null_sd_mean": 15.639681660533723,
-          "power_at_reference_mean": 0.5884,
-          "power_at_reference_std": 0.05515432893255068,
-          "power_bias_vs_reference": -0.04317761800231057,
+          "null_sd_mean": 15.554117217961107,
+          "power_at_reference_mean": 0.5960000000000001,
+          "power_at_reference_std": 0.05260874452027907,
+          "power_bias_vs_reference": -0.03557761800231052,
           "reference_power": 0.6315776180023106,
-          "rho_hat_mean": 0.4296569035398389,
-          "sigma_hat_mean": 2.7485818387785446
+          "rho_hat_mean": 0.424780621159425,
+          "sigma_hat_mean": 2.753770037221341
         },
         "model_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -8225,13 +8225,13 @@
           "null_calibration_deviation": 0.0020000000000000018,
           "null_calibration_mean": 0.052000000000000005,
           "null_calibration_std": 0.002828427124746188,
-          "null_sd_mean": 15.613127855927514,
-          "power_at_reference_mean": 0.5912,
-          "power_at_reference_std": 0.05374011537017758,
-          "power_bias_vs_reference": -0.040377618002310656,
+          "null_sd_mean": 15.554132909168292,
+          "power_at_reference_mean": 0.5960000000000001,
+          "power_at_reference_std": 0.05260874452027907,
+          "power_bias_vs_reference": -0.03557761800231052,
           "reference_power": 0.6315776180023106,
-          "rho_hat_mean": 0.4282730102850424,
-          "sigma_hat_mean": 2.7496761391995346
+          "rho_hat_mean": 0.4247816970613564,
+          "sigma_hat_mean": 2.7537683517543265
         },
         "model_simulation|ols": {
           "fallback_rate": 0.0,
@@ -8282,16 +8282,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.007999999999999993,
-          "null_calibration_mean": 0.057999999999999996,
-          "null_calibration_std": 0.01979898987322333,
-          "null_sd_mean": 10.476202619375234,
-          "power_at_reference_mean": 0.9055,
+          "null_calibration_deviation": 0.006000000000000005,
+          "null_calibration_mean": 0.05600000000000001,
+          "null_calibration_std": 0.019798989873223333,
+          "null_sd_mean": 10.479989228608574,
+          "power_at_reference_mean": 0.9073,
           "power_at_reference_std": 0.03181980515339467,
-          "power_bias_vs_reference": 0.27392238199768937,
+          "power_bias_vs_reference": 0.2757223819976894,
           "reference_power": 0.6315776180023106,
-          "rho_hat_mean": 0.4296569035398389,
-          "sigma_hat_mean": 2.7485818387785446
+          "rho_hat_mean": 0.424780621159425,
+          "sigma_hat_mean": 2.753770037221341
         },
         "residual_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -8302,16 +8302,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.007999999999999993,
-          "null_calibration_mean": 0.057999999999999996,
-          "null_calibration_std": 0.01979898987322333,
-          "null_sd_mean": 10.475955459756912,
-          "power_at_reference_mean": 0.9055,
-          "power_at_reference_std": 0.02927422074112306,
-          "power_bias_vs_reference": 0.27392238199768937,
+          "null_calibration_deviation": 0.006000000000000005,
+          "null_calibration_mean": 0.05600000000000001,
+          "null_calibration_std": 0.019798989873223333,
+          "null_sd_mean": 10.47999336471838,
+          "power_at_reference_mean": 0.9073,
+          "power_at_reference_std": 0.03181980515339467,
+          "power_bias_vs_reference": 0.2757223819976894,
           "reference_power": 0.6315776180023106,
-          "rho_hat_mean": 0.4282730102850424,
-          "sigma_hat_mean": 2.7496761391995346
+          "rho_hat_mean": 0.4247816970613564,
+          "sigma_hat_mean": 2.7537683517543265
         },
         "residual_simulation|ols": {
           "fallback_rate": 0.0,
@@ -8343,16 +8343,16 @@
         "n_errored": 0,
         "n_incomplete": 0,
         "n_runs": 14,
-        "null_calibration_deviation": 0.01542857142857143,
-        "null_calibration_mean": 0.06542857142857143,
-        "null_calibration_std": 0.027312195883085706,
-        "null_sd_mean": 11.231329212894886,
-        "power_at_reference_mean": 0.7526857142857144,
-        "power_at_reference_std": 0.1541924414846234,
-        "power_bias_vs_reference": 0.1211080962834038,
+        "null_calibration_deviation": 0.01485714285714286,
+        "null_calibration_mean": 0.06485714285714286,
+        "null_calibration_std": 0.027495054500364643,
+        "null_sd_mean": 11.211795659303883,
+        "power_at_reference_mean": 0.7549714285714286,
+        "power_at_reference_std": 0.15268041750699365,
+        "power_bias_vs_reference": 0.12339381056911802,
         "reference_power": 0.6315776180023106,
-        "rho_hat_mean": 0.42800356879511253,
-        "sigma_hat_mean": 2.748200453808514
+        "rho_hat_mean": 0.42561282719394117,
+        "sigma_hat_mean": 2.7508519998078245
       }
     },
     "daily_weekday": {
@@ -8595,13 +8595,13 @@
           "null_calibration_deviation": 0.0029999999999999957,
           "null_calibration_mean": 0.053,
           "null_calibration_std": 0.003286335345030996,
-          "null_sd_mean": 14.715467683432536,
+          "null_sd_mean": 14.719939768596854,
           "power_at_reference_mean": 0.6344000000000001,
           "power_at_reference_std": 0.046446872876438075,
           "power_bias_vs_reference": 0.0028226095238511606,
           "reference_power": 0.6315773904761489,
-          "rho_hat_mean": 0.4132964234170724,
-          "sigma_hat_mean": 2.650386778552714
+          "rho_hat_mean": 0.41454311657086035,
+          "sigma_hat_mean": 2.6462941882681523
         },
         "one_sided_positive|placebo_empirical": {
           "fallback_rate": 0.0,
@@ -8632,16 +8632,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 6,
-          "null_calibration_deviation": 0.01733333333333334,
-          "null_calibration_mean": 0.06733333333333334,
-          "null_calibration_std": 0.014787382008545893,
-          "null_sd_mean": 10.220609213532503,
-          "power_at_reference_mean": 0.9283,
-          "power_at_reference_std": 0.007756029912268245,
-          "power_bias_vs_reference": 0.2967226095238511,
+          "null_calibration_deviation": 0.017,
+          "null_calibration_mean": 0.067,
+          "null_calibration_std": 0.012049896265113654,
+          "null_sd_mean": 10.230646469149226,
+          "power_at_reference_mean": 0.928,
+          "power_at_reference_std": 0.009859006035092998,
+          "power_bias_vs_reference": 0.29642260952385113,
           "reference_power": 0.6315773904761489,
-          "rho_hat_mean": 0.4132964234170724,
-          "sigma_hat_mean": 2.650386778552714
+          "rho_hat_mean": 0.41454311657086035,
+          "sigma_hat_mean": 2.6462941882681523
         }
       },
       "cells": {
@@ -8657,13 +8657,13 @@
           "null_calibration_deviation": 0.0030000000000000027,
           "null_calibration_mean": 0.053000000000000005,
           "null_calibration_std": 0.004242640687119284,
-          "null_sd_mean": 14.711038819381265,
+          "null_sd_mean": 14.719932030731904,
           "power_at_reference_mean": 0.6344000000000001,
           "power_at_reference_std": 0.05996265504461922,
           "power_bias_vs_reference": 0.0028226095238511606,
           "reference_power": 0.6315773904761489,
-          "rho_hat_mean": 0.41149281690056905,
-          "sigma_hat_mean": 2.6566740435768077
+          "rho_hat_mean": 0.41454250751294075,
+          "sigma_hat_mean": 2.6462951904159815
         },
         "model_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -8677,13 +8677,13 @@
           "null_calibration_deviation": 0.0030000000000000027,
           "null_calibration_mean": 0.053000000000000005,
           "null_calibration_std": 0.004242640687119284,
-          "null_sd_mean": 14.715414367061857,
+          "null_sd_mean": 14.719937411204175,
           "power_at_reference_mean": 0.6344000000000001,
           "power_at_reference_std": 0.05996265504461922,
           "power_bias_vs_reference": 0.0028226095238511606,
           "reference_power": 0.6315773904761489,
-          "rho_hat_mean": 0.4138526524067496,
-          "sigma_hat_mean": 2.648192978102134
+          "rho_hat_mean": 0.4145430412557417,
+          "sigma_hat_mean": 2.646294060409276
         },
         "model_simulation|ols": {
           "fallback_rate": 0.0,
@@ -8734,16 +8734,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.018000000000000002,
-          "null_calibration_mean": 0.068,
-          "null_calibration_std": 0.022627416997969527,
-          "null_sd_mean": 10.20945111967041,
+          "null_calibration_deviation": 0.017,
+          "null_calibration_mean": 0.067,
+          "null_calibration_std": 0.015556349186104044,
+          "null_sd_mean": 10.230636052357479,
           "power_at_reference_mean": 0.928,
-          "power_at_reference_std": 0.007636753236814657,
+          "power_at_reference_std": 0.012727922061357866,
           "power_bias_vs_reference": 0.29642260952385113,
           "reference_power": 0.6315773904761489,
-          "rho_hat_mean": 0.41149281690056905,
-          "sigma_hat_mean": 2.6566740435768077
+          "rho_hat_mean": 0.41454250751294075,
+          "sigma_hat_mean": 2.6462951904159815
         },
         "residual_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -8756,14 +8756,14 @@
           "n_runs": 2,
           "null_calibration_deviation": 0.017,
           "null_calibration_mean": 0.067,
-          "null_calibration_std": 0.018384776310850236,
-          "null_sd_mean": 10.221716410494606,
-          "power_at_reference_mean": 0.9289000000000001,
-          "power_at_reference_std": 0.008909545442950459,
-          "power_bias_vs_reference": 0.29732260952385114,
+          "null_calibration_std": 0.015556349186104044,
+          "null_sd_mean": 10.2306432446577,
+          "power_at_reference_mean": 0.928,
+          "power_at_reference_std": 0.012727922061357866,
+          "power_bias_vs_reference": 0.29642260952385113,
           "reference_power": 0.6315773904761489,
-          "rho_hat_mean": 0.4138526524067496,
-          "sigma_hat_mean": 2.648192978102134
+          "rho_hat_mean": 0.4145430412557417,
+          "sigma_hat_mean": 2.646294060409276
         },
         "residual_simulation|ols": {
           "fallback_rate": 0.0,
@@ -8795,16 +8795,16 @@
         "n_errored": 0,
         "n_incomplete": 0,
         "n_runs": 14,
-        "null_calibration_deviation": 0.019428571428571434,
-        "null_calibration_mean": 0.06942857142857144,
-        "null_calibration_std": 0.026267014370804382,
-        "null_sd_mean": 10.739855407768932,
-        "power_at_reference_mean": 0.7965142857142856,
-        "power_at_reference_std": 0.14923786824623742,
-        "power_bias_vs_reference": 0.1649368952381367,
+        "null_calibration_deviation": 0.019285714285714295,
+        "null_calibration_mean": 0.0692857142857143,
+        "null_calibration_std": 0.025736620337053314,
+        "null_sd_mean": 10.746073696675094,
+        "power_at_reference_mean": 0.7963857142857141,
+        "power_at_reference_std": 0.14916339444300078,
+        "power_bias_vs_reference": 0.16480832380956523,
         "reference_power": 0.6315773904761489,
-        "rho_hat_mean": 0.413474620206619,
-        "sigma_hat_mean": 2.6498019978993548
+        "rho_hat_mean": 0.4145432143384374,
+        "sigma_hat_mean": 2.6462940633697305
       }
     },
     "heteroskedastic": {
@@ -9044,16 +9044,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 6,
-          "null_calibration_deviation": 0.0073333333333333375,
-          "null_calibration_mean": 0.05733333333333334,
-          "null_calibration_std": 0.0010327955589886455,
-          "null_sd_mean": 42.33304785010764,
-          "power_at_reference_mean": 0.5953333333333334,
-          "power_at_reference_std": 0.04674469666889138,
-          "power_bias_vs_reference": 0.2591241286171465,
+          "null_calibration_deviation": 0.007999999999999993,
+          "null_calibration_mean": 0.057999999999999996,
+          "null_calibration_std": 0.002190890230020664,
+          "null_sd_mean": 42.40143368826912,
+          "power_at_reference_mean": 0.5930000000000001,
+          "power_at_reference_std": 0.04498444175490009,
+          "power_bias_vs_reference": 0.2567907952838132,
           "reference_power": 0.33620920471618687,
-          "rho_hat_mean": 0.8571384165633683,
-          "sigma_hat_mean": 2.878038819315229
+          "rho_hat_mean": 0.8595170701337639,
+          "sigma_hat_mean": 2.8606345669507967
         },
         "one_sided_positive|placebo_empirical": {
           "fallback_rate": 0.0,
@@ -9084,16 +9084,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 6,
-          "null_calibration_deviation": 0.003999999999999997,
-          "null_calibration_mean": 0.054,
-          "null_calibration_std": 0.00456070170039655,
-          "null_sd_mean": 19.11814714648003,
-          "power_at_reference_mean": 0.988,
-          "power_at_reference_std": 0.0021908902300206666,
-          "power_bias_vs_reference": 0.6517907952838131,
+          "null_calibration_deviation": 0.001999999999999995,
+          "null_calibration_mean": 0.052,
+          "null_calibration_std": 0.0055136195008360905,
+          "null_sd_mean": 19.150758763638667,
+          "power_at_reference_mean": 0.9876666666666667,
+          "power_at_reference_std": 0.002658320271650254,
+          "power_bias_vs_reference": 0.6514574619504798,
           "reference_power": 0.33620920471618687,
-          "rho_hat_mean": 0.8571384165633683,
-          "sigma_hat_mean": 2.878038819315229
+          "rho_hat_mean": 0.8595170701337639,
+          "sigma_hat_mean": 2.8606345669507967
         }
       },
       "cells": {
@@ -9106,16 +9106,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.006999999999999999,
-          "null_calibration_mean": 0.057,
-          "null_calibration_std": 0.0014142135623730963,
-          "null_sd_mean": 42.34047509887204,
-          "power_at_reference_mean": 0.5960000000000001,
-          "power_at_reference_std": 0.05939696961966997,
-          "power_bias_vs_reference": 0.2597907952838132,
+          "null_calibration_deviation": 0.008999999999999994,
+          "null_calibration_mean": 0.059,
+          "null_calibration_std": 0.004242640687119284,
+          "null_sd_mean": 42.465869435783006,
+          "power_at_reference_mean": 0.593,
+          "power_at_reference_std": 0.05515432893255068,
+          "power_bias_vs_reference": 0.2567907952838131,
           "reference_power": 0.33620920471618687,
-          "rho_hat_mean": 0.8599325261225871,
-          "sigma_hat_mean": 2.8526194154083395
+          "rho_hat_mean": 0.8649938885148037,
+          "sigma_hat_mean": 2.8142589430306675
         },
         "model_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -9129,13 +9129,13 @@
           "null_calibration_deviation": 0.006999999999999999,
           "null_calibration_mean": 0.057,
           "null_calibration_std": 0.0014142135623730963,
-          "null_sd_mean": 42.33264832157422,
-          "power_at_reference_mean": 0.595,
-          "power_at_reference_std": 0.06081118318204306,
-          "power_bias_vs_reference": 0.2587907952838131,
+          "null_sd_mean": 42.41241149914771,
+          "power_at_reference_mean": 0.591,
+          "power_at_reference_std": 0.05798275605729687,
+          "power_bias_vs_reference": 0.2547907952838131,
           "reference_power": 0.33620920471618687,
-          "rho_hat_mean": 0.8567364015116087,
-          "sigma_hat_mean": 2.8817202428713795
+          "rho_hat_mean": 0.8588109998305785,
+          "sigma_hat_mean": 2.867867958155755
         },
         "model_simulation|ols": {
           "fallback_rate": 0.0,
@@ -9186,16 +9186,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.0040000000000000036,
-          "null_calibration_mean": 0.054000000000000006,
-          "null_calibration_std": 0.005656854249492381,
-          "null_sd_mean": 19.110188482892248,
-          "power_at_reference_mean": 0.988,
-          "power_at_reference_std": 0.0028284271247461927,
-          "power_bias_vs_reference": 0.6517907952838131,
+          "null_calibration_deviation": 0.0010000000000000009,
+          "null_calibration_mean": 0.051000000000000004,
+          "null_calibration_std": 0.009899494936611668,
+          "null_sd_mean": 19.178131087665534,
+          "power_at_reference_mean": 0.987,
+          "power_at_reference_std": 0.004242640687119289,
+          "power_bias_vs_reference": 0.6507907952838131,
           "reference_power": 0.33620920471618687,
-          "rho_hat_mean": 0.8599325261225871,
-          "sigma_hat_mean": 2.8526194154083395
+          "rho_hat_mean": 0.8649938885148037,
+          "sigma_hat_mean": 2.8142589430306675
         },
         "residual_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -9206,16 +9206,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.0049999999999999975,
-          "null_calibration_mean": 0.055,
-          "null_calibration_std": 0.007071067811865472,
-          "null_sd_mean": 19.118261847323932,
+          "null_calibration_deviation": 0.0020000000000000018,
+          "null_calibration_mean": 0.052000000000000005,
+          "null_calibration_std": 0.005656854249492381,
+          "null_sd_mean": 19.14815409402654,
           "power_at_reference_mean": 0.988,
           "power_at_reference_std": 0.0028284271247461927,
           "power_bias_vs_reference": 0.6517907952838131,
           "reference_power": 0.33620920471618687,
-          "rho_hat_mean": 0.8567364015116087,
-          "sigma_hat_mean": 2.8817202428713795
+          "rho_hat_mean": 0.8588109998305785,
+          "sigma_hat_mean": 2.867867958155755
         },
         "residual_simulation|ols": {
           "fallback_rate": 0.0,
@@ -9247,16 +9247,16 @@
         "n_errored": 0,
         "n_incomplete": 0,
         "n_runs": 14,
-        "null_calibration_deviation": 0.015571428571428583,
-        "null_calibration_mean": 0.06557142857142859,
-        "null_calibration_std": 0.025394470281522332,
-        "null_sd_mean": 26.530473731641468,
-        "power_at_reference_mean": 0.7857142857142857,
-        "power_at_reference_std": 0.19144930181339173,
-        "power_bias_vs_reference": 0.4495050809980988,
+        "null_calibration_deviation": 0.015000000000000013,
+        "null_calibration_mean": 0.06500000000000002,
+        "null_calibration_std": 0.025845695966640173,
+        "null_sd_mean": 26.57375835535009,
+        "power_at_reference_mean": 0.7845714285714286,
+        "power_at_reference_std": 0.1921993013217567,
+        "power_bias_vs_reference": 0.4483622238552417,
         "reference_power": 0.33620920471618687,
-        "rho_hat_mean": 0.8567966887765887,
-        "sigma_hat_mean": 2.8811442450796205
+        "rho_hat_mean": 0.8588355346940705,
+        "sigma_hat_mean": 2.8662263144815348
       }
     },
     "low_volume": {
@@ -9273,13 +9273,13 @@
           "null_calibration_deviation": 0.0029999999999999957,
           "null_calibration_mean": 0.053,
           "null_calibration_std": 0.005477225575051662,
-          "null_sd_mean": 3.0191302310115433,
-          "power_at_reference_mean": 0.5985,
-          "power_at_reference_std": 0.02773986301336042,
-          "power_bias_vs_reference": 0.054103215349470046,
+          "null_sd_mean": 3.029121388508429,
+          "power_at_reference_mean": 0.595,
+          "power_at_reference_std": 0.029577018105278997,
+          "power_bias_vs_reference": 0.05060321534946999,
           "reference_power": 0.54439678465053,
-          "rho_hat_mean": 0.19774013308704497,
-          "sigma_hat_mean": 0.718499163094689
+          "rho_hat_mean": 0.20621801727751976,
+          "sigma_hat_mean": 0.7139693725643855
         },
         "one_sided_positive|placebo_empirical": {
           "fallback_rate": null,
@@ -9310,16 +9310,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 6,
-          "null_calibration_deviation": 0.027666666666666673,
-          "null_calibration_mean": 0.07766666666666668,
-          "null_calibration_std": 0.003204163957519447,
-          "null_sd_mean": 2.546358242766324,
-          "power_at_reference_mean": 0.7756666666666666,
-          "power_at_reference_std": 0.021275964529643948,
-          "power_bias_vs_reference": 0.23126988201613663,
+          "null_calibration_deviation": 0.026999999999999996,
+          "null_calibration_mean": 0.077,
+          "null_calibration_std": 0.0010954451150103333,
+          "null_sd_mean": 2.537906882776599,
+          "power_at_reference_mean": 0.7855,
+          "power_at_reference_std": 0.018074844397670497,
+          "power_bias_vs_reference": 0.24110321534947,
           "reference_power": 0.54439678465053,
-          "rho_hat_mean": 0.19774013308704497,
-          "sigma_hat_mean": 0.718499163094689
+          "rho_hat_mean": 0.20621801727751976,
+          "sigma_hat_mean": 0.7139693725643855
         }
       },
       "cells": {
@@ -9335,13 +9335,13 @@
           "null_calibration_deviation": 0.0030000000000000027,
           "null_calibration_mean": 0.053000000000000005,
           "null_calibration_std": 0.007071067811865477,
-          "null_sd_mean": 3.0156126930518097,
-          "power_at_reference_mean": 0.6,
-          "power_at_reference_std": 0.033941125496954314,
-          "power_bias_vs_reference": 0.05560321534946999,
+          "null_sd_mean": 3.0291625346300286,
+          "power_at_reference_mean": 0.595,
+          "power_at_reference_std": 0.038183766184073605,
+          "power_bias_vs_reference": 0.05060321534946999,
           "reference_power": 0.54439678465053,
-          "rho_hat_mean": 0.19254288552702617,
-          "sigma_hat_mean": 0.7218955566431651
+          "rho_hat_mean": 0.20623331770504258,
+          "sigma_hat_mean": 0.7139665857224258
         },
         "model_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -9355,13 +9355,13 @@
           "null_calibration_deviation": 0.0030000000000000027,
           "null_calibration_mean": 0.053000000000000005,
           "null_calibration_std": 0.007071067811865477,
-          "null_sd_mean": 3.0127334854197323,
-          "power_at_reference_mean": 0.6005,
-          "power_at_reference_std": 0.03464823227814086,
-          "power_bias_vs_reference": 0.05610321534947005,
+          "null_sd_mean": 3.02915711633217,
+          "power_at_reference_mean": 0.595,
+          "power_at_reference_std": 0.038183766184073605,
+          "power_bias_vs_reference": 0.05060321534946999,
           "reference_power": 0.54439678465053,
-          "rho_hat_mean": 0.1944881405303032,
-          "sigma_hat_mean": 0.7196273060688366
+          "rho_hat_mean": 0.20623136092371114,
+          "sigma_hat_mean": 0.7139669053986655
         },
         "model_simulation|ols": {
           "fallback_rate": 0.0,
@@ -9412,16 +9412,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.03,
-          "null_calibration_mean": 0.08,
-          "null_calibration_std": 0.005656854249492385,
-          "null_sd_mean": 2.5534616794169223,
-          "power_at_reference_mean": 0.7715000000000001,
+          "null_calibration_deviation": 0.026999999999999996,
+          "null_calibration_mean": 0.077,
+          "null_calibration_std": 0.0014142135623730963,
+          "null_sd_mean": 2.53788988269854,
+          "power_at_reference_mean": 0.7855000000000001,
           "power_at_reference_std": 0.02333452377915609,
-          "power_bias_vs_reference": 0.2271032153494701,
+          "power_bias_vs_reference": 0.2411032153494701,
           "reference_power": 0.54439678465053,
-          "rho_hat_mean": 0.19254288552702617,
-          "sigma_hat_mean": 0.7218955566431651
+          "rho_hat_mean": 0.20623331770504258,
+          "sigma_hat_mean": 0.7139665857224258
         },
         "residual_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -9432,16 +9432,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.025999999999999995,
-          "null_calibration_mean": 0.076,
-          "null_calibration_std": 0.0,
-          "null_sd_mean": 2.5476756485964422,
-          "power_at_reference_mean": 0.77,
-          "power_at_reference_std": 0.029698484809835023,
-          "power_bias_vs_reference": 0.22560321534947003,
+          "null_calibration_deviation": 0.026999999999999996,
+          "null_calibration_mean": 0.077,
+          "null_calibration_std": 0.0014142135623730963,
+          "null_sd_mean": 2.53789336534565,
+          "power_at_reference_mean": 0.7855000000000001,
+          "power_at_reference_std": 0.02333452377915609,
+          "power_bias_vs_reference": 0.2411032153494701,
           "reference_power": 0.54439678465053,
-          "rho_hat_mean": 0.1944881405303032,
-          "sigma_hat_mean": 0.7196273060688366
+          "rho_hat_mean": 0.20623136092371114,
+          "sigma_hat_mean": 0.7139669053986655
         },
         "residual_simulation|ols": {
           "fallback_rate": 0.0,
@@ -9473,16 +9473,16 @@
         "n_errored": 2,
         "n_incomplete": 0,
         "n_runs": 14,
-        "null_calibration_deviation": 0.015333333333333324,
-        "null_calibration_mean": 0.06533333333333333,
-        "null_calibration_std": 0.013573592901012769,
-        "null_sd_mean": 2.782744236888934,
-        "power_at_reference_mean": 0.6870833333333334,
-        "power_at_reference_std": 0.09547723034918598,
-        "power_bias_vs_reference": 0.1426865486828034,
+        "null_calibration_deviation": 0.014999999999999986,
+        "null_calibration_mean": 0.06499999999999999,
+        "null_calibration_std": 0.013087120663947713,
+        "null_sd_mean": 2.783514135642514,
+        "power_at_reference_mean": 0.6902499999999999,
+        "power_at_reference_std": 0.10219333281935412,
+        "power_bias_vs_reference": 0.14585321534946993,
         "reference_power": 0.54439678465053,
-        "rho_hat_mean": 0.19774013308704497,
-        "sigma_hat_mean": 0.7184991630946892
+        "rho_hat_mean": 0.20621801727751976,
+        "sigma_hat_mean": 0.7139693725643855
       }
     },
     "many_weak_controls": {
@@ -9499,13 +9499,13 @@
           "null_calibration_deviation": 0.001999999999999995,
           "null_calibration_mean": 0.052,
           "null_calibration_std": 0.0021908902300206627,
-          "null_sd_mean": 16.33244602548792,
-          "power_at_reference_mean": 0.4458666666666667,
-          "power_at_reference_std": 0.04008883468831025,
-          "power_bias_vs_reference": -0.05873712952261262,
+          "null_sd_mean": 16.44165980240825,
+          "power_at_reference_mean": 0.4433,
+          "power_at_reference_std": 0.03963690199801192,
+          "power_bias_vs_reference": -0.06130379618927928,
           "reference_power": 0.5046037961892793,
-          "rho_hat_mean": 0.42726504849754326,
-          "sigma_hat_mean": 2.8807006298265168
+          "rho_hat_mean": 0.43275465625444604,
+          "sigma_hat_mean": 2.875653083891231
         },
         "one_sided_positive|placebo_empirical": {
           "fallback_rate": 0.0,
@@ -9536,16 +9536,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 6,
-          "null_calibration_deviation": -0.012666666666666673,
-          "null_calibration_mean": 0.03733333333333333,
-          "null_calibration_std": 0.008824209124146292,
-          "null_sd_mean": 10.458209597936746,
-          "power_at_reference_mean": 0.6705666666666666,
-          "power_at_reference_std": 0.015986702807854643,
-          "power_bias_vs_reference": 0.16596287047738734,
+          "null_calibration_deviation": -0.013666666666666667,
+          "null_calibration_mean": 0.036333333333333336,
+          "null_calibration_std": 0.011413442367080437,
+          "null_sd_mean": 10.487984788977922,
+          "power_at_reference_mean": 0.6684666666666668,
+          "power_at_reference_std": 0.014572119498091785,
+          "power_bias_vs_reference": 0.16386287047738746,
           "reference_power": 0.5046037961892793,
-          "rho_hat_mean": 0.42726504849754326,
-          "sigma_hat_mean": 2.8807006298265168
+          "rho_hat_mean": 0.43275465625444604,
+          "sigma_hat_mean": 2.875653083891231
         }
       },
       "cells": {
@@ -9561,13 +9561,13 @@
           "null_calibration_deviation": 0.0020000000000000018,
           "null_calibration_mean": 0.052000000000000005,
           "null_calibration_std": 0.002828427124746188,
-          "null_sd_mean": 16.386267194720865,
-          "power_at_reference_mean": 0.44370000000000004,
-          "power_at_reference_std": 0.050770266889194095,
-          "power_bias_vs_reference": -0.06090379618927927,
+          "null_sd_mean": 16.60951525621964,
+          "power_at_reference_mean": 0.4363,
+          "power_at_reference_std": 0.047093311627024056,
+          "power_bias_vs_reference": -0.06830379618927929,
           "reference_power": 0.5046037961892793,
-          "rho_hat_mean": 0.4305347997566975,
-          "sigma_hat_mean": 2.8759546769408155
+          "rho_hat_mean": 0.4422394980630388,
+          "sigma_hat_mean": 2.8633361860422504
         },
         "model_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -9581,13 +9581,13 @@
           "null_calibration_deviation": 0.0020000000000000018,
           "null_calibration_mean": 0.052000000000000005,
           "null_calibration_std": 0.002828427124746188,
-          "null_sd_mean": 16.358801381178598,
-          "power_at_reference_mean": 0.4439,
-          "power_at_reference_std": 0.05048742417671951,
-          "power_bias_vs_reference": -0.06070379618927929,
+          "null_sd_mean": 16.463194650440826,
+          "power_at_reference_mean": 0.4436,
+          "power_at_reference_std": 0.05091168824543143,
+          "power_bias_vs_reference": -0.06100379618927931,
           "reference_power": 0.5046037961892793,
-          "rho_hat_mean": 0.42827228494305203,
-          "sigma_hat_mean": 2.881002169281899
+          "rho_hat_mean": 0.4330364099074191,
+          "sigma_hat_mean": 2.8784780223746083
         },
         "model_simulation|ols": {
           "fallback_rate": 0.0,
@@ -9638,16 +9638,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": -0.012000000000000004,
-          "null_calibration_mean": 0.038,
-          "null_calibration_std": 0.01131370849898476,
-          "null_sd_mean": 10.466329640314665,
-          "power_at_reference_mean": 0.6706000000000001,
-          "power_at_reference_std": 0.018950461735799506,
-          "power_bias_vs_reference": 0.16599620381072078,
+          "null_calibration_deviation": -0.015,
+          "null_calibration_mean": 0.035,
+          "null_calibration_std": 0.015556349186104044,
+          "null_sd_mean": 10.520707874201424,
+          "power_at_reference_mean": 0.6661000000000001,
+          "power_at_reference_std": 0.014849242404917511,
+          "power_bias_vs_reference": 0.16149620381072083,
           "reference_power": 0.5046037961892793,
-          "rho_hat_mean": 0.4305347997566975,
-          "sigma_hat_mean": 2.8759546769408155
+          "rho_hat_mean": 0.4422394980630388,
+          "sigma_hat_mean": 2.8633361860422504
         },
         "residual_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -9660,14 +9660,14 @@
           "n_runs": 2,
           "null_calibration_deviation": -0.013000000000000005,
           "null_calibration_mean": 0.037,
-          "null_calibration_std": 0.009899494936611665,
-          "null_sd_mean": 10.468232670061528,
-          "power_at_reference_mean": 0.6688000000000001,
-          "power_at_reference_std": 0.013859292911256375,
-          "power_bias_vs_reference": 0.16419620381072075,
+          "null_calibration_std": 0.015556349186104048,
+          "null_sd_mean": 10.503180009298301,
+          "power_at_reference_mean": 0.667,
+          "power_at_reference_std": 0.009050966799187753,
+          "power_bias_vs_reference": 0.16239620381072073,
           "reference_power": 0.5046037961892793,
-          "rho_hat_mean": 0.42827228494305203,
-          "sigma_hat_mean": 2.881002169281899
+          "rho_hat_mean": 0.4330364099074191,
+          "sigma_hat_mean": 2.8784780223746083
         },
         "residual_simulation|ols": {
           "fallback_rate": 0.0,
@@ -9699,16 +9699,16 @@
         "n_errored": 0,
         "n_incomplete": 0,
         "n_runs": 14,
-        "null_calibration_deviation": 0.006142857142857144,
-        "null_calibration_mean": 0.05614285714285715,
-        "null_calibration_std": 0.0305358733367749,
-        "null_sd_mean": 11.557458656043277,
-        "power_at_reference_mean": 0.5695428571428572,
-        "power_at_reference_std": 0.11487767885407983,
-        "power_bias_vs_reference": 0.06493906095357793,
+        "null_calibration_deviation": 0.005714285714285713,
+        "null_calibration_mean": 0.055714285714285716,
+        "null_calibration_std": 0.031148351163741882,
+        "null_sd_mean": 11.617025356598209,
+        "power_at_reference_mean": 0.5675428571428572,
+        "power_at_reference_std": 0.11517096799164218,
+        "power_bias_vs_reference": 0.06293906095357793,
         "reference_power": 0.5046037961892793,
-        "rho_hat_mean": 0.42665405025402,
-        "sigma_hat_mean": 2.881335546030847
+        "rho_hat_mean": 0.43135942833136526,
+        "sigma_hat_mean": 2.877009078086317
       }
     },
     "mde_not_reached": {
@@ -10237,13 +10237,13 @@
           "null_calibration_deviation": 0.0029999999999999957,
           "null_calibration_mean": 0.053,
           "null_calibration_std": 0.003286335345030996,
-          "null_sd_mean": 14.559071363591997,
-          "power_at_reference_mean": 0.6578666666666667,
-          "power_at_reference_std": 0.042591955421965186,
-          "power_bias_vs_reference": 0.013784143396854298,
+          "null_sd_mean": 14.590125001396403,
+          "power_at_reference_mean": 0.6568,
+          "power_at_reference_std": 0.04337962655440918,
+          "power_bias_vs_reference": 0.012717476730187638,
           "reference_power": 0.6440825232698124,
-          "rho_hat_mean": 0.40633057583735127,
-          "sigma_hat_mean": 2.6492907512864208
+          "rho_hat_mean": 0.4089654064929575,
+          "sigma_hat_mean": 2.6446850930578667
         },
         "one_sided_positive|placebo_empirical": {
           "fallback_rate": 0.0,
@@ -10274,16 +10274,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 6,
-          "null_calibration_deviation": 0.01833333333333334,
-          "null_calibration_mean": 0.06833333333333334,
-          "null_calibration_std": 0.013937957765277764,
-          "null_sd_mean": 10.171310094478715,
+          "null_calibration_deviation": 0.022000000000000006,
+          "null_calibration_mean": 0.07200000000000001,
+          "null_calibration_std": 0.013145341380123991,
+          "null_sd_mean": 10.179450362548856,
           "power_at_reference_mean": 0.9415,
           "power_at_reference_std": 0.006901304224565062,
           "power_bias_vs_reference": 0.2974174767301876,
           "reference_power": 0.6440825232698124,
-          "rho_hat_mean": 0.40633057583735127,
-          "sigma_hat_mean": 2.6492907512864208
+          "rho_hat_mean": 0.4089654064929575,
+          "sigma_hat_mean": 2.6446850930578667
         },
         "two_sided|model_simulation": {
           "fallback_rate": 0.0,
@@ -10359,13 +10359,13 @@
           "null_calibration_deviation": 0.0030000000000000027,
           "null_calibration_mean": 0.053000000000000005,
           "null_calibration_std": 0.004242640687119284,
-          "null_sd_mean": 14.538014875398925,
-          "power_at_reference_mean": 0.6589,
-          "power_at_reference_std": 0.05388153672641496,
-          "power_bias_vs_reference": 0.014817476730187629,
+          "null_sd_mean": 14.590133773780671,
+          "power_at_reference_mean": 0.6568,
+          "power_at_reference_std": 0.0560028570699746,
+          "power_bias_vs_reference": 0.012717476730187638,
           "reference_power": 0.6440825232698124,
-          "rho_hat_mean": 0.4043485137470901,
-          "sigma_hat_mean": 2.653167652084024
+          "rho_hat_mean": 0.4089663613449711,
+          "sigma_hat_mean": 2.6446829626669053
         },
         "model_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -10379,13 +10379,13 @@
           "null_calibration_deviation": 0.0030000000000000027,
           "null_calibration_mean": 0.053000000000000005,
           "null_calibration_std": 0.004242640687119284,
-          "null_sd_mean": 14.549084684143223,
-          "power_at_reference_mean": 0.6579,
-          "power_at_reference_std": 0.05501290757631346,
-          "power_bias_vs_reference": 0.013817476730187628,
+          "null_sd_mean": 14.590126699174707,
+          "power_at_reference_mean": 0.6568,
+          "power_at_reference_std": 0.0560028570699746,
+          "power_bias_vs_reference": 0.012717476730187638,
           "reference_power": 0.6440825232698124,
-          "rho_hat_mean": 0.4056792885776009,
-          "sigma_hat_mean": 2.6500156347834887
+          "rho_hat_mean": 0.4089659329465383,
+          "sigma_hat_mean": 2.6446833495149447
         },
         "model_simulation|ols": {
           "fallback_rate": 0.0,
@@ -10436,16 +10436,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.015,
-          "null_calibration_mean": 0.065,
-          "null_calibration_std": 0.015556349186104044,
-          "null_sd_mean": 10.165285453678452,
+          "null_calibration_deviation": 0.022000000000000006,
+          "null_calibration_mean": 0.07200000000000001,
+          "null_calibration_std": 0.016970562748477146,
+          "null_sd_mean": 10.179456168123057,
           "power_at_reference_mean": 0.9415,
           "power_at_reference_std": 0.008909545442950459,
           "power_bias_vs_reference": 0.2974174767301876,
           "reference_power": 0.6440825232698124,
-          "rho_hat_mean": 0.4043485137470901,
-          "sigma_hat_mean": 2.653167652084024
+          "rho_hat_mean": 0.4089663613449711,
+          "sigma_hat_mean": 2.6446829626669053
         },
         "residual_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -10456,16 +10456,16 @@
           "n_errored": 0,
           "n_incomplete": 0,
           "n_runs": 2,
-          "null_calibration_deviation": 0.018000000000000002,
-          "null_calibration_mean": 0.068,
-          "null_calibration_std": 0.019798989873223333,
-          "null_sd_mean": 10.169207457604525,
+          "null_calibration_deviation": 0.022000000000000006,
+          "null_calibration_mean": 0.07200000000000001,
+          "null_calibration_std": 0.016970562748477146,
+          "null_sd_mean": 10.179457547370342,
           "power_at_reference_mean": 0.9415,
           "power_at_reference_std": 0.008909545442950459,
           "power_bias_vs_reference": 0.2974174767301876,
           "reference_power": 0.6440825232698124,
-          "rho_hat_mean": 0.4056792885776009,
-          "sigma_hat_mean": 2.6500156347834887
+          "rho_hat_mean": 0.4089659329465383,
+          "sigma_hat_mean": 2.6446833495149447
         },
         "residual_simulation|ols": {
           "fallback_rate": 0.0,
@@ -10497,16 +10497,16 @@
         "n_errored": 0,
         "n_incomplete": 0,
         "n_runs": 14,
-        "null_calibration_deviation": 0.019857142857142865,
-        "null_calibration_mean": 0.06985714285714287,
-        "null_calibration_std": 0.02605573063456672,
-        "null_sd_mean": 10.651342020574557,
-        "power_at_reference_mean": 0.8122285714285713,
-        "power_at_reference_std": 0.142470587672152,
-        "power_bias_vs_reference": 0.1681460481587589,
+        "null_calibration_deviation": 0.021428571428571422,
+        "null_calibration_mean": 0.07142857142857142,
+        "null_calibration_std": 0.0258656715944699,
+        "null_sd_mean": 10.668139408806505,
+        "power_at_reference_mean": 0.8117714285714285,
+        "power_at_reference_std": 0.14309507559430779,
+        "power_bias_vs_reference": 0.16768890530161606,
         "reference_power": 0.6440825232698124,
-        "rho_hat_mean": 0.4067067686016386,
-        "sigma_hat_mean": 2.648633353530039
+        "rho_hat_mean": 0.4089651948778724,
+        "sigma_hat_mean": 2.6446856464769932
       }
     },
     "weekly_156": {
@@ -10523,13 +10523,13 @@
           "null_calibration_deviation": 0.003999999999999997,
           "null_calibration_mean": 0.054,
           "null_calibration_std": 0.0,
-          "null_sd_mean": 13.802558112977879,
-          "power_at_reference_mean": 0.7089,
-          "power_at_reference_std": 0.028168280032689192,
-          "power_bias_vs_reference": 0.04110167079315785,
+          "null_sd_mean": 13.842921767595476,
+          "power_at_reference_mean": 0.7065999999999999,
+          "power_at_reference_std": 0.028647094093467773,
+          "power_bias_vs_reference": 0.03880167079315777,
           "reference_power": 0.6677983292068421,
-          "rho_hat_mean": 0.3458081362881424,
-          "sigma_hat_mean": 2.7352280147841306
+          "rho_hat_mean": 0.34842335035490773,
+          "sigma_hat_mean": 2.7335127577710026
         },
         "one_sided_positive|placebo_empirical": {
           "fallback_rate": 0.0,
@@ -10562,14 +10562,14 @@
           "n_runs": 6,
           "null_calibration_deviation": -0.020000000000000004,
           "null_calibration_mean": 0.03,
-          "null_calibration_std": 0.001788854381999832,
-          "null_sd_mean": 9.661561339200231,
-          "power_at_reference_mean": 0.9068999999999999,
-          "power_at_reference_std": 0.004277849927241514,
-          "power_bias_vs_reference": 0.2391016707931578,
+          "null_calibration_std": 0.0028284271247461914,
+          "null_sd_mean": 9.65204800142209,
+          "power_at_reference_mean": 0.906,
+          "power_at_reference_std": 0.0042313118533145394,
+          "power_bias_vs_reference": 0.2382016707931579,
           "reference_power": 0.6677983292068421,
-          "rho_hat_mean": 0.3458081362881424,
-          "sigma_hat_mean": 2.7352280147841306
+          "rho_hat_mean": 0.34842335035490773,
+          "sigma_hat_mean": 2.7335127577710026
         }
       },
       "cells": {
@@ -10585,13 +10585,13 @@
           "null_calibration_deviation": 0.003999999999999997,
           "null_calibration_mean": 0.054,
           "null_calibration_std": 0.0,
-          "null_sd_mean": 13.79075887424641,
-          "power_at_reference_mean": 0.7098,
-          "power_at_reference_std": 0.03592102448427659,
-          "power_bias_vs_reference": 0.042001670793157864,
+          "null_sd_mean": 13.883737648857373,
+          "power_at_reference_mean": 0.7039,
+          "power_at_reference_std": 0.038608030252785405,
+          "power_bias_vs_reference": 0.03610167079315785,
           "reference_power": 0.6677983292068421,
-          "rho_hat_mean": 0.34454051293459836,
-          "sigma_hat_mean": 2.7375816241947395
+          "rho_hat_mean": 0.3505768582302916,
+          "sigma_hat_mean": 2.733568459693947
         },
         "model_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -10605,13 +10605,13 @@
           "null_calibration_deviation": 0.003999999999999997,
           "null_calibration_mean": 0.054,
           "null_calibration_std": 0.0,
-          "null_sd_mean": 13.796637688205607,
-          "power_at_reference_mean": 0.7089000000000001,
-          "power_at_reference_std": 0.03719381669041231,
-          "power_bias_vs_reference": 0.04110167079315796,
+          "null_sd_mean": 13.824749877447436,
+          "power_at_reference_mean": 0.7079,
+          "power_at_reference_std": 0.03606244584051388,
+          "power_bias_vs_reference": 0.04010167079315785,
           "reference_power": 0.6677983292068421,
-          "rho_hat_mean": 0.3453594078666903,
-          "sigma_hat_mean": 2.735718993188518
+          "rho_hat_mean": 0.34716870477129325,
+          "sigma_hat_mean": 2.7345863866499274
         },
         "model_simulation|ols": {
           "fallback_rate": 0.0,
@@ -10664,14 +10664,14 @@
           "n_runs": 2,
           "null_calibration_deviation": -0.020000000000000004,
           "null_calibration_mean": 0.03,
-          "null_calibration_std": 0.0028284271247461905,
-          "null_sd_mean": 9.67194619747973,
-          "power_at_reference_mean": 0.9054,
-          "power_at_reference_std": 0.008768124086713245,
-          "power_bias_vs_reference": 0.23760167079315786,
+          "null_calibration_std": 0.005656854249492383,
+          "null_sd_mean": 9.652862659612875,
+          "power_at_reference_mean": 0.9045000000000001,
+          "power_at_reference_std": 0.007495331880577442,
+          "power_bias_vs_reference": 0.23670167079315796,
           "reference_power": 0.6677983292068421,
-          "rho_hat_mean": 0.34454051293459836,
-          "sigma_hat_mean": 2.7375816241947395
+          "rho_hat_mean": 0.3505768582302916,
+          "sigma_hat_mean": 2.733568459693947
         },
         "residual_simulation|lasso": {
           "fallback_rate": 0.0,
@@ -10685,13 +10685,13 @@
           "null_calibration_deviation": -0.019000000000000003,
           "null_calibration_mean": 0.031,
           "null_calibration_std": 0.0014142135623730963,
-          "null_sd_mean": 9.66047863637294,
-          "power_at_reference_mean": 0.9081,
-          "power_at_reference_std": 0.002404163056034311,
-          "power_bias_vs_reference": 0.2403016707931579,
+          "null_sd_mean": 9.651022160905374,
+          "power_at_reference_mean": 0.9063000000000001,
+          "power_at_reference_std": 0.004949747468305837,
+          "power_bias_vs_reference": 0.23850167079315798,
           "reference_power": 0.6677983292068421,
-          "rho_hat_mean": 0.3453594078666903,
-          "sigma_hat_mean": 2.735718993188518
+          "rho_hat_mean": 0.34716870477129325,
+          "sigma_hat_mean": 2.7345863866499274
         },
         "residual_simulation|ols": {
           "fallback_rate": 0.0,
@@ -10725,14 +10725,14 @@
         "n_runs": 14,
         "null_calibration_deviation": -0.003010989010989007,
         "null_calibration_mean": 0.046989010989010996,
-        "null_calibration_std": 0.017175069979639503,
-        "null_sd_mean": 10.097048708076644,
-        "power_at_reference_mean": 0.7957824175824175,
-        "power_at_reference_std": 0.10152868768759203,
-        "power_bias_vs_reference": 0.1279840883755754,
+        "null_calibration_std": 0.017228731312887432,
+        "null_sd_mean": 10.110270272436411,
+        "power_at_reference_mean": 0.7944109890109889,
+        "power_at_reference_std": 0.10203587638779624,
+        "power_bias_vs_reference": 0.12661265980414682,
         "reference_power": 0.6677983292068421,
-        "rho_hat_mean": 0.346053329398856,
-        "sigma_hat_mean": 2.7348216450962743
+        "rho_hat_mean": 0.34829494145608353,
+        "sigma_hat_mean": 2.733351424799308
       }
     },
     "weekly_52": {
