@@ -3,12 +3,39 @@
 **Document type:** Functional and methodological product specification  
 **Parent document:** `PRD.md`  
 **Version:** 1.0  
-**Status:** Draft for methodology approval  
-**Date:** 4 August 2026  
+**Status:** Approved methodology; production implementation in progress
+**Date:** 14 August 2026
 
 ## 1. Purpose
 
 This specification defines the prospective power-analysis and test-sizing capability required within GeoTestLab.
+
+The methodology decision pack is approved under
+[`ADR-000`](decisions/ADR-000-power-methodology-approval-gate.md). Approval
+does not turn the experimental evidence harness into a production engine: the
+production contract must preserve the approved method/support conditions and
+must keep media-delivery and effect-plausibility assumptions outside the
+statistical calculation.
+
+## 1.1 Production statistical-power contract (PR4)
+
+The first production boundary is implemented in
+`geotestlab/power/production/`. It accepts a canonical `RegionalKPIDataset`
+and an explicit `ProductionPowerConfig` containing the metric, historical
+period, test/control regions, planned test dates, target effects, direction,
+simulation method, fit method and approved simulation settings.
+
+It returns a typed `ProductionPowerResult` containing the power curve and
+target-effect estimates, conditional Clopper–Pearson intervals, MDE, effective
+and requested periods, fit and safety diagnostics, source/input fingerprints,
+support status, blockers and warnings. It records the statistical-power stage
+in the shared experiment record and can identify stale results when the source
+dataset or configuration changes.
+
+There is intentionally no implicit best-method default. `model_simulation` or
+`residual_simulation` must be selected and recorded explicitly; empirical
+placebo results remain a cross-check. The result is not a media feasibility or
+effect-plausibility recommendation.
 
 The capability must help an analyst answer:
 
