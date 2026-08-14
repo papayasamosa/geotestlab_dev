@@ -1,6 +1,6 @@
 # ADR-015: Production simulation count and reproducibility
 
-- **Status:** Proposed — pending product-owner approval
+- **Status:** Approved — product-owner approval recorded in ADR-000
 - **Date:** 2026-08-14
 
 ## Decision proposal
