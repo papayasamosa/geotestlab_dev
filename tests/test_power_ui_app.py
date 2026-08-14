@@ -39,6 +39,7 @@ def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
 
     assert any(item.label == "Simulation method" for item in app.selectbox)
     assert any(item.label == "Counterfactual fit" for item in app.selectbox)
+    assert any(item.label == "Frequency" for item in app.selectbox)
     assert any(item.label == "Target effect (%)" for item in app.number_input)
     assert any("Run production power" in item.label for item in app.button)
     assert not app.exception

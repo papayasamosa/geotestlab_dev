@@ -1,16 +1,17 @@
 {
-  "app_baseline_commit": "407f4a502a8726e6dd23b0257de1f4134b5af0ce",
+  "app_baseline_commit": "1806dea6b24c0b53c9e34b0b7255b1d7a1b37a80",
   "expected": {
-    "n_tabs": 4,
+    "n_tabs": 5,
     "tab_labels": [
       "\u2699\ufe0f Region Matching",
       "\ud83d\udd0d Validate Test Design",
       "\ud83d\udcca Measure Test Impact",
-      "\ud83e\udde0 Bayesian TBR"
+      "\ud83e\udde0 Bayesian TBR",
+      "\ud83d\udcc8 Power & Test Sizing"
     ]
   },
   "fixture_version": 1,
-  "golden_created_by_commit": "6b35f6863e27263c17c06b32159959ef89f29efd",
+  "golden_created_by_commit": "e852216603320bcd913153e1e86b75d58d389096",
   "known_limitations": [],
   "scenario": "app_tab_labels",
   "schema_version": 1,

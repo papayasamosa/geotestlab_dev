@@ -6628,6 +6628,23 @@ def render_production_power_tab():
             help="Dates after the historical period used for the planned test window.",
         )
 
+        frequency_options = ("weekly", "daily")
+        preferred_frequency = str(validation_inputs.get("time_series_frequency") or "weekly")
+        frequency = st.selectbox(
+            "Frequency",
+            frequency_options,
+            index=(
+                frequency_options.index(preferred_frequency)
+                if preferred_frequency in frequency_options
+                else 0
+            ),
+            format_func=lambda value: value.title(),
+            help=(
+                "Preserve the validated KPI frequency. Daily data is explicitly passed "
+                "to the safety policy and remains blocked until an approved daily model exists."
+            ),
+        )
+
         method_col, fit_col = st.columns(2)
         with method_col:
             method = st.selectbox(
@@ -6713,6 +6730,7 @@ def render_production_power_tab():
                 test_dates=tuple(pd.Timestamp(value) for value in test_dates),
                 target_effects=(float(target_effect),),
                 side=direction,
+                frequency=frequency,
                 target_power=float(target_power),
                 n_simulations=int(n_simulations),
                 mde_bounds=(0.0, float(mde_upper)),
@@ -6726,7 +6744,15 @@ def render_production_power_tab():
                 st.session_state.production_power_config = config
                 st.session_state.production_power_result = result
                 _save_experiment_record(rec)
-                st.success("Production power run completed and recorded in the experiment record.")
+                if result.completed:
+                    st.success(
+                        "Production power run completed and recorded in the experiment record."
+                    )
+                else:
+                    st.warning(
+                        "Production power run is incomplete or blocked; the result was recorded "
+                        "for audit and is not usable for recommendation."
+                    )
             except (TypeError, ValueError, KeyError) as exc:
                 st.error(f"Production power could not run: {exc}")
 

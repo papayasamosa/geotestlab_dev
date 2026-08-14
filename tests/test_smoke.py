@@ -152,6 +152,7 @@ class TestLiveAppStartup:
             "\U0001f50d Validate Test Design",
             "\U0001f4ca Measure Test Impact",
             "\U0001f9e0 Bayesian TBR",
+            "\U0001f4c8 Power & Test Sizing",
         ]
 
     @pytest.mark.smoke
