@@ -1,18 +1,19 @@
 {
-  "app_baseline_commit": "7d41ed7433abfa0d0d855503425419a2c3a3c616",
+  "app_baseline_commit": "85757ae07bdffc4a42df3b36ad7054af9484399b",
   "expected": {
-    "n_tabs": 6,
+    "n_tabs": 7,
     "tab_labels": [
       "\u2699\ufe0f Region Matching",
       "\ud83d\udd0d Validate Test Design",
       "\ud83d\udcca Measure Test Impact",
       "\ud83e\udde0 Bayesian TBR",
       "\ud83d\udcc8 Power & Test Sizing",
-      "\ud83d\udce3 Media Delivery Feasibility"
+      "\ud83d\udce3 Media Delivery Feasibility",
+      "\ud83c\udfaf Effect Plausibility"
     ]
   },
   "fixture_version": 1,
-  "golden_created_by_commit": "7d41ed7433abfa0d0d855503425419a2c3a3c616",
+  "golden_created_by_commit": "85757ae07bdffc4a42df3b36ad7054af9484399b",
   "known_limitations": [],
   "scenario": "app_tab_labels",
   "schema_version": 1,

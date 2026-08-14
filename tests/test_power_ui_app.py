@@ -32,6 +32,16 @@ def test_media_delivery_tab_renders_without_power_dataset():
     assert not app.exception
 
 
+def test_effect_plausibility_tab_renders_without_evidence():
+    app = AppTest.from_file(APP_PATH)
+    app.run(timeout=RUN_TIMEOUT)
+
+    assert any("Effect Plausibility" in item.value for item in app.subheader)
+    assert any(item.label == "Effectiveness evidence type" for item in app.selectbox)
+    assert any(item.label == "Evidence quality" for item in app.selectbox)
+    assert not app.exception
+
+
 def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     app = AppTest.from_file(APP_PATH)
     app.run(timeout=RUN_TIMEOUT)

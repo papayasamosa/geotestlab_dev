@@ -38,6 +38,7 @@ from geotestlab.data.mapping import (
 )
 from geotestlab.data.models import compute_mapping_report
 from geotestlab.data.period_quality import compute_period_quality
+from geotestlab.effect.ui import render_effect_plausibility_tab
 
 # Experiment record (geotestlab.experiment) — identity, fingerprints, stage
 # status, design freeze, and reproducible export. Pure, no Streamlit imports.
@@ -2112,7 +2113,7 @@ issue_severity = (
 # =============================================================================
 # Main app – Tabs
 # =============================================================================
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
     [
         "⚙️ Region Matching",
         "🔍 Validate Test Design",
@@ -2120,6 +2121,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
         "🧠 Bayesian TBR",
         "📈 Power & Test Sizing",
         "📣 Media Delivery Feasibility",
+        "🎯 Effect Plausibility",
     ]
 )
 
@@ -6820,6 +6822,9 @@ with tab5:
 
 with tab6:
     render_media_delivery_tab()
+
+with tab7:
+    render_effect_plausibility_tab()
 
 
 # ------------------------------------------------------------

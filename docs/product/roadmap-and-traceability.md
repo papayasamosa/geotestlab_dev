@@ -118,7 +118,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Prospective power | Evidence harness plus approved production contract and selected-design UI | FR-10, FR-11 | Current | Continue design-share and duration UX hardening |
 | Platform selector | Generic profile schema with registered Meta profile | FR-12 | In progress | Complete dynamic selector and approve first profile set |
 | Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | In progress | Add further profiles and production delivery integrations |
-| Effect plausibility | None | FR-14 | Planned | Define evidence hierarchy and scenarios |
+| Effect plausibility | Typed evidence/scenario layer with MDE comparison | FR-14 | In progress | Approve evidence hierarchy and build integrated recommendation |
 | Integrated recommendation | Matching recommendations only | FR-15 | Planned | Build after power and delivery layers |
 | Design freeze | Versioned frozen-design foundations (immutable versions, fingerprints) | FR-16 | Partially implemented | Complete the FR-16 approved-design-freeze contract |
 | Impact measurement | Actual/counterfactual and uplift | FR-17 | Current | Link to approved design |
@@ -360,7 +360,7 @@ broader profiles and production integrations remain planned.
 
 ## Milestone 7. Effect plausibility and spend recommendation
 
-**Status:** Planned.
+**Status:** Effect-plausibility evidence/scenario layer in progress; integrated recommendation remains planned.
 
 ### Deliverables
 
@@ -412,8 +412,8 @@ remain pending.
 6. `feature/power-analysis-core` — delivered
 7. `feature/power-analysis-ui` — delivered
 8. `feature/platform-profile-schema` — delivered
-9. `feature/media-delivery-feasibility` — in progress
-10. `feature/effect-plausibility-scenarios`
+9. `feature/media-delivery-feasibility` — delivered
+10. `feature/effect-plausibility-scenarios` — in progress
 11. `feature/integrated-design-recommendation`
 12. `feature/unified-experiment-export`
 13. `docs/user-and-methodology-guides`
