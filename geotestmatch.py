@@ -101,6 +101,7 @@ from geotestlab.matching import (
 from geotestlab.matching import (
     read_kpi_pattern_excel as _read_kpi_pattern_excel,
 )
+from geotestlab.media.ui import render_media_delivery_tab
 from geotestlab.power.production import (
     ProductionPowerConfig,
     production_input_fingerprint,
@@ -2111,13 +2112,14 @@ issue_severity = (
 # =============================================================================
 # Main app – Tabs
 # =============================================================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     [
         "⚙️ Region Matching",
         "🔍 Validate Test Design",
         "📊 Measure Test Impact",
         "🧠 Bayesian TBR",
         "📈 Power & Test Sizing",
+        "📣 Media Delivery Feasibility",
     ]
 )
 
@@ -6815,6 +6817,9 @@ def render_production_power_tab():
 
 with tab5:
     render_production_power_tab()
+
+with tab6:
+    render_media_delivery_tab()
 
 
 # ------------------------------------------------------------

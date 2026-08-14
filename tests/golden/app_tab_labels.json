@@ -1,13 +1,14 @@
 {
   "app_baseline_commit": "1806dea6b24c0b53c9e34b0b7255b1d7a1b37a80",
   "expected": {
-    "n_tabs": 5,
+    "n_tabs": 6,
     "tab_labels": [
       "\u2699\ufe0f Region Matching",
       "\ud83d\udd0d Validate Test Design",
       "\ud83d\udcca Measure Test Impact",
       "\ud83e\udde0 Bayesian TBR",
-      "\ud83d\udcc8 Power & Test Sizing"
+      "\ud83d\udcc8 Power & Test Sizing",
+      "\ud83d\udce3 Media Delivery Feasibility"
     ]
   },
   "fixture_version": 1,
