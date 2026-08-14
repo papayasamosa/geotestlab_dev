@@ -246,13 +246,13 @@ class TestMethodologySafetyExpectedStates:
         "daily_weekday",
         "seasonal_residuals",  # daily frequency -> blocked, same as daily_weekday
         "heteroskedastic",
+        "high_autocorrelation",  # rho uncertainty now blocks the unsafe AR(1) regime
         "mde_not_reached",
     }
     EXPECTED_SUPPORTED = {
         "weekly_104",
         "weekly_156",
         "low_volume",
-        "high_autocorrelation",
         "collinear_controls",
         "many_weak_controls",
         "duplicate_controls",

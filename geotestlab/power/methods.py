@@ -407,6 +407,62 @@ def fit_ar1(residuals):
     return rho, sigma
 
 
+def _bootstrap_ar1_parameters(residuals, n_draws, rng):
+    """Parametric bootstrap for AR(1) parameter uncertainty.
+
+    A single fitted ``rho``/``sigma`` pair makes future power conditional on
+    an uncertain short historical sample.  This lightweight outer bootstrap
+    samples AR(1) paths from the fitted process and re-estimates both
+    parameters, so the future-path simulation can propagate that uncertainty.
+    Counterfactual-coefficient uncertainty remains separately visible in the
+    fit diagnostics and must be resolved by the approved production method.
+    """
+    residuals = np.asarray(residuals, dtype=float)
+    if len(residuals) < 3 or n_draws <= 1:
+        rho, sigma = fit_ar1(residuals)
+        return np.asarray([rho]), np.asarray([sigma])
+    rho, sigma = fit_ar1(residuals)
+    stationary_sd = sigma / np.sqrt(max(1.0 - rho**2, 1e-8))
+    paths = np.empty((int(n_draws), len(residuals)), dtype=float)
+    previous = rng.normal(0.0, stationary_sd, size=int(n_draws))
+    for t in range(len(residuals)):
+        previous = rho * previous + rng.normal(0.0, sigma, size=int(n_draws))
+        paths[:, t] = previous
+    previous_values = paths[:, :-1]
+    next_values = paths[:, 1:]
+    previous_centered = previous_values - previous_values.mean(axis=1, keepdims=True)
+    next_centered = next_values - next_values.mean(axis=1, keepdims=True)
+    denominator = np.sum(previous_centered**2, axis=1)
+    rho_draws = np.divide(
+        np.sum(previous_centered * next_centered, axis=1),
+        denominator,
+        out=np.zeros(int(n_draws), dtype=float),
+        where=denominator > 0,
+    )
+    rho_draws = np.clip(rho_draws, -0.99, 0.99)
+    innovations = next_values - rho_draws[:, None] * previous_values
+    sigma_draws = np.std(innovations, axis=1, ddof=1)
+    return rho_draws, sigma_draws
+
+
+def _simulate_ar1_mixture_paths(rho_draws, sigma_draws, n_periods, n_sim, rng, e_start=0.0):
+    """Simulate paths after drawing one AR(1) parameter pair per path."""
+    rho_draws = np.asarray(rho_draws, dtype=float)
+    sigma_draws = np.asarray(sigma_draws, dtype=float)
+    if len(rho_draws) == 0:
+        rho_draws = np.asarray([0.0])
+        sigma_draws = np.asarray([0.0])
+    selected = rng.integers(0, len(rho_draws), size=int(n_sim))
+    rho = rho_draws[selected]
+    sigma = sigma_draws[selected]
+    previous = np.full(int(n_sim), float(e_start), dtype=float)
+    out = np.empty((int(n_sim), int(n_periods)), dtype=float)
+    for t in range(int(n_periods)):
+        previous = rho * previous + rng.normal(0.0, sigma, size=int(n_sim))
+        out[:, t] = previous
+    return out
+
+
 def _safety_diagnostics(fit, frequency, policy=DEFAULT_SAFETY_POLICY):
     """Evaluate the methodology safety policy against a pre-period fit.
 
@@ -420,17 +476,25 @@ def _safety_diagnostics(fit, frequency, policy=DEFAULT_SAFETY_POLICY):
     retained_periods = int(fit.diagnostics.get("dates_jointly_complete", len(fit.residuals)))
     continuity = str(fit.diagnostics.get("continuity", "unknown"))
     n_predictors = int(fit.diagnostics.get("n_predictors", 0))
-    return evaluate_safety(
+    # Heteroskedasticity is a property of the AR(1) innovations, not of the
+    # autocorrelated residual levels. Testing residual levels can mistake a
+    # persistence run for scale dependence, producing avoidable false blocks.
+    innovations = (
+        fit.residuals[1:] - rho * fit.residuals[:-1] if len(fit.residuals) > 1 else fit.residuals
+    )
+    result = evaluate_safety(
         frequency=frequency,
         retained_periods=retained_periods,
         continuity=continuity,
         n_predictors=n_predictors,
         rho=rho,
         fit_diagnostics=fit.diagnostics,
-        residuals=fit.residuals,
-        level=fit.cf_fit,
+        residuals=innovations,
+        level=fit.cf_fit[1:] if len(fit.cf_fit) > 1 else fit.cf_fit,
         policy=policy,
     )
+    result["metrics"]["heteroskedasticity"]["input"] = "AR(1) innovations"
+    return result
 
 
 def _simulate_ar1_paths(rho, sigma, n_periods, n_sim, rng, e_start=0.0):
@@ -440,6 +504,31 @@ def _simulate_ar1_paths(rho, sigma, n_periods, n_sim, rng, e_start=0.0):
         prev = rho * prev + rng.normal(0.0, sigma, size=n_sim)
         out[:, t] = prev
     return out
+
+
+def _moving_block_bootstrap(values, n_sim, n_periods, rng, block_length=None):
+    """Return sums of contiguous residual blocks for a future horizon.
+
+    The former residual-simulation path sampled every residual independently,
+    which destroys the observed autocorrelation and systematically narrows the
+    null distribution when persistence is positive.  A circular moving-block
+    bootstrap retains short-range dependence while remaining deterministic and
+    usable for arbitrary requested horizons.  The block length is deliberately
+    capped for this evidence spike; production selection belongs in the
+    methodology ADR.
+    """
+    residuals = np.asarray(values, dtype=float)
+    if len(residuals) == 0:
+        return np.zeros(n_sim)
+    if block_length is None:
+        block_length = min(8, max(2, int(round(len(residuals) ** (1.0 / 3.0))) * 2))
+    block_length = min(max(1, int(block_length)), len(residuals))
+    n_blocks = int(np.ceil(n_periods / block_length))
+    starts = rng.integers(0, len(residuals), size=(n_sim, n_blocks))
+    offsets = np.arange(block_length, dtype=int)[None, None, :]
+    indices = (starts[:, :, None] + offsets) % len(residuals)
+    paths = residuals[indices].reshape(n_sim, -1)[:, :n_periods]
+    return paths.sum(axis=1)
 
 
 def project_counterfactual(fit, test_df, test_regions, control_regions):
@@ -749,8 +838,10 @@ def residual_simulation(
     safety_policy=DEFAULT_SAFETY_POLICY,
     enforce_safety=True,
 ):
-    """Null totals by resampling pre-period residuals (with replacement).
+    """Null totals by moving-block bootstrap of pre-period residuals.
 
+    Contiguous residual blocks preserve short-range autocorrelation; sampling
+    individual residuals would make the null too narrow for persistent series.
     Uses independent calibration / alternative / diagnostics bootstrap streams
     derived from ``seed`` (``child_rngs(seed, 3)``, NumPy >= 1.24 compatible).
     Empty residual evidence is NOT padded; the service enforces the minimum
@@ -775,7 +866,13 @@ def residual_simulation(
     cf_test, retained_test_dates, test_align_diag = project_counterfactual(
         fit, test_df, test_regions, control_regions
     )
-    matrix_diagnostics = {**fit.diagnostics, "safety": safety, "test_window": test_align_diag}
+    matrix_diagnostics = {
+        **fit.diagnostics,
+        "safety": safety,
+        "test_window": test_align_diag,
+        "bootstrap_method": "moving_block",
+        "bootstrap_block_length": int(min(8, max(2, int(round(len(resid) ** (1.0 / 3.0))) * 2))),
+    }
     if test_align_diag.get("duplicate_keys_blocking"):
         return _blocked_result(
             "duplicate (region, date) keys among selected regions in the test window; "
@@ -795,11 +892,11 @@ def residual_simulation(
 
     cal_rng, alt_rng, diag_rng = child_rngs(seed, 3)
 
+    block_length = min(8, max(2, int(round(len(resid) ** (1.0 / 3.0))) * 2))
+
     def _bootstrap(stream):
-        if len(resid) == 0:
-            return np.zeros(n_sim)
-        return cf_test_sum + stream.choice(resid, size=(n_sim, n_test_use), replace=True).sum(
-            axis=1
+        return cf_test_sum + _moving_block_bootstrap(
+            resid, n_sim, n_test_use, stream, block_length=block_length
         )
 
     cal_null = _bootstrap(cal_rng)
@@ -828,6 +925,8 @@ def residual_simulation(
         "effective_test_periods": n_test_use,
         "requested_test_periods": int(n_test),
         "cf_test_sum": cf_test_sum,
+        "bootstrap_method": "moving_block",
+        "bootstrap_block_length": int(block_length),
         "safety": safety,
         "blocked": False,
         "block_reason": None,

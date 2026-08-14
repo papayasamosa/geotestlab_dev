@@ -41,12 +41,12 @@ from geotestlab.power.market_evidence import (
 )
 from geotestlab.power.models import METHODOLOGY_VERSION
 
-EVIDENCE_SUITE_VERSION = "2.0.0"
+EVIDENCE_SUITE_VERSION = "2.1.0"
 
 # Data-generation seeds (independent synthetic markets) x Monte-Carlo
 # simulation seeds (independent random streams over the SAME market).
-DEFAULT_DATA_SEEDS = (0, 1, 2)
-DEFAULT_SIM_SEEDS = (0, 1)
+DEFAULT_DATA_SEEDS = (0, 1, 2, 3, 4)
+DEFAULT_SIM_SEEDS = (0, 1, 2)
 DEFAULT_N_SIM = 500
 
 # Scenarios the current AR(1) method is expected to BLOCK outright (Stage 3
@@ -54,8 +54,16 @@ DEFAULT_N_SIM = 500
 # (completed=True) result on one of these is a false positive by
 # construction, regardless of the specific effect/seed.
 EXPECTED_BLOCKED_CORE_SCENARIOS = frozenset(
-    {"weekly_52", "daily_weekday", "seasonal_residuals", "heteroskedastic", "mde_not_reached"}
+    {
+        "weekly_52",
+        "daily_weekday",
+        "seasonal_residuals",
+        "heteroskedastic",
+        "high_autocorrelation",
+        "mde_not_reached",
+    }
 )
+EXPECTED_SUPPORTED_CORE_SCENARIOS = frozenset(MARKET_SCENARIOS) - EXPECTED_BLOCKED_CORE_SCENARIOS
 
 # ---------------------------------------------------------------------------
 # Proposed (NOT approved) acceptance thresholds.
@@ -286,7 +294,7 @@ def run_evidence_v2(
     scenario_names=None,
     additional_scenario_names=ADDITIONAL_SAFETY_SCENARIOS,
     methods=("model_simulation", "residual_simulation"),
-    fit_methods=("ols",),
+    fit_methods=("ols", "elastic_net", "lasso"),
     side="one_sided_positive",
     data_seeds=DEFAULT_DATA_SEEDS,
     sim_seeds=DEFAULT_SIM_SEEDS,
@@ -438,6 +446,12 @@ def summarise_v2(runs, safety_runs):
     n_blockers = sum(1 for r in runs if r.get("n_blockers", 0) > 0)
     n_fallback = sum(1 for r in runs if r.get("fallback_reason"))
     n_errored = sum(1 for r in runs if r.get("error"))
+    expected_supported_runs = [
+        r for r in runs if r["scenario"] in EXPECTED_SUPPORTED_CORE_SCENARIOS
+    ]
+    false_blocked = [
+        r for r in expected_supported_runs if not r.get("completed") and not r.get("error")
+    ]
 
     # Seed sensitivity: for each (scenario, method, fit_method) combo, the
     # std of power_at_reference across every (data_seed, sim_seed) pair.
@@ -463,6 +477,47 @@ def summarise_v2(runs, safety_runs):
     safety_pass = sum(1 for r in safety_runs if r.get("safety_correct"))
     safety_total = len(safety_runs)
 
+    scenario_results = {}
+    scenario_keys = sorted(
+        {(r.get("scenario"), r.get("method"), r.get("fit_method")) for r in runs}
+    )
+    for scenario, method, fit_method in scenario_keys:
+        rows = [
+            r
+            for r in runs
+            if r.get("scenario") == scenario
+            and r.get("method") == method
+            and r.get("fit_method") == fit_method
+        ]
+        supported = [r for r in rows if r.get("completed")]
+        biases = [
+            r["power_at_reference"] - r["reference_power"]
+            for r in supported
+            if r.get("power_at_reference") is not None and r.get("reference_power") is not None
+        ]
+        scenario_results[f"{scenario}|{method}|{fit_method}"] = {
+            "scenario": scenario,
+            "method": method,
+            "fit_method": fit_method,
+            "n_runs": len(rows),
+            "n_completed": len(supported),
+            "n_blocked": sum(1 for r in rows if r.get("n_blockers", 0) > 0),
+            "false_supported": bool(scenario in EXPECTED_BLOCKED_CORE_SCENARIOS and supported),
+            "power_bias": _quantiles(biases),
+            "power_bias_abs": _quantiles([abs(v) for v in biases]),
+            "mde_bias_relative": _quantiles(
+                [
+                    abs(r["mde"] - r["reference_mde"]) / abs(r["reference_mde"])
+                    for r in supported
+                    if r.get("mde") is not None
+                    and r.get("mde_reached")
+                    and r.get("reference_mde") not in (None, 0)
+                    and r.get("reference_mde_reached")
+                ]
+            ),
+            "blockers": sorted({blocker for r in rows for blocker in r.get("blockers", [])}),
+        }
+
     return {
         "total_runs": n_total,
         "n_completed": n_completed,
@@ -478,6 +533,11 @@ def summarise_v2(runs, safety_runs):
         "false_supported_rate": false_supported_rate,
         "false_supported_count": len(false_supported),
         "false_supported_denominator": len(expected_block_runs),
+        "false_blocked_rate": (
+            len(false_blocked) / len(expected_supported_runs) if expected_supported_runs else None
+        ),
+        "false_blocked_count": len(false_blocked),
+        "false_blocked_denominator": len(expected_supported_runs),
         "false_mde_rate": false_mde_rate,
         "false_mde_count": len(false_mde),
         "false_mde_denominator": len(mde_eligible),
@@ -485,6 +545,7 @@ def summarise_v2(runs, safety_runs):
         "fallback_rate": n_fallback / n_total if n_total else None,
         "seed_sensitivity_power_std": _quantiles(seed_sensitivities),
         "runtime_seconds": _quantiles(runtimes, qs=(0.5, 0.95)),
+        "scenario_results": scenario_results,
         "additional_safety_scenarios": {
             "n_scenarios": safety_total,
             "n_correct": safety_pass,

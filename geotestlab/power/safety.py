@@ -49,7 +49,7 @@ SUPPORT_STATUSES = (SUPPORTED, SUPPORTED_WITH_WARNING, UNSUPPORTED, BLOCKED)
 
 _SEVERITY = {SUPPORTED: 0, SUPPORTED_WITH_WARNING: 1, UNSUPPORTED: 2, BLOCKED: 3}
 
-SAFETY_POLICY_VERSION = "0.1.0"
+SAFETY_POLICY_VERSION = "0.2.0"
 
 
 def _worst(*statuses: str) -> str:
@@ -84,25 +84,29 @@ class MethodologySafetyPolicy:
     # standard OLS-autocorrelation approximation sqrt((1-rho^2)/n)) at or
     # above this threshold is treated as a plausible near-unit-root process
     # and BLOCKS the result, even when the point estimate itself is lower.
-    persistence_near_unit_root_upper: float = 0.97
+    # The v2 multi-seed study showed that rho~=0.9 is already materially
+    # under-calibrated for the current short-horizon AR(1) simulation even
+    # when the point estimate's upper bound is below 0.97.  Treat a plausible
+    # rho >= 0.92 as unsupported by this spike; an approved production method
+    # may choose a different persistence model after the ADR gate.
+    persistence_near_unit_root_upper: float = 0.92
     persistence_z: float = 2.0
     # A point-estimate rho at or above this (but not near-unit-root) is a
     # warning: power/MDE are more sensitive to noise, not unreliable.
     persistence_warning_rho: float = 0.80
-    # Heteroskedasticity: residuals are split into two halves by ascending
-    # fitted level; a variance ratio (high-level half / low-level half)
-    # outside [1/threshold, threshold] is treated as material and BLOCKS.
-    # A two-group split-variance ratio on ~100 pre-period observations is
-    # inherently noisy at the DATA-GENERATION seed level (a homoskedastic
-    # scenario can show a ratio anywhere from ~0.4 to ~2.7 by chance), so
-    # this is calibrated against the market-evidence scenario suite at its
-    # fixed scenario seed: every homoskedastic-by-design scenario's ratio
-    # stays inside the band while the deliberately heteroskedastic
-    # scenario's ratio (2.59 at its scenario seed) sits just outside it.
-    # This is a coarse first-pass diagnostic, not a validated statistical
-    # test; Stage 5 measures its false-supported/false-blocked rate properly
-    # across many data-generation seeds.
+    # Heteroskedasticity: retain the split-variance candidate for continuity,
+    # but combine it with a dependence-preserving scale-association test.
+    # The latter permutes contiguous residual blocks against fitted levels,
+    # preserving short-range autocorrelation instead of using iid residual
+    # permutations.  The union is intentionally conservative: uncertainty
+    # about a constant-variance assumption blocks the unapproved spike rather
+    # than silently reporting optimistic power.
     heteroskedasticity_ratio_block: float = 2.3
+    heteroskedasticity_scale_pvalue: float = 0.05
+    heteroskedasticity_scale_min_abs_correlation: float = 0.15
+    heteroskedasticity_block_length: int = 13
+    heteroskedasticity_resamples: int = 199
+    heteroskedasticity_random_seed: int = 20240814
 
 
 DEFAULT_SAFETY_POLICY = MethodologySafetyPolicy()
@@ -217,6 +221,12 @@ def heteroskedasticity_support(
     lvl = np.asarray(level, dtype=float)
     if len(r) < 8:
         return UNSUPPORTED, ["too few residuals to assess heteroskedasticity"], {}
+    finite = np.isfinite(r) & np.isfinite(lvl)
+    r = r[finite]
+    lvl = lvl[finite]
+    if len(r) < 8:
+        return UNSUPPORTED, ["too few finite residuals to assess heteroskedasticity"], {}
+
     order = np.argsort(lvl)
     rr = r[order]
     n = len(rr)
@@ -230,19 +240,77 @@ def heteroskedasticity_support(
         ratio = float("inf") if var_high > 0 else 1.0
     upper = policy.heteroskedasticity_ratio_block
     lower = 1.0 / upper
+    centered_sq = (r - float(np.mean(r))) ** 2
+    level_centered = lvl - float(np.mean(lvl))
+    denominator = float(np.sqrt(np.dot(level_centered, level_centered)))
+    sq_centered = centered_sq - float(np.mean(centered_sq))
+    sq_denominator = float(np.sqrt(np.dot(sq_centered, sq_centered)))
+    scale_correlation = (
+        float(np.dot(level_centered, sq_centered) / (denominator * sq_denominator))
+        if denominator > 0 and sq_denominator > 0
+        else 0.0
+    )
+
+    block_length = min(
+        max(2, int(policy.heteroskedasticity_block_length)),
+        max(2, len(r)),
+    )
+    blocks = [r[start : start + block_length] for start in range(0, len(r), block_length)]
+    rng = np.random.default_rng(
+        int(policy.heteroskedasticity_random_seed) + len(r) + int(np.round(np.sum(lvl)))
+    )
+    null_statistics = []
+    for _ in range(max(1, int(policy.heteroskedasticity_resamples))):
+        permuted = np.concatenate([blocks[i] for i in rng.permutation(len(blocks))])[: len(r)]
+        permuted_sq = (permuted - float(np.mean(permuted))) ** 2
+        permuted_centered = permuted_sq - float(np.mean(permuted_sq))
+        permuted_denominator = float(np.sqrt(np.dot(permuted_centered, permuted_centered)))
+        null_statistics.append(
+            float(np.dot(level_centered, permuted_centered) / (denominator * permuted_denominator))
+            if denominator > 0 and permuted_denominator > 0
+            else 0.0
+        )
+    null_statistics = np.asarray(null_statistics, dtype=float)
+    observed_abs = abs(scale_correlation)
+    scale_pvalue = float(
+        (1 + np.count_nonzero(np.abs(null_statistics) >= observed_abs)) / (len(null_statistics) + 1)
+    )
+    scale_candidate_blocks = bool(
+        scale_pvalue <= policy.heteroskedasticity_scale_pvalue
+        and observed_abs >= policy.heteroskedasticity_scale_min_abs_correlation
+    )
+    ratio_candidate_blocks = bool(not np.isfinite(ratio) or ratio >= upper or ratio <= lower)
     metrics = {
         "variance_ratio_high_over_low_level": ratio if np.isfinite(ratio) else None,
         "variance_low_level": var_low,
         "variance_high_level": var_high,
+        "scale_association_correlation": scale_correlation,
+        "scale_association_abs_correlation": observed_abs,
+        "scale_association_block_permutation_pvalue": scale_pvalue,
+        "scale_association_block_length": block_length,
+        "scale_association_resamples": len(null_statistics),
+        "candidate_diagnostics": {
+            "split_variance_ratio": "blocked" if ratio_candidate_blocks else "supported",
+            "block_permutation_scale_association": (
+                "blocked" if scale_candidate_blocks else "supported"
+            ),
+        },
     }
-    if not np.isfinite(ratio) or ratio >= upper or ratio <= lower:
+    if ratio_candidate_blocks or scale_candidate_blocks:
+        candidates = []
+        if ratio_candidate_blocks:
+            candidates.append(
+                f"split variance ratio={ratio if np.isfinite(ratio) else 'inf'} "
+                f"outside [{lower:.2f}, {upper:.2f}]"
+            )
+        if scale_candidate_blocks:
+            candidates.append(
+                "dependence-preserving scale association is material "
+                f"(abs correlation={observed_abs:.3f}, permutation p={scale_pvalue:.3f})"
+            )
         return (
             BLOCKED,
-            [
-                f"residual variance ratio (high-level half / low-level half) = "
-                f"{ratio if np.isfinite(ratio) else 'inf'}, outside the constant-sigma AR(1) "
-                f"support band [{lower:.2f}, {upper:.2f}]"
-            ],
+            ["; ".join(candidates) + "; constant-variance AR(1) simulation is blocked"],
             metrics,
         )
     return SUPPORTED, [], metrics

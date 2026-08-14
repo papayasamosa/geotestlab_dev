@@ -873,6 +873,8 @@ def _run_one(scenario, method, fit_method, side, seed, n_sim, effect_grid, alpha
                 "n_errors": len(res.errors),
                 "n_blockers": len(res.blockers),
                 "n_warnings": len(res.warnings),
+                "support_status": res.support_status,
+                "safety_diagnostics": res.safety_diagnostics,
                 "blockers": list(res.blockers),
                 "errors": list(res.errors),
             }
@@ -901,6 +903,8 @@ def _run_one(scenario, method, fit_method, side, seed, n_sim, effect_grid, alpha
                 "n_errors": 0,
                 "n_blockers": 0,
                 "n_warnings": 0,
+                "support_status": None,
+                "safety_diagnostics": {},
                 "blockers": [],
                 "errors": [],
                 "noise_diagnostics": _noise_diagnostics(scenario, fit_method),

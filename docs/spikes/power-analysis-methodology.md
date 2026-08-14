@@ -17,8 +17,9 @@ by `test/power-methodology-evidence-v2`, see section 10)
 > near-unit-root persistence and sub-104-period weekly history now BLOCK
 > outright rather than merely being "recommended" to flag; daily-frequency
 > data is blocked outright. Section 9's numbers are historical evidence from
-> the state at the time; section 10 reports current, evidence-v2-generation
-> behaviour. A full reconciliation of this document's older sections against
+> the state at the time; section 10 reports the original v2.0 evidence snapshot,
+> while section 10.6 records the current PR2 remediation evidence. A full
+> reconciliation of this document's older sections against
 > current code is Stage 6 scope, not repeated here.
 
 ## 1. Purpose
@@ -531,3 +532,58 @@ explicit open decision below, not resolved in this stage.
 
 Status remains **For methodology approval**; this section adds evidence
 only — no production method is selected, no ADR is approved.
+
+### 10.6 PR2 remediation iteration — current evidence (v2.1)
+
+PR2 reran the study after remediating the two most consequential simulation
+gaps identified by the v2.0 snapshot. `residual_simulation` now uses a
+dependence-preserving moving-block bootstrap rather than independently
+resampling residuals. Heteroskedasticity evidence is evaluated on AR(1)
+innovations with both the existing split-variance diagnostic and a
+deterministic contiguous-block permutation test for level/scale association.
+The persistence gate now blocks a fitted AR(1) when its approximate upper
+bound reaches 0.92, which prevents the high-autocorrelation scenario from
+being treated as supported evidence. An AR-parameter bootstrap was also
+implemented and tested for reproducibility, but was not selected as the
+default because its finite-sample calibration was less stable in the
+characterisation tests.
+
+The committed v2.1 run uses 5 data-generation seeds × 3 simulation seeds ×
+2 simulation methods × 3 fit methods across 12 core scenarios: **1,080 core
+runs**, plus 25 additional safety checks. The report now retains
+scenario/method/fit-level results and explicitly records both false-supported
+and false-blocked rates.
+
+| Statistic | v2.1 result |
+|---|---:|
+| Core runs / completed / blocked | 1,080 / 522 / 558 |
+| Null calibration, mean absolute error | 0.0071 |
+| Power bias, mean absolute error | 0.102 |
+| Power bias, worst supported case | 0.477 |
+| MDE bias, relative mean | 0.229 |
+| False-supported rate | 18 / 540 = **3.3%** |
+| False-blocked rate | 36 / 540 = **6.7%** |
+| False-MDE rate | 0 / 522 = **0%** |
+| Seed sensitivity, mean power std | 0.084 |
+| Additional safety checks | 21 / 25 = **84%** |
+
+The remediation materially reduces the aggregate absolute power bias from
+0.216 to 0.102 and the false-supported rate from 6.7% to 3.3%, but it does
+not satisfy the proposed approval thresholds. The remaining false-supported
+cells are explicitly labelled in `scenario_results` and are concentrated in
+the heteroskedastic scenario; residual simulation remains particularly
+optimistic there even with block resampling. Four structural-break safety
+seeds are blocked by the strengthened persistence gate although the current
+additional-scenario expectation does not yet classify them as expected
+blocks. These are visible evidence limitations, not approval claims.
+
+CI now runs `scripts/check_evidence_v2.py`, which verifies the committed
+suite configuration, non-approval status, scenario-level failure labels, and
+a fixed status-level sentinel against the report. The full report and summary
+remain maintainer-generated artefacts; CI checks drift and unsafe relabelling
+without pretending that Monte-Carlo point estimates are byte-stable.
+
+Status remains **For methodology approval**. PR2 supplies a stronger,
+drift-detectable remediation study; it does not authorise production power
+implementation. The unresolved thresholds, scenario expectations, and
+simulation-method choice move to the ADR decision pack in PR3.

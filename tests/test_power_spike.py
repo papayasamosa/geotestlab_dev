@@ -52,7 +52,7 @@ from geotestlab.power import (
     validate_detection_criterion,
     validate_mde_config,
 )
-from geotestlab.power.methods import _shift
+from geotestlab.power.methods import _bootstrap_ar1_parameters, _moving_block_bootstrap, _shift
 from geotestlab.power.service import _split_case
 from geotestlab.power.synthetic import TEST_REGION
 
@@ -197,6 +197,14 @@ class TestModelSimulation:
         null, alt_fn, meta = model_simulation(pre_df, test_df, ("T",), ("C1", "C2"), N_TEST, 500, 3)
         assert abs(meta["rho_estimate"] - RHO) < 0.2
         assert abs(meta["sigma_estimate"] - SIGMA) < 0.5
+
+    def test_ar_parameter_bootstrap_is_reproducible_for_review(self):
+        residuals = np.asarray([0.4, 1.0, 0.2, -0.5, -0.2, 0.7, 1.1, 0.3, -0.4, 0.1])
+        first = _bootstrap_ar1_parameters(residuals, 32, np.random.default_rng(17))
+        second = _bootstrap_ar1_parameters(residuals, 32, np.random.default_rng(17))
+        assert np.array_equal(first[0], second[0])
+        assert np.array_equal(first[1], second[1])
+        assert len(first[0]) == 32
 
     def test_higher_rho_lower_power(self):
         res_lo = run_power_analysis(_case(rho=0.2).df, N_PRE, _config())
@@ -385,6 +393,21 @@ class TestOtherMethods:
         i = int(np.argmin(np.abs(res.effect_grid - 0.5)))
         # shift/sd for rho=0: cf_sum*0.5% / (sigma*sqrt(n_test)) ~ 0.99 -> power ~ 0.16
         assert 0.05 < res.power_curve[i] < 0.4
+
+    def test_residual_simulation_records_moving_block_bootstrap(self):
+        case = _case(rho=0.0)
+        res = run_power_analysis(case.df, N_PRE, _config(method="residual_simulation"))
+        assert res.matrix_diagnostics["bootstrap_method"] == "moving_block"
+        assert res.matrix_diagnostics["bootstrap_block_length"] >= 2
+
+    def test_moving_block_bootstrap_is_reproducible_and_horizon_safe(self):
+        residuals = np.arange(10.0)
+        first = _moving_block_bootstrap(residuals, 20, 7, np.random.default_rng(17), block_length=3)
+        second = _moving_block_bootstrap(
+            residuals, 20, 7, np.random.default_rng(17), block_length=3
+        )
+        assert np.array_equal(first, second)
+        assert first.shape == (20,)
 
     def test_placebo_windows_function(self):
         case = _case()
