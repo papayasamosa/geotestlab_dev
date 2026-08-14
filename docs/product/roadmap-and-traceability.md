@@ -318,9 +318,9 @@ production power core is now the active next stage under those conditions.
 
 ## Milestone 5. Power-analysis MVP
 
-**Status:** In progress after explicit product-owner methodology approval;
-production implementation must preserve the approved method/version and
-support-status conditions.
+**Status:** Production core and candidate scenario engine in progress after
+explicit product-owner methodology approval; implementation must preserve the
+approved method/version and support-status conditions.
 
 ### Deliverables
 
