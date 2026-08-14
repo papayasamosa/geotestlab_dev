@@ -100,6 +100,47 @@ def test_media_plan_surfaces_unknown_required_and_invalid_values():
     assert "missing required field 'required_budget'" not in errors
 
 
+def test_unordered_values_export_deterministically():
+    profile_id = "meta_auction_social"
+    first = MediaPlan(
+        profile_id=profile_id,
+        values={"targeting_restrictions": MediaValue({"age", "location"}, "analyst_assumption")},
+    )
+    second = MediaPlan(
+        profile_id=profile_id,
+        values={"targeting_restrictions": MediaValue({"location", "age"}, "analyst_assumption")},
+    )
+
+    assert first.to_dict() == second.to_dict()
+    assert first.to_dict()["values"]["targeting_restrictions"]["value"] == ["age", "location"]
+
+
+def test_date_fields_reject_invalid_iso_strings():
+    plan = MediaPlan(
+        profile_id="meta_auction_social",
+        values={"forecast_date": MediaValue("2026-02-30", "supplied_forecast")},
+    )
+
+    assert plan.validation_errors() == (
+        "forecast_date must be a valid ISO date or datetime string",
+    )
+
+
+def test_plan_rejects_a_mismatched_explicit_profile():
+    plan = MediaPlan(profile_id="meta_auction_social")
+    other_profile = PlatformProfile(
+        profile_id="other",
+        display_name="Other",
+        channel_family="other",
+        fields=(),
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        plan.validation_errors(other_profile)
+    with pytest.raises(ValueError, match="does not match"):
+        plan.to_dict(other_profile)
+
+
 def test_invalid_provenance_and_duplicate_profile_fields_are_rejected():
     with pytest.raises(ValueError, match="unknown media-input provenance"):
         MediaValue(1, "inferred")

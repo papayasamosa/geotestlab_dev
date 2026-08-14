@@ -7,6 +7,7 @@ it does not calculate delivery or make claims about incremental KPI impact.
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -40,7 +41,10 @@ def _json_value(value: Any) -> Any:
             str(key): _json_value(item)
             for key, item in sorted(value.items(), key=lambda x: str(x[0]))
         }
-    if isinstance(value, (tuple, list, set, frozenset)):
+    if isinstance(value, (set, frozenset)):
+        items = [_json_value(item) for item in value]
+        return sorted(items, key=lambda item: json.dumps(item, sort_keys=True, default=str))
+    if isinstance(value, (tuple, list)):
         return [_json_value(item) for item in value]
     if isinstance(value, StrEnum):
         return value.value
@@ -102,8 +106,14 @@ class MediaField:
                 return f"{self.key} must be non-negative"
         elif self.value_type == "text" and not isinstance(value, str):
             return f"{self.key} must be text"
-        elif self.value_type == "date" and not isinstance(value, (date, datetime, str)):
-            return f"{self.key} must be a date or ISO date string"
+        elif self.value_type == "date":
+            if not isinstance(value, (date, datetime, str)):
+                return f"{self.key} must be a date or ISO date string"
+            if isinstance(value, str):
+                try:
+                    datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    return f"{self.key} must be a valid ISO date or datetime string"
         elif self.value_type == "list" and (
             isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple, set, frozenset))
         ):
@@ -168,10 +178,21 @@ class MediaPlan:
     values: Mapping[str, MediaValue] = field(default_factory=dict)
     custom_fields: Mapping[str, MediaValue] = field(default_factory=dict)
 
+    def _selected_profile(self, profile: PlatformProfile | None) -> PlatformProfile:
+        """Resolve a profile and reject mismatched plan/profile identities."""
+
+        selected_profile = profile or get_platform_profile(self.profile_id)
+        if selected_profile.profile_id != self.profile_id:
+            raise ValueError(
+                f"profile id {selected_profile.profile_id!r} does not match "
+                f"media plan profile id {self.profile_id!r}"
+            )
+        return selected_profile
+
     def validation_errors(self, profile: PlatformProfile | None = None) -> tuple[str, ...]:
         """Validate field names, required values, types and provenance metadata."""
 
-        selected_profile = profile or get_platform_profile(self.profile_id)
+        selected_profile = self._selected_profile(profile)
         field_map = selected_profile.field_map
         errors: list[str] = []
         for key, media_value in self.values.items():
@@ -197,7 +218,7 @@ class MediaPlan:
     def to_dict(self, profile: PlatformProfile | None = None) -> dict[str, Any]:
         """Return a reproducible export preserving profile and provenance."""
 
-        selected_profile = profile or get_platform_profile(self.profile_id)
+        selected_profile = self._selected_profile(profile)
         return {
             "schema_version": MEDIA_PLAN_SCHEMA_VERSION,
             "profile": selected_profile.to_dict(),
