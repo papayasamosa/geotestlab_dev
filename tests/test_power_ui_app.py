@@ -22,6 +22,16 @@ def test_power_tab_explains_canonical_dataset_prerequisite():
     assert not app.exception
 
 
+def test_media_delivery_tab_renders_without_power_dataset():
+    app = AppTest.from_file(APP_PATH)
+    app.run(timeout=RUN_TIMEOUT)
+
+    assert any("Media Delivery Feasibility" in item.value for item in app.subheader)
+    assert any(item.label == "Platform profile" for item in app.selectbox)
+    assert any(item.label == "Default input provenance" for item in app.selectbox)
+    assert not app.exception
+
+
 def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     app = AppTest.from_file(APP_PATH)
     app.run(timeout=RUN_TIMEOUT)

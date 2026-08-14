@@ -686,7 +686,7 @@ The test-sizing workflow shall include a platform or channel selector.
 
 ## FR-13. Media-delivery feasibility
 
-**Status:** Planned.
+**Status:** Partially implemented — profile-driven delivery calculations, provenance and the dedicated feasibility stage exist; broader platform profiles and production delivery integrations remain planned.
 
 GeoTestLab shall assess whether the available budget can deliver the required media exposure within the proposed test area.
 

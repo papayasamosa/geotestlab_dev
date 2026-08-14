@@ -117,7 +117,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Counterfactual Confidence | Priority cascade | FR-9 | Current | Review thresholds and driver logic |
 | Prospective power | Evidence harness plus approved production contract and selected-design UI | FR-10, FR-11 | Current | Continue design-share and duration UX hardening |
 | Platform selector | Generic profile schema with registered Meta profile | FR-12 | In progress | Complete dynamic selector and approve first profile set |
-| Delivery feasibility | None | FR-13 | Planned | Build profile-driven inputs and calculations |
+| Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | In progress | Add further profiles and production delivery integrations |
 | Effect plausibility | None | FR-14 | Planned | Define evidence hierarchy and scenarios |
 | Integrated recommendation | Matching recommendations only | FR-15 | Planned | Build after power and delivery layers |
 | Design freeze | Versioned frozen-design foundations (immutable versions, fingerprints) | FR-16 | Partially implemented | Complete the FR-16 approved-design-freeze contract |
@@ -340,7 +340,8 @@ method/version and support-status conditions.
 
 ## Milestone 6. Platform-aware media feasibility
 
-**Status:** Platform-profile schema in progress; delivery calculations and UI remain planned.
+**Status:** Platform-profile schema and Meta delivery-feasibility stage delivered;
+broader profiles and production integrations remain planned.
 
 ### Deliverables
 
@@ -410,8 +411,8 @@ remain pending.
 5. `spike/power-analysis-methodology` — delivered; methodology pack approved
 6. `feature/power-analysis-core` — delivered
 7. `feature/power-analysis-ui` — delivered
-8. `feature/platform-profile-schema` — in progress
-9. `feature/media-delivery-feasibility`
+8. `feature/platform-profile-schema` — delivered
+9. `feature/media-delivery-feasibility` — in progress
 10. `feature/effect-plausibility-scenarios`
 11. `feature/integrated-design-recommendation`
 12. `feature/unified-experiment-export`

@@ -153,6 +153,7 @@ class TestLiveAppStartup:
             "\U0001f4ca Measure Test Impact",
             "\U0001f9e0 Bayesian TBR",
             "\U0001f4c8 Power & Test Sizing",
+            "\U0001f4e3 Media Delivery Feasibility",
         ]
 
     @pytest.mark.smoke

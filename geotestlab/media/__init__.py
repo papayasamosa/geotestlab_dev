@@ -5,6 +5,16 @@ The contracts here describe platform fields and provenance; delivery calculation
 consume these contracts in a later workflow stage.
 """
 
+from geotestlab.media.delivery import (
+    DELIVERY_CONTRACT_VERSION,
+    DeliveryAssessment,
+    DeliveryStatus,
+    DeliveryThresholds,
+    ExperimentMediaScope,
+    assess_media_delivery,
+    delivery_input_fingerprint,
+    delivery_result_is_stale,
+)
 from geotestlab.media.profiles import (
     INPUT_PROVENANCES,
     MEDIA_PLAN_SCHEMA_VERSION,
@@ -29,4 +39,12 @@ __all__ = [
     "PlatformProfile",
     "get_platform_profile",
     "list_platform_profiles",
+    "DELIVERY_CONTRACT_VERSION",
+    "DeliveryAssessment",
+    "DeliveryStatus",
+    "DeliveryThresholds",
+    "ExperimentMediaScope",
+    "assess_media_delivery",
+    "delivery_input_fingerprint",
+    "delivery_result_is_stale",
 ]
