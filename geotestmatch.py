@@ -16,6 +16,7 @@ from geotestlab.bayesian import (
     run_bayesian,
     summarize_mcmc_diagnostics,
 )
+from geotestlab.data import RegionalKPIConfig, prepare_regional_kpi
 
 # pymc and arviz imported lazily inside the Bayesian tab to avoid
 # segfaults and Numba errors at startup on Python 3.14
@@ -72,12 +73,10 @@ from geotestlab.matching import (
     MatchConstraints,
     basic_strategy,
     build_kpi_pattern_agg_df,
-    build_kpi_pattern_wide,
+    build_kpi_pattern_wide_from_regional,
     calculate_experiment_population_coverage,
     calculate_metrics,
     calculate_metrics_from_flat,
-    coerce_kpi_date_values,
-    filter_kpi_rows,
     find_guided_test_group,
     fit_structural_stats,
     get_grouping_columns,
@@ -819,6 +818,7 @@ def reset_results():
     st.session_state.experiment_validation_inputs = None
     st.session_state.experiment_bayesian_inputs = None
     st.session_state.kpi_pattern_source_bytes = None
+    st.session_state.kpi_pattern_regional_dataset = None
     st.session_state.kpi_pattern_date_range = None
 
 
@@ -846,6 +846,7 @@ def reset_manual_results():
     st.session_state.experiment_validation_inputs = None
     st.session_state.experiment_bayesian_inputs = None
     st.session_state.kpi_pattern_source_bytes = None
+    st.session_state.kpi_pattern_regional_dataset = None
     st.session_state.kpi_pattern_date_range = None
 
 
@@ -1893,25 +1894,28 @@ else:
         st.error("Select a wider date range in the sidebar — at least 2 dates are needed.")
         st.stop()
 
-    _kp_filtered, _kp_n_dropped = filter_kpi_rows(
-        _kp_full, _kp_metric_col_full, kpi_pattern_metric_value, kpi_pattern_agg_col
+    _kp_dataset = prepare_regional_kpi(
+        _kp_full,
+        RegionalKPIConfig(
+            aggregation_column=kpi_pattern_agg_col,
+            metric_column=_kp_metric_col_full,
+            metric_value=str(kpi_pattern_metric_value),
+        ),
     )
-
-    if _kp_filtered.empty:
+    st.session_state["kpi_pattern_regional_dataset"] = _kp_dataset
+    if _kp_dataset.data.empty:
         st.error(
             "No rows remain after filtering. Check your metric/aggregation-level/date-range selection."
         )
         st.stop()
 
-    # Coerce to numeric BEFORE aggregating, so a non-numeric cell becomes missing (and is
-    # reported) rather than silently raising or being dropped by groupby/sum.
-    _kp_filtered, _kp_non_numeric_cells = coerce_kpi_date_values(_kp_filtered, _kp_dates_in_range)
-
-    # sum(min_count=1): an aggregation-level/date group where every contributing row is
-    # missing stays missing, instead of silently becoming a real-looking 0.
-    _kp_wide_raw_full = build_kpi_pattern_wide(
-        _kp_filtered, kpi_pattern_agg_col, _kp_dates_in_range
+    # The shared contract performs numeric coercion and sum(min_count=1)
+    # aggregation before this KPI Pattern-specific date/outage handling.
+    _kp_wide_raw_full = build_kpi_pattern_wide_from_regional(
+        _kp_dataset, str(kpi_pattern_metric_value), _kp_dates_in_range
     )
+    _kp_n_dropped = _kp_dataset.quality.source_rows_dropped_blank_region
+    _kp_non_numeric_cells = _kp_dataset.quality.observations_dropped_non_numeric_kpi
 
     _kp_quality_report = compute_period_quality(_kp_wide_raw_full)
     _kp_reason_by_date = {
@@ -3928,6 +3932,10 @@ def render_time_series_validation(mode: str):
         st.session_state.validation_triggered = False
     if "kpi_long_df" not in st.session_state:
         st.session_state.kpi_long_df = None
+    if "kpi_regional_dataset" not in st.session_state:
+        st.session_state.kpi_regional_dataset = None
+    if "kpi_regional_source_fingerprint" not in st.session_state:
+        st.session_state.kpi_regional_source_fingerprint = None
     if "kpi_quality_report" not in st.session_state:
         st.session_state.kpi_quality_report = None
     if "kpi_rejected_rows" not in st.session_state:
@@ -3946,6 +3954,8 @@ def render_time_series_validation(mode: str):
         st.session_state.kpi_candidate_universe = []
     if "kpi_pattern_source_bytes" not in st.session_state:
         st.session_state.kpi_pattern_source_bytes = None
+    if "kpi_pattern_regional_dataset" not in st.session_state:
+        st.session_state.kpi_pattern_regional_dataset = None
     if "kpi_pattern_date_range" not in st.session_state:
         st.session_state.kpi_pattern_date_range = None
     if "file_upload_key" not in st.session_state:
@@ -3972,6 +3982,8 @@ def render_time_series_validation(mode: str):
         uploaded file can't leave stale parsed data (dates, metric list, long-format df) behind."""
         clear_validation_state()
         st.session_state.kpi_long_df = None
+        st.session_state.kpi_regional_dataset = None
+        st.session_state.kpi_regional_source_fingerprint = None
         st.session_state.kpi_quality_report = None
         st.session_state.kpi_rejected_rows = None
         st.session_state.kpi_mapping_report = None
@@ -3989,19 +4001,41 @@ def render_time_series_validation(mode: str):
     st.markdown("### Data Source")
     st.caption("Upload your historical KPI data and select the metric to model.")
 
-    # Use mode-prefixed uploader key so Design and Evaluate get independent file widgets
-    mode_prefix = "design" if mode == "Design" else "evaluate"
-    uploaded_file = st.file_uploader(
-        "Upload historical KPI Excel file",
-        type=["xlsx"],
-        key=f"kpi_uploader_{mode_prefix}_{st.session_state.file_upload_key}",
-        help="Simple format: column 1 = region name, column 2 = metric name, then date columns. "
-        "Aggregated format: column 1 = raw key (ignored), several aggregation-level columns, "
-        "a metric column, then date columns — pick which columns to use after uploading.",
-        on_change=clear_uploaded_kpi_state,
+    # KPI Pattern has already prepared the sidebar workbook through the shared
+    # canonical contract. Reuse that dataset in validation instead of asking
+    # the analyst to upload the same workbook a second time.
+    shared_kpi_dataset = (
+        st.session_state.get("kpi_pattern_regional_dataset")
+        if st.session_state.get("kpi_pattern_mode")
+        else None
     )
+    mode_prefix = "design" if mode == "Design" else "evaluate"
+    if shared_kpi_dataset is not None:
+        if (
+            st.session_state.get("kpi_regional_source_fingerprint")
+            != shared_kpi_dataset.source_data_fingerprint
+        ):
+            clear_uploaded_kpi_state()
+        st.session_state.kpi_regional_source_fingerprint = (
+            shared_kpi_dataset.source_data_fingerprint
+        )
+        uploaded_file = None
+        st.info(
+            "Using the KPI Pattern workbook and aggregation/metric selections "
+            "already prepared in Region Matching."
+        )
+    else:
+        uploaded_file = st.file_uploader(
+            "Upload historical KPI Excel file",
+            type=["xlsx"],
+            key=f"kpi_uploader_{mode_prefix}_{st.session_state.file_upload_key}",
+            help="Simple format: column 1 = region name, column 2 = metric name, then date columns. "
+            "Aggregated format: column 1 = raw key (ignored), several aggregation-level columns, "
+            "a metric column, then date columns — pick which columns to use after uploading.",
+            on_change=clear_uploaded_kpi_state,
+        )
 
-    if uploaded_file is None:
+    if uploaded_file is None and shared_kpi_dataset is None:
         st.info("📂 Please upload a historical KPI Excel file to begin.")
         return
 
@@ -4011,18 +4045,22 @@ def render_time_series_validation(mode: str):
     # Selectors (when needed) always render live, with on_change wired to
     # clear_uploaded_kpi_state, so changing the selection re-parses the file rather
     # than only taking effect on first upload. ----
-    try:
-        _kpi_peek_df = pd.read_excel(uploaded_file, engine="calamine", header=0, nrows=5)
-    except Exception:
-        uploaded_file.seek(0)
-        _kpi_peek_df = pd.read_excel(uploaded_file, engine="openpyxl", header=0, nrows=5)
-    uploaded_file.seek(0)
-    _kpi_peek_date_cols = detect_date_columns(_kpi_peek_df)
-    _kpi_peek_non_date_cols = [c for c in _kpi_peek_df.columns if c not in _kpi_peek_date_cols]
-
     _kpi_agg_col = None
     _kpi_metric_col = None
-    if len(_kpi_peek_non_date_cols) > 2:
+    if shared_kpi_dataset is not None:
+        _kpi_agg_col = shared_kpi_dataset.config.aggregation_column
+        _kpi_metric_col = shared_kpi_dataset.config.metric_column
+    else:
+        try:
+            _kpi_peek_df = pd.read_excel(uploaded_file, engine="calamine", header=0, nrows=5)
+        except Exception:
+            uploaded_file.seek(0)
+            _kpi_peek_df = pd.read_excel(uploaded_file, engine="openpyxl", header=0, nrows=5)
+        uploaded_file.seek(0)
+        _kpi_peek_date_cols = detect_date_columns(_kpi_peek_df)
+        _kpi_peek_non_date_cols = [c for c in _kpi_peek_df.columns if c not in _kpi_peek_date_cols]
+
+    if shared_kpi_dataset is None and len(_kpi_peek_non_date_cols) > 2:
         # ---- In KPI Pattern mode, the aggregation-level and metric columns were already
         # chosen in Step 1 (Region Matching sidebar) — carry them over instead of asking
         # again, as long as this file actually has those same column names. ----
@@ -4074,7 +4112,22 @@ def render_time_series_validation(mode: str):
                     on_change=clear_uploaded_kpi_state,
                 )
 
-    if st.session_state.kpi_long_df is None:
+    if st.session_state.kpi_long_df is None and shared_kpi_dataset is not None:
+        st.session_state.kpi_source_bytes = st.session_state.get("kpi_pattern_source_bytes")
+        st.session_state.kpi_long_df = shared_kpi_dataset.legacy_data.copy()
+        st.session_state.kpi_regional_dataset = shared_kpi_dataset
+        st.session_state.kpi_regional_source_fingerprint = (
+            shared_kpi_dataset.source_data_fingerprint
+        )
+        st.session_state.kpi_quality_report = shared_kpi_dataset.quality
+        st.session_state.kpi_rejected_rows = shared_kpi_dataset.rejected_rows
+        st.session_state.kpi_available_dates = sorted(
+            st.session_state.kpi_long_df["date"].dt.date.unique()
+        )
+        st.session_state.kpi_metric_options = sorted(
+            st.session_state.kpi_long_df["metric_name"].unique()
+        )
+    elif st.session_state.kpi_long_df is None:
         with st.spinner("Reading KPI file..."):
             parsed = load_and_reshape_kpi(
                 uploaded_file, agg_col=_kpi_agg_col, metric_col=_kpi_metric_col
@@ -4082,6 +4135,12 @@ def render_time_series_validation(mode: str):
             df_long = parsed.data
             st.session_state.kpi_source_bytes = uploaded_file.getvalue()
             st.session_state.kpi_long_df = df_long
+            st.session_state.kpi_regional_dataset = parsed.regional_dataset
+            st.session_state.kpi_regional_source_fingerprint = (
+                parsed.regional_dataset.source_data_fingerprint
+                if parsed.regional_dataset is not None
+                else None
+            )
             st.session_state.kpi_quality_report = parsed.quality
             st.session_state.kpi_rejected_rows = parsed.rejected_rows
             st.session_state.kpi_available_dates = sorted(df_long["date"].dt.date.unique())
@@ -4130,6 +4189,14 @@ def render_time_series_validation(mode: str):
         on_change=clear_validation_state,
         label_visibility="collapsed",
     )
+    kpi_file_name = getattr(uploaded_file, "name", None) or (
+        "KPI Pattern sidebar workbook" if shared_kpi_dataset is not None else None
+    )
+    kpi_file_size = getattr(uploaded_file, "size", None) or (
+        len(st.session_state.get("kpi_source_bytes") or b"")
+        if shared_kpi_dataset is not None
+        else None
+    )
 
     # -------------------------------------------------------------------------
     # Pre-run region-mapping report — computed as soon as the uploaded file,
@@ -4164,8 +4231,8 @@ def render_time_series_validation(mode: str):
         )
 
     _mapping_fingerprint = region_mapping_fingerprint(
-        file_name=getattr(uploaded_file, "name", None),
-        file_size=getattr(uploaded_file, "size", None),
+        file_name=kpi_file_name,
+        file_size=kpi_file_size,
         file_sha256=(
             sha256_bytes(st.session_state["kpi_source_bytes"])
             if st.session_state.get("kpi_source_bytes")
@@ -4438,7 +4505,7 @@ def render_time_series_validation(mode: str):
         st.markdown("**Test period**")
         col_test1, col_test2 = st.columns(2)
         with col_test1:
-            test_start_idx = min(len(date_list) - 1, pre_end_idx + 5)
+            test_start_idx = min(max(0, len(date_list) - 2), pre_end_idx + 5)
             test_start_label = st.selectbox(
                 "Start",
                 date_list,
@@ -4804,7 +4871,9 @@ def render_time_series_validation(mode: str):
                 st.error(f"🚫 {_qb}")
             st.session_state.validation_triggered = False
             st.stop()
-        if uploaded_file is None or st.session_state.kpi_long_df is None:
+        if (
+            uploaded_file is None and st.session_state.get("kpi_regional_dataset") is None
+        ) or st.session_state.kpi_long_df is None:
             st.error("KPI file not available. Please upload a file first.")
             st.session_state.validation_triggered = False
             st.stop()
@@ -5224,8 +5293,8 @@ def render_time_series_validation(mode: str):
             # ---- Experiment record: store the validation inputs and stamp the
             # counterfactual_validation stage (Stage 4). ----
             st.session_state.experiment_validation_inputs = {
-                "kpi_file_name": getattr(uploaded_file, "name", None),
-                "kpi_file_size": getattr(uploaded_file, "size", None),
+                "kpi_file_name": kpi_file_name,
+                "kpi_file_size": kpi_file_size,
                 "selected_metric": selected_metric,
                 "kpi_agg_col": _kpi_agg_col,
                 "time_series_frequency": time_series_frequency,

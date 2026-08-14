@@ -36,7 +36,7 @@ The current production code remains the source of truth for existing behaviour u
 
 - Repository: `papayasamosa/geotestlab_dev`
 - Branch: `main`
-- Commit: `147a4d6fec5698346d0c8f985bd9154c7e280f9a`
+- Commit: `929cc1e690ef132069da589561f1833c76be7d26`
 - Current application source: `geotestmatch.py` (thin adapters and UI)
 - Extracted packages: `geotestlab/data/`, `geotestlab/matching/`,
   `geotestlab/validation/`, `geotestlab/bayesian/`,
@@ -98,7 +98,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 |---|---|---|---|---|
 | Market setup | Workbook-driven markets and geography levels | FR-1 | Current | Improve documentation and data-version metadata |
 | Custom geographies | KPI Pattern upload | FR-1, FR-3 | Current | Preserve and improve mapping guidance |
-| KPI ingestion | Simple and aggregated Excel | FR-2 | Current | Extract remaining adapters and strengthen schemas |
+| KPI ingestion | Simple and aggregated Excel, with canonical regional preparation and provenance | FR-2 | Current / strengthened | Reuse the contract in validation and future power sizing |
 | Data quality | Typed report, blockers, rejected/unmapped downloads | FR-2 | Current | Add experiment-level quality summary |
 | Structural matching | Demographic and population features | FR-3 to FR-5 | Current | Preserve behaviour during refactor |
 | KPI Pattern matching | Indexed historical KPI shape | FR-3 to FR-5 | Current | Clarify terminology in methodology guide |

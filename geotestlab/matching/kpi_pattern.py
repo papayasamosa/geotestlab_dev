@@ -17,6 +17,8 @@ import io
 
 import pandas as pd
 
+from geotestlab.data.regional import RegionalKPIDataset, regional_kpi_to_wide
+
 from .models import POPULATION_COL
 
 
@@ -65,6 +67,16 @@ def build_kpi_pattern_wide(filtered: pd.DataFrame, agg_col: str, date_cols: list
     contributing row is missing as missing, instead of a real-looking 0.
     """
     return filtered.groupby(agg_col)[date_cols].sum(min_count=1)
+
+
+def build_kpi_pattern_wide_from_regional(
+    dataset: RegionalKPIDataset,
+    metric_value: str,
+    date_cols: list,
+) -> pd.DataFrame:
+    """Build the KPI Pattern wide series from the canonical regional dataset."""
+
+    return regional_kpi_to_wide(dataset, metric_value=metric_value, dates=date_cols)
 
 
 def retain_kpi_dates(wide_full: pd.DataFrame, retained_dates: list):

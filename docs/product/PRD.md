@@ -6,7 +6,7 @@
 **Date:** 4 August 2026  
 **Product owner:** Repository owner  
 **Implementation repository:** `papayasamosa/geotestlab_dev`  
-**Repository baseline reviewed:** `main` at commit `c532625b3d7356e344138fcd9211f8ad25c71d3c`  
+**Repository baseline reviewed:** `main` at commit `929cc1e690ef132069da589561f1833c76be7d26`
 **Primary application:** Streamlit application launched from `geotestmatch.py`  
 
 ## 1. Document purpose
@@ -366,9 +366,10 @@ The following capabilities are implemented in the reviewed repository and form t
 - Python 3.11 runtime.
 - Built-in market workbook.
 - `geotestmatch.py` remains the application entry point.
-- Data ingestion and matching have begun moving into the `geotestlab/` package.
-- The matching package is Streamlit-free and typed.
-- Validation, reporting and Bayesian logic remain substantially within the application script.
+- Data ingestion, matching, validation and Bayesian domain logic are extracted
+  into Streamlit-free packages behind the application adapter boundary.
+- The matching and canonical data packages are Streamlit-free and typed.
+- The application remains the Streamlit entry point and UI monolith.
 
 ### 14.2 Region matching
 
@@ -486,6 +487,7 @@ The report includes:
 
 - parsed file layout;
 - selected aggregation and metric fields;
+- canonical regional KPI source fingerprint and selected market-size semantics;
 - source rows and retained observations;
 - date range and inferred frequency;
 - expected and missing dates;
