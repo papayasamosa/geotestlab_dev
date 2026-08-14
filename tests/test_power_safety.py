@@ -96,7 +96,7 @@ class TestPersistenceSupport:
         assert metrics["rho"] == pytest.approx(0.3)
 
     def test_elevated_rho_warns(self):
-        status, reasons, _ = persistence_support(0.85, 200, POLICY)
+        status, reasons, _ = persistence_support(0.85, 500, POLICY)
         assert status == SUPPORTED_WITH_WARNING
         assert reasons
 
@@ -130,6 +130,8 @@ class TestHeteroskedasticitySupport:
         assert status == SUPPORTED
         assert reasons == []
         assert np.isfinite(metrics["variance_ratio_high_over_low_level"])
+        assert "candidate_diagnostics" in metrics
+        assert "scale_association_block_permutation_pvalue" in metrics
 
     def test_material_heteroskedasticity_blocks(self):
         rng = np.random.default_rng(0)
@@ -148,6 +150,24 @@ class TestHeteroskedasticitySupport:
         status, reasons, _ = heteroskedasticity_support([1.0, 2.0, 3.0], [1.0, 2.0, 3.0], POLICY)
         assert status == UNSUPPORTED
         assert reasons
+
+    def test_scale_association_candidate_is_seed_deterministic(self):
+        rng = np.random.default_rng(11)
+        level = np.linspace(10.0, 100.0, 120)
+        residuals = rng.normal(0.0, 1.0 + level / 30.0, 120)
+        first = heteroskedasticity_support(residuals, level, POLICY)
+        second = heteroskedasticity_support(residuals, level, POLICY)
+        assert first == second
+        assert first[2]["scale_association_block_length"] == POLICY.heteroskedasticity_block_length
+
+    def test_large_negative_levels_keep_permutation_seed_valid(self):
+        rng = np.random.default_rng(12)
+        residuals = rng.normal(0.0, 1.0, 120)
+        level = np.full(120, -1_000_000_000.0)
+        first = heteroskedasticity_support(residuals, level, POLICY)
+        second = heteroskedasticity_support(residuals, level, POLICY)
+        assert first == second
+        assert first[0] in (SUPPORTED, BLOCKED)
 
 
 class TestControlMatrixSupport:

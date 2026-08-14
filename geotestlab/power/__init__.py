@@ -16,6 +16,7 @@ from geotestlab.power.detection import (
 from geotestlab.power.evidence_v2 import (
     ADDITIONAL_SAFETY_SCENARIOS,
     EVIDENCE_SUITE_VERSION,
+    EXPECTED_SUPPORTED_CORE_SCENARIOS,
     PROPOSED_ACCEPTANCE_THRESHOLDS,
     build_concise_summary,
     build_v2_scenario,
@@ -90,6 +91,7 @@ __all__ = [
     "EFFECT_INJECTIONS",
     "EFFECT_SHAPES",
     "EVIDENCE_SUITE_VERSION",
+    "EXPECTED_SUPPORTED_CORE_SCENARIOS",
     "FALLBACK_FIT_METHOD",
     "FIT_METHOD_NAMES",
     "MARKET_SCENARIOS",

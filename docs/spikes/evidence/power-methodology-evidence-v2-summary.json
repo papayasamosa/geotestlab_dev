@@ -3,12 +3,13 @@
     "daily_weekday",
     "duplicate_keys",
     "heteroskedastic",
+    "high_autocorrelation",
     "mde_not_reached",
     "seasonal_residuals",
     "weekly_52"
   ],
-  "code_commit": "479a056fdc50dc054731e7d6bea0b19fe0aafbed",
-  "generated_at": "2026-08-07T13:23:30.174066+00:00",
+  "code_commit": "d7c82065907cc3bade648d534451d9f7c1f8c69d",
+  "generated_at": "2026-08-14T17:23:57.815322+00:00",
   "methodology_version": "0.5.0",
   "open_decisions": [
     "Primary power simulation method (model_simulation vs residual_simulation vs placebo_empirical) -- see ADR-001.",
@@ -26,7 +27,7 @@
     "runtime_p95_seconds": 5.0,
     "seed_sensitivity_power_std": 0.05
   },
-  "scenario_suite_version": "2.0.0",
+  "scenario_suite_version": "2.1.0",
   "simulation_settings": {
     "additional_scenario_names": [
       "test_region_partial_missingness",
@@ -53,10 +54,14 @@
     "data_seeds": [
       0,
       1,
-      2
+      2,
+      3,
+      4
     ],
     "fit_methods": [
-      "ols"
+      "ols",
+      "elastic_net",
+      "lasso"
     ],
     "methods": [
       "model_simulation",
@@ -66,16 +71,17 @@
     "side": "one_sided_positive",
     "sim_seeds": [
       0,
-      1
+      1,
+      2
     ],
     "target_power": 0.8
   },
   "status": "For methodology approval -- this summary is decision evidence, not an approval record.",
   "summary_metrics": {
     "additional_safety_scenarios": {
-      "n_correct": 15,
-      "n_scenarios": 15,
-      "pass_rate": 1.0,
+      "n_correct": 21,
+      "n_scenarios": 25,
+      "pass_rate": 0.84,
       "results": [
         {
           "blockers": [],
@@ -102,6 +108,22 @@
           "scenario": "test_region_partial_missingness"
         },
         {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 3,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "test_region_partial_missingness"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 4,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "test_region_partial_missingness"
+        },
+        {
           "blockers": [
             "duplicate (region, date) keys among selected regions in the pre-period; refusing to resolve by row order"
           ],
@@ -127,6 +149,26 @@
           ],
           "completed": false,
           "data_seed": 2,
+          "expected_blocked": true,
+          "safety_correct": true,
+          "scenario": "duplicate_keys"
+        },
+        {
+          "blockers": [
+            "duplicate (region, date) keys among selected regions in the pre-period; refusing to resolve by row order"
+          ],
+          "completed": false,
+          "data_seed": 3,
+          "expected_blocked": true,
+          "safety_correct": true,
+          "scenario": "duplicate_keys"
+        },
+        {
+          "blockers": [
+            "duplicate (region, date) keys among selected regions in the pre-period; refusing to resolve by row order"
+          ],
+          "completed": false,
+          "data_seed": 4,
           "expected_blocked": true,
           "safety_correct": true,
           "scenario": "duplicate_keys"
@@ -158,6 +200,22 @@
         {
           "blockers": [],
           "completed": true,
+          "data_seed": 3,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "irrelevant_controls_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 4,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "irrelevant_controls_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
           "data_seed": 0,
           "expected_blocked": false,
           "safety_correct": true,
@@ -182,84 +240,2469 @@
         {
           "blockers": [],
           "completed": true,
-          "data_seed": 0,
+          "data_seed": 3,
           "expected_blocked": false,
           "safety_correct": true,
+          "scenario": "nonlinear_counterfactual_market"
+        },
+        {
+          "blockers": [],
+          "completed": true,
+          "data_seed": 4,
+          "expected_blocked": false,
+          "safety_correct": true,
+          "scenario": "nonlinear_counterfactual_market"
+        },
+        {
+          "blockers": [
+            "persistence: persistence rho=0.853 (se~0.048) has an approximate upper bound 0.948 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+          ],
+          "completed": false,
+          "data_seed": 0,
+          "expected_blocked": false,
+          "safety_correct": false,
+          "scenario": "structural_break_market"
+        },
+        {
+          "blockers": [
+            "persistence: persistence rho=0.839 (se~0.050) has an approximate upper bound 0.938 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+          ],
+          "completed": false,
+          "data_seed": 1,
+          "expected_blocked": false,
+          "safety_correct": false,
+          "scenario": "structural_break_market"
+        },
+        {
+          "blockers": [
+            "persistence: persistence rho=0.858 (se~0.047) has an approximate upper bound 0.952 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+          ],
+          "completed": false,
+          "data_seed": 2,
+          "expected_blocked": false,
+          "safety_correct": false,
+          "scenario": "structural_break_market"
+        },
+        {
+          "blockers": [
+            "persistence: persistence rho=0.824 (se~0.052) has an approximate upper bound 0.927 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+          ],
+          "completed": false,
+          "data_seed": 3,
+          "expected_blocked": false,
+          "safety_correct": false,
           "scenario": "structural_break_market"
         },
         {
           "blockers": [],
           "completed": true,
-          "data_seed": 1,
-          "expected_blocked": false,
-          "safety_correct": true,
-          "scenario": "structural_break_market"
-        },
-        {
-          "blockers": [],
-          "completed": true,
-          "data_seed": 2,
+          "data_seed": 4,
           "expected_blocked": false,
           "safety_correct": true,
           "scenario": "structural_break_market"
         }
       ]
     },
-    "blocker_rate": 0.3888888888888889,
+    "blocker_rate": 0.5166666666666667,
     "fallback_rate": 0.0,
+    "false_blocked_count": 36,
+    "false_blocked_denominator": 540,
+    "false_blocked_rate": 0.06666666666666667,
     "false_mde_count": 0,
-    "false_mde_denominator": 88,
+    "false_mde_denominator": 522,
     "false_mde_rate": 0.0,
-    "false_supported_count": 4,
-    "false_supported_denominator": 60,
-    "false_supported_rate": 0.06666666666666667,
+    "false_supported_count": 18,
+    "false_supported_denominator": 540,
+    "false_supported_rate": 0.03333333333333333,
     "mde_bias_relative": {
-      "mean": 0.283199453351638,
-      "n": 88,
-      "p10": 0.15463793103448287,
-      "p50": 0.25187499999999996,
-      "p90": 0.442934615384615
+      "mean": 0.22852146565698148,
+      "n": 522,
+      "p10": 0.0024999999999999445,
+      "p50": 0.24687500000000007,
+      "p90": 0.3758620689655173
     },
-    "n_blocked": 56,
-    "n_completed": 88,
+    "n_blocked": 558,
+    "n_completed": 522,
     "n_errored": 0,
     "n_fallback": 0,
-    "n_incomplete": 56,
+    "n_incomplete": 558,
     "null_calibration": {
-      "mean": 0.009068181818181817,
-      "n": 88,
+      "mean": 0.007099616858237548,
+      "n": 522,
       "p10": 0.0,
       "p50": 0.005999999999999998,
-      "p90": 0.023199999999999988
+      "p90": 0.016
     },
     "power_bias": {
-      "mean": 0.19051094373870595,
-      "n": 88,
-      "p10": -0.04682730240897532,
-      "p50": 0.2082196116326468,
-      "p90": 0.39545178366722356
+      "mean": 0.07082421359391795,
+      "n": 522,
+      "p10": -0.05815505181197366,
+      "p50": 0.055996384974998814,
+      "p90": 0.24225885677246473
     },
     "power_bias_abs": {
-      "mean": 0.21574315601176705,
-      "n": 88,
-      "p10": 0.023218999030829014,
-      "p50": 0.2094275143169833,
-      "p90": 0.39545178366722356
+      "mean": 0.10205342091118956,
+      "n": 522,
+      "p10": 0.014354864743973517,
+      "p50": 0.07192249428733344,
+      "p90": 0.24474041965952362
     },
-    "power_bias_worst_case_supported": 0.6610508359859255,
+    "power_bias_worst_case_supported": 0.4766887081415274,
     "runtime_seconds": {
-      "mean": 0.06103042847250132,
-      "n": 144,
-      "p50": 0.06341095000243513,
-      "p95": 0.10891021999268559
+      "mean": 0.30015852064813975,
+      "n": 1080,
+      "p50": 0.21964830000069924,
+      "p95": 0.7286222399988219
+    },
+    "scenario_results": {
+      "collinear_controls|model_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.29431250000000014,
+          "n": 15,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.6209375000000001
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": -0.002280022363991785,
+          "n": 15,
+          "p10": -0.22681614886919677,
+          "p50": -0.026634369029261085,
+          "p90": 0.16768893187950268
+        },
+        "power_bias_abs": {
+          "mean": 0.13069421626267413,
+          "n": 15,
+          "p10": 0.0282116686184809,
+          "p50": 0.14938861123589442,
+          "p90": 0.22681614886919674
+        },
+        "scenario": "collinear_controls"
+      },
+      "collinear_controls|model_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.29431250000000014,
+          "n": 15,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.6209375000000001
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": -0.0021333556973251195,
+          "n": 15,
+          "p10": -0.22393614886919677,
+          "p50": -0.028834369029261064,
+          "p90": 0.16768893187950268
+        },
+        "power_bias_abs": {
+          "mean": 0.13054754959600748,
+          "n": 15,
+          "p10": 0.02953166861848089,
+          "p50": 0.14938861123589442,
+          "p90": 0.22393614886919674
+        },
+        "scenario": "collinear_controls"
+      },
+      "collinear_controls|model_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.29431250000000014,
+          "n": 15,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.6209375000000001
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.003933310969341552,
+          "n": 15,
+          "p10": -0.22593614886919675,
+          "p50": -0.0014343690292609734,
+          "p90": 0.1687689318795027
+        },
+        "power_bias_abs": {
+          "mean": 0.12565421626267415,
+          "n": 15,
+          "p10": 0.012074369029261005,
+          "p50": 0.15118861123589444,
+          "p90": 0.22593614886919675
+        },
+        "scenario": "collinear_controls"
+      },
+      "collinear_controls|residual_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.22116666666666676,
+          "n": 15,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08153331096934152,
+          "n": 15,
+          "p10": -0.05706708096523523,
+          "p50": 0.008365630970738946,
+          "p90": 0.26339941284491497
+        },
+        "power_bias_abs": {
+          "mean": 0.11940963372543935,
+          "n": 15,
+          "p10": 0.01624447639953792,
+          "p50": 0.05843436902926091,
+          "p90": 0.26339941284491497
+        },
+        "scenario": "collinear_controls"
+      },
+      "collinear_controls|residual_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.22116666666666676,
+          "n": 15,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08290664430267486,
+          "n": 15,
+          "p10": -0.04158343693322246,
+          "p50": -0.003634369029261064,
+          "p90": 0.2597994128449149
+        },
+        "power_bias_abs": {
+          "mean": 0.11596088292934081,
+          "n": 15,
+          "p10": 0.01624447639953792,
+          "p50": 0.04221614886919678,
+          "p90": 0.2597994128449149
+        },
+        "scenario": "collinear_controls"
+      },
+      "collinear_controls|residual_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.22116666666666676,
+          "n": 15,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08861331096934157,
+          "n": 15,
+          "p10": -0.031073030349065035,
+          "p50": 0.018565630970739044,
+          "p90": 0.25617909220130675
+        },
+        "power_bias_abs": {
+          "mean": 0.11008963372543935,
+          "n": 15,
+          "p10": 0.019050425783367665,
+          "p50": 0.03217761800231056,
+          "p90": 0.25617909220130675
+        },
+        "scenario": "collinear_controls"
+      },
+      "daily_weekday|model_simulation|elastic_net": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.165, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.170, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "daily_weekday"
+      },
+      "daily_weekday|model_simulation|lasso": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.165, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.170, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "daily_weekday"
+      },
+      "daily_weekday|model_simulation|ols": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.165, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.170, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "daily_weekday"
+      },
+      "daily_weekday|residual_simulation|elastic_net": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.165, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.170, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "daily_weekday"
+      },
+      "daily_weekday|residual_simulation|lasso": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.165, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.170, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "daily_weekday"
+      },
+      "daily_weekday|residual_simulation|ols": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.165, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.170, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "daily_weekday"
+      },
+      "duplicate_controls|model_simulation|elastic_net": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.010); constant-variance AR(1) simulation is blocked; control_matrix: sanitised C2 (duplicate_of:C1)"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.21223958333333345,
+          "n": 12,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.01678818940740053,
+          "n": 12,
+          "p10": -0.03980790424168086,
+          "p50": 0.020415165827356585,
+          "p90": 0.08209565480881979
+        },
+        "power_bias_abs": {
+          "mean": 0.04366784626123978,
+          "n": 12,
+          "p10": 0.004754242899484562,
+          "p50": 0.03970545367922218,
+          "p90": 0.08412005103699659
+        },
+        "scenario": "duplicate_controls"
+      },
+      "duplicate_controls|model_simulation|lasso": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.010); constant-variance AR(1) simulation is blocked; control_matrix: sanitised C2 (duplicate_of:C1)"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.21223958333333345,
+          "n": 12,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.014171522740733874,
+          "n": 12,
+          "p10": -0.03980790424168086,
+          "p50": 0.015131693289018366,
+          "p90": 0.07075565480881985
+        },
+        "power_bias_abs": {
+          "mean": 0.04105117959457313,
+          "n": 12,
+          "p10": 0.004223700259695562,
+          "p50": 0.03970545367922218,
+          "p90": 0.07709424289948459
+        },
+        "scenario": "duplicate_controls"
+      },
+      "duplicate_controls|model_simulation|ols": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.010); constant-variance AR(1) simulation is blocked; control_matrix: sanitised C2 (duplicate_of:C1)"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.21223958333333345,
+          "n": 12,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.013671522740733874,
+          "n": 12,
+          "p10": -0.03980790424168086,
+          "p50": 0.014131693289018366,
+          "p90": 0.0675156548088199
+        },
+        "power_bias_abs": {
+          "mean": 0.04055117959457313,
+          "n": 12,
+          "p10": 0.004223700259695562,
+          "p50": 0.03970545367922218,
+          "p90": 0.07673424289948459
+        },
+        "scenario": "duplicate_controls"
+      },
+      "duplicate_controls|residual_simulation|elastic_net": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.010); constant-variance AR(1) simulation is blocked; control_matrix: sanitised C2 (duplicate_of:C1)"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.21307291666666675,
+          "n": 12,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.25137499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.09153818940740051,
+          "n": 12,
+          "p10": -0.002673516882295577,
+          "p50": 0.07928955460052761,
+          "p90": 0.1888007770541857
+        },
+        "power_bias_abs": {
+          "mean": 0.09761602836816574,
+          "n": 12,
+          "p10": 0.01985318649416359,
+          "p50": 0.07928955460052761,
+          "p90": 0.1888007770541857
+        },
+        "scenario": "duplicate_controls"
+      },
+      "duplicate_controls|residual_simulation|lasso": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.010); constant-variance AR(1) simulation is blocked; control_matrix: sanitised C2 (duplicate_of:C1)"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.21307291666666675,
+          "n": 12,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.25137499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08808818940740053,
+          "n": 12,
+          "p10": -0.002673516882295577,
+          "p50": 0.07928955460052761,
+          "p90": 0.17779896030115222
+        },
+        "power_bias_abs": {
+          "mean": 0.09416602836816572,
+          "n": 12,
+          "p10": 0.01985318649416359,
+          "p50": 0.07928955460052761,
+          "p90": 0.17779896030115222
+        },
+        "scenario": "duplicate_controls"
+      },
+      "duplicate_controls|residual_simulation|ols": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.010); constant-variance AR(1) simulation is blocked; control_matrix: sanitised C2 (duplicate_of:C1)"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.2126562500000001,
+          "n": 12,
+          "p10": 0.1083333333333335,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "residual_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08462152274073387,
+          "n": 12,
+          "p10": -0.002673516882295577,
+          "p50": 0.07928955460052761,
+          "p90": 0.16951896030115224
+        },
+        "power_bias_abs": {
+          "mean": 0.09069936170149906,
+          "n": 12,
+          "p10": 0.01985318649416359,
+          "p50": 0.07928955460052761,
+          "p90": 0.16951896030115224
+        },
+        "scenario": "duplicate_controls"
+      },
+      "heteroskedastic|model_simulation|elastic_net": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.192, permutation p=0.020); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.308837806942066 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.248, permutation p=0.015); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.8603433391209956 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.376, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.935012487771893 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": true,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.23269230769230762,
+          "n": 3,
+          "p10": 0.2326923076923076,
+          "p50": 0.2326923076923076,
+          "p90": 0.2326923076923076
+        },
+        "method": "model_simulation",
+        "n_blocked": 12,
+        "n_completed": 3,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.2635553748081941,
+          "n": 3,
+          "p10": 0.2389287081415275,
+          "p50": 0.2670887081415274,
+          "p90": 0.2867687081415274
+        },
+        "power_bias_abs": {
+          "mean": 0.2635553748081941,
+          "n": 3,
+          "p10": 0.2389287081415275,
+          "p50": 0.2670887081415274,
+          "p90": 0.2867687081415274
+        },
+        "scenario": "heteroskedastic"
+      },
+      "heteroskedastic|model_simulation|lasso": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.178, permutation p=0.035); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.302784891678177 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.015); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.8675917323118374 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.378, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=3.134018598508374 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": true,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.23269230769230762,
+          "n": 3,
+          "p10": 0.2326923076923076,
+          "p50": 0.2326923076923076,
+          "p90": 0.2326923076923076
+        },
+        "method": "model_simulation",
+        "n_blocked": 12,
+        "n_completed": 3,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.2594887081415274,
+          "n": 3,
+          "p10": 0.2344487081415274,
+          "p50": 0.26148870814152736,
+          "p90": 0.2837287081415274
+        },
+        "power_bias_abs": {
+          "mean": 0.2594887081415274,
+          "n": 3,
+          "p10": 0.2344487081415274,
+          "p50": 0.26148870814152736,
+          "p90": 0.2837287081415274
+        },
+        "scenario": "heteroskedastic"
+      },
+      "heteroskedastic|model_simulation|ols": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.178, permutation p=0.035); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.303628880474544 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.015); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=3.0230191695649493 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.378, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=3.134887830897249 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": true,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.23269230769230762,
+          "n": 3,
+          "p10": 0.2326923076923076,
+          "p50": 0.2326923076923076,
+          "p90": 0.2326923076923076
+        },
+        "method": "model_simulation",
+        "n_blocked": 12,
+        "n_completed": 3,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.2650220414748608,
+          "n": 3,
+          "p10": 0.2409287081415275,
+          "p50": 0.2690887081415274,
+          "p90": 0.28748870814152744
+        },
+        "power_bias_abs": {
+          "mean": 0.2650220414748608,
+          "n": 3,
+          "p10": 0.2409287081415275,
+          "p50": 0.2690887081415274,
+          "p90": 0.28748870814152744
+        },
+        "scenario": "heteroskedastic"
+      },
+      "heteroskedastic|residual_simulation|elastic_net": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.192, permutation p=0.020); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.308837806942066 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.248, permutation p=0.015); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.8603433391209956 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.376, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.935012487771893 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": true,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.23269230769230762,
+          "n": 3,
+          "p10": 0.2326923076923076,
+          "p50": 0.2326923076923076,
+          "p90": 0.2326923076923076
+        },
+        "method": "residual_simulation",
+        "n_blocked": 12,
+        "n_completed": 3,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.44135537480819415,
+          "n": 3,
+          "p10": 0.41424870814152737,
+          "p50": 0.4404887081415274,
+          "p90": 0.4688087081415275
+        },
+        "power_bias_abs": {
+          "mean": 0.44135537480819415,
+          "n": 3,
+          "p10": 0.41424870814152737,
+          "p50": 0.4404887081415274,
+          "p90": 0.4688087081415275
+        },
+        "scenario": "heteroskedastic"
+      },
+      "heteroskedastic|residual_simulation|lasso": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.178, permutation p=0.035); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.302784891678177 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.015); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.8675917323118374 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.378, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=3.134018598508374 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": true,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.23269230769230762,
+          "n": 3,
+          "p10": 0.2326923076923076,
+          "p50": 0.2326923076923076,
+          "p90": 0.2326923076923076
+        },
+        "method": "residual_simulation",
+        "n_blocked": 12,
+        "n_completed": 3,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.4427553748081941,
+          "n": 3,
+          "p10": 0.4210887081415274,
+          "p50": 0.4514887081415274,
+          "p90": 0.4609287081415274
+        },
+        "power_bias_abs": {
+          "mean": 0.4427553748081941,
+          "n": 3,
+          "p10": 0.4210887081415274,
+          "p50": 0.4514887081415274,
+          "p90": 0.4609287081415274
+        },
+        "scenario": "heteroskedastic"
+      },
+      "heteroskedastic|residual_simulation|ols": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.178, permutation p=0.035); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=2.303628880474544 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.247, permutation p=0.015); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=3.0230191695649493 outside [0.43, 2.30]; dependence-preserving scale association is material (abs correlation=0.378, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "heteroskedasticity: split variance ratio=3.134887830897249 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": true,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.23269230769230762,
+          "n": 3,
+          "p10": 0.2326923076923076,
+          "p50": 0.2326923076923076,
+          "p90": 0.2326923076923076
+        },
+        "method": "residual_simulation",
+        "n_blocked": 12,
+        "n_completed": 3,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.4457553748081941,
+          "n": 3,
+          "p10": 0.4145687081415274,
+          "p50": 0.4564887081415274,
+          "p90": 0.47264870814152743
+        },
+        "power_bias_abs": {
+          "mean": 0.4457553748081941,
+          "n": 3,
+          "p10": 0.4145687081415274,
+          "p50": 0.4564887081415274,
+          "p90": 0.47264870814152743
+        },
+        "scenario": "heteroskedastic"
+      },
+      "high_autocorrelation|model_simulation|elastic_net": {
+        "blockers": [
+          "persistence: persistence rho=0.813 (se~0.057) has an approximate upper bound 0.927 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.815 (se~0.057) has an approximate upper bound 0.929 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.010); constant-variance AR(1) simulation is blocked",
+          "persistence: persistence rho=0.829 (se~0.055) has an approximate upper bound 0.939 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.865 (se~0.049) has an approximate upper bound 0.963 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.892 (se~0.044) has an approximate upper bound 0.981 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "high_autocorrelation"
+      },
+      "high_autocorrelation|model_simulation|lasso": {
+        "blockers": [
+          "persistence: persistence rho=0.808 (se~0.058) has an approximate upper bound 0.924 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.813 (se~0.057) has an approximate upper bound 0.927 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.815 (se~0.057) has an approximate upper bound 0.929 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.010); constant-variance AR(1) simulation is blocked",
+          "persistence: persistence rho=0.859 (se~0.050) has an approximate upper bound 0.959 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.891 (se~0.044) has an approximate upper bound 0.980 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "high_autocorrelation"
+      },
+      "high_autocorrelation|model_simulation|ols": {
+        "blockers": [
+          "persistence: persistence rho=0.810 (se~0.058) has an approximate upper bound 0.925 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.813 (se~0.057) has an approximate upper bound 0.927 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.815 (se~0.057) has an approximate upper bound 0.929 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.010); constant-variance AR(1) simulation is blocked",
+          "persistence: persistence rho=0.855 (se~0.051) has an approximate upper bound 0.957 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.891 (se~0.044) has an approximate upper bound 0.980 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "high_autocorrelation"
+      },
+      "high_autocorrelation|residual_simulation|elastic_net": {
+        "blockers": [
+          "persistence: persistence rho=0.813 (se~0.057) has an approximate upper bound 0.927 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.815 (se~0.057) has an approximate upper bound 0.929 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.010); constant-variance AR(1) simulation is blocked",
+          "persistence: persistence rho=0.829 (se~0.055) has an approximate upper bound 0.939 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.865 (se~0.049) has an approximate upper bound 0.963 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.892 (se~0.044) has an approximate upper bound 0.981 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "high_autocorrelation"
+      },
+      "high_autocorrelation|residual_simulation|lasso": {
+        "blockers": [
+          "persistence: persistence rho=0.808 (se~0.058) has an approximate upper bound 0.924 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.813 (se~0.057) has an approximate upper bound 0.927 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.815 (se~0.057) has an approximate upper bound 0.929 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.010); constant-variance AR(1) simulation is blocked",
+          "persistence: persistence rho=0.859 (se~0.050) has an approximate upper bound 0.959 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.891 (se~0.044) has an approximate upper bound 0.980 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "high_autocorrelation"
+      },
+      "high_autocorrelation|residual_simulation|ols": {
+        "blockers": [
+          "persistence: persistence rho=0.810 (se~0.058) has an approximate upper bound 0.925 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.813 (se~0.057) has an approximate upper bound 0.927 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.815 (se~0.057) has an approximate upper bound 0.929 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.010); constant-variance AR(1) simulation is blocked",
+          "persistence: persistence rho=0.855 (se~0.051) has an approximate upper bound 0.957 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.891 (se~0.044) has an approximate upper bound 0.980 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "high_autocorrelation"
+      },
+      "low_volume|model_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.32216091954022996,
+          "n": 15,
+          "p10": 0.17448275862068963,
+          "p50": 0.3758620689655173,
+          "p90": 0.3758620689655173
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08806988201613669,
+          "n": 15,
+          "p10": -0.030996784650529966,
+          "p50": 0.07660321534947001,
+          "p90": 0.25820321534947
+        },
+        "power_bias_abs": {
+          "mean": 0.10462859587634869,
+          "n": 15,
+          "p10": 0.03040321534946997,
+          "p50": 0.07660321534947001,
+          "p90": 0.25820321534947
+        },
+        "scenario": "low_volume"
+      },
+      "low_volume|model_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.32216091954022996,
+          "n": 15,
+          "p10": 0.17448275862068963,
+          "p50": 0.3758620689655173,
+          "p90": 0.3758620689655173
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08806988201613669,
+          "n": 15,
+          "p10": -0.030996784650529966,
+          "p50": 0.07660321534947001,
+          "p90": 0.25820321534947
+        },
+        "power_bias_abs": {
+          "mean": 0.10462859587634869,
+          "n": 15,
+          "p10": 0.03040321534946997,
+          "p50": 0.07660321534947001,
+          "p90": 0.25820321534947
+        },
+        "scenario": "low_volume"
+      },
+      "low_volume|model_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.32216091954022996,
+          "n": 15,
+          "p10": 0.17448275862068963,
+          "p50": 0.3758620689655173,
+          "p90": 0.3758620689655173
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.08806988201613669,
+          "n": 15,
+          "p10": -0.030996784650529966,
+          "p50": 0.07660321534947001,
+          "p90": 0.25820321534947
+        },
+        "power_bias_abs": {
+          "mean": 0.10462859587634869,
+          "n": 15,
+          "p10": 0.03040321534946997,
+          "p50": 0.07660321534947001,
+          "p90": 0.25820321534947
+        },
+        "scenario": "low_volume"
+      },
+      "low_volume|residual_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.2684597701149426,
+          "n": 15,
+          "p10": 0.17448275862068963,
+          "p50": 0.17448275862068963,
+          "p90": 0.3758620689655173
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.14006988201613665,
+          "n": 15,
+          "p10": 0.018003215349469963,
+          "p50": 0.13260321534947006,
+          "p90": 0.26180321534947
+        },
+        "power_bias_abs": {
+          "mean": 0.140789453302874,
+          "n": 15,
+          "p10": 0.018003215349469963,
+          "p50": 0.13260321534947006,
+          "p90": 0.26180321534947
+        },
+        "scenario": "low_volume"
+      },
+      "low_volume|residual_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.2684597701149426,
+          "n": 15,
+          "p10": 0.17448275862068963,
+          "p50": 0.17448275862068963,
+          "p90": 0.3758620689655173
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.14000321534947,
+          "n": 15,
+          "p10": 0.018003215349469963,
+          "p50": 0.13260321534947006,
+          "p90": 0.26180321534947
+        },
+        "power_bias_abs": {
+          "mean": 0.14072278663620733,
+          "n": 15,
+          "p10": 0.018003215349469963,
+          "p50": 0.13260321534947006,
+          "p90": 0.26180321534947
+        },
+        "scenario": "low_volume"
+      },
+      "low_volume|residual_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.2684597701149426,
+          "n": 15,
+          "p10": 0.17448275862068963,
+          "p50": 0.17448275862068963,
+          "p90": 0.3758620689655173
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.13980321534947,
+          "n": 15,
+          "p10": 0.01740321534946996,
+          "p50": 0.13260321534947006,
+          "p90": 0.25820321534947
+        },
+        "power_bias_abs": {
+          "mean": 0.14052278663620735,
+          "n": 15,
+          "p10": 0.01740321534946996,
+          "p50": 0.13260321534947006,
+          "p90": 0.25820321534947
+        },
+        "scenario": "low_volume"
+      },
+      "many_weak_controls|model_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.15943333333333334,
+          "n": 15,
+          "p10": 0.0024999999999999445,
+          "p50": 0.29675000000000007,
+          "p90": 0.29675000000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": -0.0058307515986438015,
+          "n": 15,
+          "p10": -0.09457875645612292,
+          "p50": -0.03500379618927929,
+          "p90": 0.11391879221953727
+        },
+        "power_bias_abs": {
+          "mean": 0.06961194389092627,
+          "n": 15,
+          "p10": 0.017097231220534373,
+          "p50": 0.0728555066005086,
+          "p90": 0.12058147797192578
+        },
+        "scenario": "many_weak_controls"
+      },
+      "many_weak_controls|model_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.17905000000000007,
+          "n": 15,
+          "p10": 0.0024999999999999445,
+          "p50": 0.29675000000000007,
+          "p90": 0.29675000000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": -0.0028574182653104702,
+          "n": 15,
+          "p10": -0.09918623658954476,
+          "p50": -0.03324119685638843,
+          "p90": 0.13863879221953732
+        },
+        "power_bias_abs": {
+          "mean": 0.07805194389092626,
+          "n": 15,
+          "p10": 0.0279947908202689,
+          "p50": 0.07264119685638837,
+          "p90": 0.13863879221953732
+        },
+        "scenario": "many_weak_controls"
+      },
+      "many_weak_controls|model_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.1202,
+          "n": 15,
+          "p10": 0.0024999999999999445,
+          "p50": 0.0024999999999999445,
+          "p90": 0.29675000000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.026382581734689516,
+          "n": 15,
+          "p10": -0.07527482243601687,
+          "p50": 0.015958803143611533,
+          "p90": 0.15079879221953732
+        },
+        "power_bias_abs": {
+          "mean": 0.0732917957647898,
+          "n": 15,
+          "p10": 0.016296800361878618,
+          "p50": 0.05340379618927926,
+          "p90": 0.15079879221953732
+        },
+        "scenario": "many_weak_controls"
+      },
+      "many_weak_controls|residual_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.061349999999999974,
+          "n": 15,
+          "p10": 0.0024999999999999445,
+          "p50": 0.0024999999999999445,
+          "p90": 0.29675000000000007
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.06907591506802283,
+          "n": 15,
+          "p10": -0.06698623658954475,
+          "p50": 0.03394449339949135,
+          "p90": 0.2613187922195373
+        },
+        "power_bias_abs": {
+          "mean": 0.105760072794386,
+          "n": 15,
+          "p10": 0.010001196856388405,
+          "p50": 0.09674449339949132,
+          "p90": 0.2613187922195373
+        },
+        "scenario": "many_weak_controls"
+      },
+      "many_weak_controls|residual_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.10058333333333332,
+          "n": 15,
+          "p10": 0.0024999999999999445,
+          "p50": 0.0024999999999999445,
+          "p90": 0.29675000000000007
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.06440924840135617,
+          "n": 15,
+          "p10": -0.08466623658954475,
+          "p50": 0.04614449339949134,
+          "p90": 0.27383879221953733
+        },
+        "power_bias_abs": {
+          "mean": 0.116560072794386,
+          "n": 15,
+          "p10": 0.04014449339949133,
+          "p50": 0.09634449339949136,
+          "p90": 0.27383879221953733
+        },
+        "scenario": "many_weak_controls"
+      },
+      "many_weak_controls|residual_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.041733333333333296,
+          "n": 15,
+          "p10": 0.0024999999999999445,
+          "p50": 0.0024999999999999445,
+          "p90": 0.17904999999999993
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.09807591506802285,
+          "n": 15,
+          "p10": -0.048824480353771016,
+          "p50": 0.06055880314361162,
+          "p90": 0.2971187922195373
+        },
+        "power_bias_abs": {
+          "mean": 0.12069816775713571,
+          "n": 15,
+          "p10": 0.012797484526370417,
+          "p50": 0.08075880314361161,
+          "p90": 0.2971187922195373
+        },
+        "scenario": "many_weak_controls"
+      },
+      "mde_not_reached|model_simulation|elastic_net": {
+        "blockers": [
+          "persistence: persistence rho=0.919 (se~0.039) has an approximate upper bound 0.996 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.933 (se~0.035) has an approximate upper bound 1.004 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.979 (se~0.020) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.984 (se~0.018) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "mde_not_reached"
+      },
+      "mde_not_reached|model_simulation|lasso": {
+        "blockers": [
+          "persistence: persistence rho=0.918 (se~0.039) has an approximate upper bound 0.996 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.934 (se~0.035) has an approximate upper bound 1.004 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.966 (se~0.025) has an approximate upper bound 1.017 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.984 (se~0.018) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "mde_not_reached"
+      },
+      "mde_not_reached|model_simulation|ols": {
+        "blockers": [
+          "persistence: persistence rho=0.882 (se~0.046) has an approximate upper bound 0.975 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.899 (se~0.043) has an approximate upper bound 0.985 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.919 (se~0.039) has an approximate upper bound 0.996 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.951 (se~0.030) has an approximate upper bound 1.012 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.984 (se~0.018) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "mde_not_reached"
+      },
+      "mde_not_reached|residual_simulation|elastic_net": {
+        "blockers": [
+          "persistence: persistence rho=0.919 (se~0.039) has an approximate upper bound 0.996 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.933 (se~0.035) has an approximate upper bound 1.004 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.959 (se~0.028) has an approximate upper bound 1.015 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.979 (se~0.020) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.984 (se~0.018) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "mde_not_reached"
+      },
+      "mde_not_reached|residual_simulation|lasso": {
+        "blockers": [
+          "persistence: persistence rho=0.918 (se~0.039) has an approximate upper bound 0.996 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.934 (se~0.035) has an approximate upper bound 1.004 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.957 (se~0.028) has an approximate upper bound 1.014 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.966 (se~0.025) has an approximate upper bound 1.017 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.984 (se~0.018) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "mde_not_reached"
+      },
+      "mde_not_reached|residual_simulation|ols": {
+        "blockers": [
+          "persistence: persistence rho=0.882 (se~0.046) has an approximate upper bound 0.975 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.899 (se~0.043) has an approximate upper bound 0.985 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.919 (se~0.039) has an approximate upper bound 0.996 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.951 (se~0.030) has an approximate upper bound 1.012 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable",
+          "persistence: persistence rho=0.984 (se~0.018) has an approximate upper bound 1.019 within the near-unit-root region (>= 0.92); a plausible near-unit-root process would make the reported power/MDE unreliable"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "mde_not_reached"
+      },
+      "seasonal_residuals|model_simulation|elastic_net": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.151, permutation p=0.025); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.179, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "seasonal_residuals"
+      },
+      "seasonal_residuals|model_simulation|lasso": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.151, permutation p=0.025); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.179, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "seasonal_residuals"
+      },
+      "seasonal_residuals|model_simulation|ols": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.151, permutation p=0.025); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.179, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "seasonal_residuals"
+      },
+      "seasonal_residuals|residual_simulation|elastic_net": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.151, permutation p=0.025); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.179, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "seasonal_residuals"
+      },
+      "seasonal_residuals|residual_simulation|lasso": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.151, permutation p=0.025); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.179, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "seasonal_residuals"
+      },
+      "seasonal_residuals|residual_simulation|ols": {
+        "blockers": [
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.151, permutation p=0.025); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.179, permutation p=0.005); constant-variance AR(1) simulation is blocked",
+          "frequency: 'daily' frequency is not supported by the current constant-sigma AR(1) residual model (no seasonal/calendar component); blocked until an approved daily seasonal process exists. Weekly aggregation of daily data may be offered only as an explicit, separately recorded analyst decision, never a silent frequency change.; history: no minimum-history floor configured for frequency 'daily'; seasonality: daily-frequency data may carry weekday/calendar seasonality that the current constant-sigma AR(1) residual model cannot represent (calendar structure remains in the residuals and materially under-estimates power); blocked until an approved daily seasonal process exists; heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.216, permutation p=0.005); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "seasonal_residuals"
+      },
+      "weekly_104|model_simulation|elastic_net": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.185, permutation p=0.010); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.2468750000000001,
+          "n": 12,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.0252324220027757,
+          "n": 12,
+          "p10": -0.038540478127975904,
+          "p50": 0.03442249428733346,
+          "p90": 0.08192522052395158
+        },
+        "power_bias_abs": {
+          "mean": 0.04973074577051926,
+          "n": 12,
+          "p10": 0.006657978485902195,
+          "p50": 0.04941998550876053,
+          "p90": 0.08192522052395158
+        },
+        "scenario": "weekly_104"
+      },
+      "weekly_104|model_simulation|lasso": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.186, permutation p=0.010); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.2468750000000001,
+          "n": 12,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.025999088669442377,
+          "n": 12,
+          "p10": -0.03674047812797591,
+          "p50": 0.03442249428733346,
+          "p90": 0.08192522052395158
+        },
+        "power_bias_abs": {
+          "mean": 0.04896407910385259,
+          "n": 12,
+          "p10": 0.006657978485902195,
+          "p50": 0.04941998550876053,
+          "p90": 0.08192522052395158
+        },
+        "scenario": "weekly_104"
+      },
+      "weekly_104|model_simulation|ols": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.185, permutation p=0.010); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.2468750000000001,
+          "n": 12,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.025999088669442377,
+          "n": 12,
+          "p10": -0.03674047812797591,
+          "p50": 0.03442249428733346,
+          "p90": 0.08192522052395158
+        },
+        "power_bias_abs": {
+          "mean": 0.04896407910385259,
+          "n": 12,
+          "p10": 0.006657978485902195,
+          "p50": 0.04941998550876053,
+          "p90": 0.08192522052395158
+        },
+        "scenario": "weekly_104"
+      },
+      "weekly_104|residual_simulation|elastic_net": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.185, permutation p=0.010); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.24812500000000007,
+          "n": 12,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.09539908866944236,
+          "n": 12,
+          "p10": 0.010224193554450357,
+          "p50": 0.06751998550876054,
+          "p90": 0.21793885677246472
+        },
+        "power_bias_abs": {
+          "mean": 0.10443838974370064,
+          "n": 12,
+          "p10": 0.024660023627738715,
+          "p50": 0.06751998550876054,
+          "p90": 0.21793885677246472
+        },
+        "scenario": "weekly_104"
+      },
+      "weekly_104|residual_simulation|lasso": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.186, permutation p=0.010); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.24812500000000007,
+          "n": 12,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.09706575533610906,
+          "n": 12,
+          "p10": 0.028664193554450414,
+          "p50": 0.06751998550876054,
+          "p90": 0.2177188567724647
+        },
+        "power_bias_abs": {
+          "mean": 0.10377172307703401,
+          "n": 12,
+          "p10": 0.03186002362773872,
+          "p50": 0.06751998550876054,
+          "p90": 0.2177188567724647
+        },
+        "scenario": "weekly_104"
+      },
+      "weekly_104|residual_simulation|ols": {
+        "blockers": [
+          "heteroskedasticity: dependence-preserving scale association is material (abs correlation=0.185, permutation p=0.010); constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.24812500000000007,
+          "n": 12,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 3,
+        "n_completed": 12,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.09616575533610905,
+          "n": 12,
+          "p10": 0.028664193554450414,
+          "p50": 0.06751998550876054,
+          "p90": 0.21519885677246478
+        },
+        "power_bias_abs": {
+          "mean": 0.102871723077034,
+          "n": 12,
+          "p10": 0.03186002362773872,
+          "p50": 0.06751998550876054,
+          "p90": 0.21519885677246478
+        },
+        "scenario": "weekly_104"
+      },
+      "weekly_156|model_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.24687500000000012,
+          "n": 15,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.031658211145887676,
+          "n": 15,
+          "p10": -0.01734728026306966,
+          "p50": 0.03580728130154154,
+          "p90": 0.07234016604144194
+        },
+        "power_bias_abs": {
+          "mean": 0.04634022334949994,
+          "n": 15,
+          "p10": 0.008766140859135607,
+          "p50": 0.039754864743973495,
+          "p90": 0.07719593715180242
+        },
+        "scenario": "weekly_156"
+      },
+      "weekly_156|model_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.24687500000000012,
+          "n": 15,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.036418211145887676,
+          "n": 15,
+          "p10": -0.016937545763545996,
+          "p50": 0.039754864743973495,
+          "p90": 0.07618016604144197
+        },
+        "power_bias_abs": {
+          "mean": 0.051100223349499936,
+          "n": 15,
+          "p10": 0.018648249670952688,
+          "p50": 0.05200728130154142,
+          "p90": 0.07719593715180242
+        },
+        "scenario": "weekly_156"
+      },
+      "weekly_156|model_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.24687500000000012,
+          "n": 15,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.24687500000000007
+        },
+        "method": "model_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.038418211145887685,
+          "n": 15,
+          "p10": -0.016937545763545996,
+          "p50": 0.039754864743973495,
+          "p90": 0.07798631467851422
+        },
+        "power_bias_abs": {
+          "mean": 0.053100223349499945,
+          "n": 15,
+          "p10": 0.018768249670952742,
+          "p50": 0.06135486474397345,
+          "p90": 0.07798631467851422
+        },
+        "scenario": "weekly_156"
+      },
+      "weekly_156|residual_simulation|elastic_net": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "mean": 0.2478750000000001,
+          "n": 15,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.06869821114588766,
+          "n": 15,
+          "p10": -0.024165135256026593,
+          "p50": 0.06374245423645397,
+          "p90": 0.18036728130154142
+        },
+        "power_bias_abs": {
+          "mean": 0.08167791998263423,
+          "n": 15,
+          "p10": 0.017867749470879123,
+          "p50": 0.06374245423645397,
+          "p90": 0.18036728130154142
+        },
+        "scenario": "weekly_156"
+      },
+      "weekly_156|residual_simulation|lasso": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "mean": 0.2478750000000001,
+          "n": 15,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.06892487781255432,
+          "n": 15,
+          "p10": -0.024165135256026593,
+          "p50": 0.06374245423645397,
+          "p90": 0.18040728130154143
+        },
+        "power_bias_abs": {
+          "mean": 0.08393125331596756,
+          "n": 15,
+          "p10": 0.017867749470879123,
+          "p50": 0.0666575457635461,
+          "p90": 0.18040728130154143
+        },
+        "scenario": "weekly_156"
+      },
+      "weekly_156|residual_simulation|ols": {
+        "blockers": [],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "mean": 0.2478750000000001,
+          "n": 15,
+          "p10": 0.24687500000000007,
+          "p50": 0.24687500000000007,
+          "p90": 0.25187499999999996
+        },
+        "method": "residual_simulation",
+        "n_blocked": 0,
+        "n_completed": 15,
+        "n_runs": 15,
+        "power_bias": {
+          "mean": 0.07127154447922097,
+          "n": 15,
+          "p10": -0.024165135256026593,
+          "p50": 0.06374245423645397,
+          "p90": 0.18752728130154148
+        },
+        "power_bias_abs": {
+          "mean": 0.08627791998263422,
+          "n": 15,
+          "p10": 0.02074774947087912,
+          "p50": 0.0666575457635461,
+          "p90": 0.18752728130154148
+        },
+        "scenario": "weekly_156"
+      },
+      "weekly_52|model_simulation|elastic_net": {
+        "blockers": [
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor)",
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor); heteroskedasticity: split variance ratio=3.0500575853940983 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "weekly_52"
+      },
+      "weekly_52|model_simulation|lasso": {
+        "blockers": [
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor)",
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor); heteroskedasticity: split variance ratio=2.8473792171904058 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "weekly_52"
+      },
+      "weekly_52|model_simulation|ols": {
+        "blockers": [
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor)",
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor); heteroskedasticity: split variance ratio=2.8711322857518167 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "model_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "weekly_52"
+      },
+      "weekly_52|residual_simulation|elastic_net": {
+        "blockers": [
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor)",
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor); heteroskedasticity: split variance ratio=3.0500575853940983 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "elastic_net",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "weekly_52"
+      },
+      "weekly_52|residual_simulation|lasso": {
+        "blockers": [
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor)",
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor); heteroskedasticity: split variance ratio=2.8473792171904058 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "lasso",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "weekly_52"
+      },
+      "weekly_52|residual_simulation|ols": {
+        "blockers": [
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor)",
+          "history: only 52 retained weekly periods (< required minimum 104 for the current AR(1) method; evidence shows an unacceptable power bias below this floor); heteroskedasticity: split variance ratio=2.8711322857518167 outside [0.43, 2.30]; constant-variance AR(1) simulation is blocked"
+        ],
+        "false_supported": false,
+        "fit_method": "ols",
+        "mde_bias_relative": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "method": "residual_simulation",
+        "n_blocked": 15,
+        "n_completed": 0,
+        "n_runs": 15,
+        "power_bias": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "power_bias_abs": {
+          "n": 0,
+          "p10": null,
+          "p50": null,
+          "p90": null
+        },
+        "scenario": "weekly_52"
+      }
     },
     "seed_sensitivity_power_std": {
-      "mean": 0.073837801025667,
-      "n": 16,
-      "p10": 0.02639598747299816,
-      "p50": 0.05847428572931181,
-      "p90": 0.1315535377766776
+      "mean": 0.08410606319592254,
+      "n": 42,
+      "p10": 0.03444455645853384,
+      "p50": 0.08323977306140737,
+      "p90": 0.14015838754594995
     },
-    "total_runs": 144
+    "total_runs": 1080
   }
 }

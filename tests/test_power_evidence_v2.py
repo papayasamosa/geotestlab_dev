@@ -218,6 +218,23 @@ class TestSummariseV2:
         assert summary["false_supported_denominator"] == 2  # both mde_not_reached runs
         assert summary["false_supported_count"] == 1
         assert summary["false_supported_rate"] == pytest.approx(0.5)
+        result = summary["scenario_results"]["mde_not_reached|model_simulation|ols"]
+        assert result["false_supported"] is True
+        assert result["n_completed"] == 1
+
+    def test_false_blocked_rate_and_scenario_results_are_recorded(self):
+        runs = [
+            self._completed_run("weekly_104", power_ref=0.8, power_at_ref=0.8),
+            self._blocked_run("weekly_104"),  # false blocked
+            self._blocked_run("weekly_52"),  # expected blocked
+        ]
+        summary = summarise_v2(runs, [])
+        assert summary["false_blocked_count"] == 1
+        assert summary["false_blocked_denominator"] == 2
+        result = summary["scenario_results"]["weekly_104|model_simulation|ols"]
+        assert result["n_runs"] == 2
+        assert result["n_blocked"] == 1
+        assert result["false_supported"] is False
 
     def test_false_mde_rate_flags_reached_when_reference_never_reaches(self):
         runs = [
@@ -402,8 +419,9 @@ class TestCommittedEvidenceV2Artifacts:
 
     def test_report_used_multiple_data_and_simulation_seeds(self):
         report = json.loads(self.REPORT_PATH.read_text(encoding="utf-8"))
-        assert len(report["config"]["data_seeds"]) >= 2
-        assert len(report["config"]["sim_seeds"]) >= 2
+        assert len(report["config"]["data_seeds"]) >= 5
+        assert len(report["config"]["sim_seeds"]) >= 3
+        assert {"ols", "elastic_net", "lasso"} <= set(report["config"]["fit_methods"])
 
     def test_summary_records_a_real_commit_sha(self):
         summary = json.loads(self.SUMMARY_PATH.read_text(encoding="utf-8"))

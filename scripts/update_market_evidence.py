@@ -67,7 +67,38 @@ def generate_full_report() -> dict:
     side = run_market_evidence(**SIDE_CONFIG)
     report = combine_evidence(broad, side)
     report["scenario_names"] = list(MARKET_SCENARIOS)
-    return strip_timing(report)
+    return _canonicalise_json_numbers(strip_timing(report))
+
+
+def _canonicalise_json_numbers(value):
+    """Round floats so deterministic evidence is stable across BLAS platforms.
+
+    The v1 report is byte-compared in CI.  Windows and Linux linear-algebra
+    backends can differ by a few final-bit ULPs in diagnostics such as AR
+    estimates and condition numbers, even when the methodology result is the
+    same.  Twelve decimal places preserve decision-level precision for the
+    primary results.  The two diagnostics below need slightly wider bins:
+    their platform drift in the full matrix is larger than one trillionth,
+    while still being far below any decision-relevant precision.
+    """
+
+    def round_digits(key):
+        if key == "condition_number":
+            return 8
+        if key in {"variance_high_level", "variance_low_level"}:
+            return 11
+        return 12
+
+    def canonicalise(item, key=None):
+        if isinstance(item, float):
+            return round(item, round_digits(key))
+        if isinstance(item, dict):
+            return {name: canonicalise(child, name) for name, child in item.items()}
+        if isinstance(item, list):
+            return [canonicalise(child, key) for child in item]
+        return item
+
+    return canonicalise(value)
 
 
 def main(argv=None) -> int:
