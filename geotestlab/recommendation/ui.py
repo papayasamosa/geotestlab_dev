@@ -66,7 +66,9 @@ def _default_row() -> dict[str, Any]:
     if delivery is not None:
         budget = delivery.values.get("total_budget")
         cost = _number(getattr(budget, "value", None)) if budget is not None else None
-    power_status = str(getattr(power, "support_status", "not_evaluated")) if power else "not_evaluated"
+    power_status = (
+        str(getattr(power, "support_status", "not_evaluated")) if power else "not_evaluated"
+    )
     delivery_status = str(getattr(getattr(delivery, "status", None), "value", "not_evaluated"))
     effect_status = str(getattr(getattr(effect, "status", None), "value", "not_evaluated"))
     return {
@@ -77,7 +79,9 @@ def _default_row() -> dict[str, Any]:
         "match_status": _stage_status("match_quality"),
         "counterfactual_status": _stage_status("counterfactual_validation"),
         "power_status": power_status,
-        "power_usable": bool(getattr(power, "usable_for_recommendation", False)) if power else False,
+        "power_usable": bool(getattr(power, "usable_for_recommendation", False))
+        if power
+        else False,
         "power_meets_target": power_meets if power else None,
         "delivery_status": delivery_status,
         "effect_status": effect_status,
@@ -100,7 +104,10 @@ def _scenario_from_row(row: dict[str, Any]) -> DesignScenario:
         power_meets_target=(
             bool(row.get("power_meets_target"))
             if row.get("power_meets_target") is not None
-            and not (isinstance(row.get("power_meets_target"), float) and math.isnan(row["power_meets_target"]))
+            and not (
+                isinstance(row.get("power_meets_target"), float)
+                and math.isnan(row["power_meets_target"])
+            )
             else None
         ),
         delivery_status=str(row.get("delivery_status", "not_evaluated")),
@@ -108,7 +115,10 @@ def _scenario_from_row(row: dict[str, Any]) -> DesignScenario:
         effect_meets_mde=(
             bool(row.get("effect_meets_mde"))
             if row.get("effect_meets_mde") is not None
-            and not (isinstance(row.get("effect_meets_mde"), float) and math.isnan(row["effect_meets_mde"]))
+            and not (
+                isinstance(row.get("effect_meets_mde"), float)
+                and math.isnan(row["effect_meets_mde"])
+            )
             else None
         ),
         region_constraints_status=str(row.get("region_constraints_status", "not_evaluated")),
@@ -166,9 +176,7 @@ def render_design_recommendation_tab() -> None:
             help="An override must include a reason and remains visible in the export.",
         )
         override_reason = st.text_area("Override reason (required when overriding)")
-        run_recommendation = st.form_submit_button(
-            "▶ Compare design candidates", type="primary"
-        )
+        run_recommendation = st.form_submit_button("▶ Compare design candidates", type="primary")
 
     scenarios: list[DesignScenario] = []
     parse_error = None

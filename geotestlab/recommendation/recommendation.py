@@ -43,7 +43,10 @@ def _value(value: Any) -> Any:
     if isinstance(value, StrEnum):
         return value.value
     if isinstance(value, Mapping):
-        return {str(key): _value(item) for key, item in sorted(value.items(), key=lambda item: str(item[0]))}
+        return {
+            str(key): _value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
     if isinstance(value, (tuple, list)):
         return [_value(item) for item in value]
     if isinstance(value, (set, frozenset)):
@@ -83,9 +86,7 @@ class DesignScenario:
             raise ValueError("size_metric must be a finite non-negative number")
         if int(self.duration_periods) <= 0:
             raise ValueError("duration_periods must be positive")
-        if self.cost is not None and (
-            not math.isfinite(float(self.cost)) or float(self.cost) < 0
-        ):
+        if self.cost is not None and (not math.isfinite(float(self.cost)) or float(self.cost) < 0):
             raise ValueError("cost must be finite and non-negative when supplied")
         if self.history_periods is not None and int(self.history_periods) < 0:
             raise ValueError("history_periods must be non-negative when supplied")
@@ -321,15 +322,15 @@ def assess_design_recommendation(
         raise ValueError("override_reason is required when overriding a recommendation")
 
     assessments = tuple(_assess_scenario(scenario, selected_objective) for scenario in scenarios)
-    full_candidates = [
-        (index, item) for index, item in enumerate(assessments) if item.qualifies
-    ]
+    full_candidates = [(index, item) for index, item in enumerate(assessments) if item.qualifies]
     conditional_candidates = [
         (index, item) for index, item in enumerate(assessments) if item.conditional
     ]
     selected: ScenarioAssessment | None = None
     if full_candidates:
-        selected = min(full_candidates, key=lambda item: _selection_key(item, selected_objective))[1]
+        selected = min(full_candidates, key=lambda item: _selection_key(item, selected_objective))[
+            1
+        ]
     elif conditional_candidates:
         selected = min(
             conditional_candidates, key=lambda item: _selection_key(item, selected_objective)
@@ -337,9 +338,15 @@ def assess_design_recommendation(
 
     override_applied = override_scenario_id is not None
     if override_applied:
-        selected = next(
-            item for item in assessments if item.scenario_id == str(override_scenario_id).strip()
-        ) if str(override_scenario_id).strip() in identifiers else None
+        selected = (
+            next(
+                item
+                for item in assessments
+                if item.scenario_id == str(override_scenario_id).strip()
+            )
+            if str(override_scenario_id).strip() in identifiers
+            else None
+        )
         if selected is None:
             raise ValueError(f"override scenario {override_scenario_id!r} was not found")
 

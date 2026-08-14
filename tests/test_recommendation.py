@@ -116,9 +116,5 @@ def test_recommendation_fingerprint_detects_changed_candidate_inputs():
     result = assess_design_recommendation(scenarios, "smallest_qualifying_design")
     changed = [_scenario("a", cost=101)]
 
-    assert not recommendation_result_is_stale(
-        result, scenarios, "smallest_qualifying_design"
-    )
-    assert recommendation_result_is_stale(
-        result, changed, "smallest_qualifying_design"
-    )
+    assert not recommendation_result_is_stale(result, scenarios, "smallest_qualifying_design")
+    assert recommendation_result_is_stale(result, changed, "smallest_qualifying_design")
