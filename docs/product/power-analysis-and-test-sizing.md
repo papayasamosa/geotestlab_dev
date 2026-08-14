@@ -37,6 +37,13 @@ There is intentionally no implicit best-method default. `model_simulation` or
 placebo results remain a cross-check. The result is not a media feasibility or
 effect-plausibility recommendation.
 
+The scenario boundary in `geotestlab/power/scenarios.py` builds candidate
+test-share and duration designs using explicit historical-KPI, population or
+custom regional weights. It retains requested versus achieved share, applies
+the shared matching constraints, preserves match/counterfactual assessment,
+and selects a qualifying candidate only when an optimisation objective is
+explicitly supplied.
+
 The capability must help an analyst answer:
 
 1. Are the selected test and control regions historically credible?
