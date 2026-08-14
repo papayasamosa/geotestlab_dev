@@ -671,7 +671,7 @@ The analyst shall be able to compare alternative market shares and durations.
 
 ## FR-12. Platform and channel selection
 
-**Status:** Planned.
+**Status:** Partially implemented — generic profile schema and Meta profile registration exist; selector and dynamic workflow remain planned.
 
 The test-sizing workflow shall include a platform or channel selector.
 

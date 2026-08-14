@@ -115,8 +115,8 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Residual diagnostics | Durbin-Watson | FR-7 | Current | Decide additional diagnostics |
 | Placebos | Capped historical windows | FR-8 | Current | Approve finite-sample and fallback policy (recorded in the power-methodology spike) |
 | Counterfactual Confidence | Priority cascade | FR-9 | Current | Review thresholds and driver logic |
-| Prospective power | Evidence harness (`geotestlab/power/`); approved methodology, no production contract yet | FR-10, FR-11 | Spike / approved method pack | Implement the explicit production power contract |
-| Platform selector | None | FR-12 | Planned | Define first platform profiles |
+| Prospective power | Evidence harness plus approved production contract and selected-design UI | FR-10, FR-11 | Current | Continue design-share and duration UX hardening |
+| Platform selector | Generic profile schema with registered Meta profile | FR-12 | In progress | Complete dynamic selector and approve first profile set |
 | Delivery feasibility | None | FR-13 | Planned | Build profile-driven inputs and calculations |
 | Effect plausibility | None | FR-14 | Planned | Define evidence hierarchy and scenarios |
 | Integrated recommendation | Matching recommendations only | FR-15 | Planned | Build after power and delivery layers |
@@ -318,9 +318,9 @@ production power core is now the active next stage under those conditions.
 
 ## Milestone 5. Power-analysis MVP
 
-**Status:** Production core, candidate scenario engine and selected-design UI
-in progress after explicit product-owner methodology approval; implementation
-must preserve the approved method/version and support-status conditions.
+**Status:** Delivered for the selected-design workflow after explicit
+product-owner methodology approval; implementation preserves the approved
+method/version and support-status conditions.
 
 ### Deliverables
 
@@ -340,7 +340,7 @@ must preserve the approved method/version and support-status conditions.
 
 ## Milestone 6. Platform-aware media feasibility
 
-**Status:** Planned.
+**Status:** Platform-profile schema in progress; delivery calculations and UI remain planned.
 
 ### Deliverables
 
@@ -399,8 +399,8 @@ must preserve the approved method/version and support-status conditions.
 
 ## 9. Suggested pull-request sequence for the new capability
 
-Items 1–5 below are delivered on `main` as of the reviewed baseline; the
-methodology pack is approved and item 6 is now in progress. Items 7 onward
+Items 1–7 below are delivered on `main` as of the reviewed baseline; the
+methodology pack is approved and item 8 is now in progress. Items 9 onward
 remain pending.
 
 1. `docs/canonical-product-prd` — delivered
@@ -409,8 +409,8 @@ remain pending.
 4. `feature/experiment-identity-and-freeze` — delivered (foundations)
 5. `spike/power-analysis-methodology` — delivered; methodology pack approved
 6. `feature/power-analysis-core` — delivered
-7. `feature/power-analysis-ui` — in progress
-8. `feature/platform-profile-schema`
+7. `feature/power-analysis-ui` — delivered
+8. `feature/platform-profile-schema` — in progress
 9. `feature/media-delivery-feasibility`
 10. `feature/effect-plausibility-scenarios`
 11. `feature/integrated-design-recommendation`

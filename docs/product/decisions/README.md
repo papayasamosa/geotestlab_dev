@@ -27,7 +27,7 @@ entry is marked `Pending` and no approved decision is implied.
 | `ADR-005-exploratory-fallback-policy.md` | Treatment of exploratory fallback fits and safety scenarios. | Approved |
 | `ADR-006-design-freeze-storage.md` | Persistence mechanism for approved design records (local serialisable record first; no database unless separately approved). | Pending |
 | `ADR-007-experiment-versioning.md` | Versioning rules for experiment identity, input fingerprints and approved design versions. | Pending |
-| `ADR-008-first-platform-profiles.md` | Which platform profiles are included in the first release of the test-sizing workflow. | Pending |
+| `ADR-008-first-platform-profiles.md` | Which platform profiles are included in the first release of the test-sizing workflow. | Pending — proposed generic schema with Meta profile |
 | `ADR-009-effectiveness-evidence-quality.md` | Which effectiveness-evidence sources are permitted to support a full spend-sufficiency conclusion. | Pending |
 | `ADR-010-licensing.md` | Licensing model for the product. | Pending |
 | `ADR-011-counterfactual-fit-policy.md` | Explicit OLS/Elastic Net/LASSO fit selection and fallback behaviour. | Approved |
