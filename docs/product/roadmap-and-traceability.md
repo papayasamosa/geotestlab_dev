@@ -79,10 +79,11 @@ Several capabilities are delivered as **foundations** but are not yet the
   complete FR-22 reproducible export (tool and methodology versions, package
   versions, power and MDE, platform/budget/delivery/effectiveness assumptions,
   recommendation rationale, etc.) is not yet delivered.
-- **Spike vs production FR-10 and FR-11.** `geotestlab/power/` is an
-  **unapproved methodology prototype**, not the production power engine. The
-  production `feature/power-analysis-core` stage is explicitly gated on
-  methodology approval.
+- **Evidence harness vs production FR-10 and FR-11.** `geotestlab/power/`
+  remains an **experimental evidence harness**, not the production power
+  engine. The methodology is approved under ADR-000, but the production
+  contract must remain separate and preserve its explicit method/support
+  conditions.
 - **Reduced-sampling smoke vs Bayesian assurance.** The Bayesian CI job runs a
   reduced-sampling execution-path smoke test (tiny draws/tune/chains) to prove
   the pipeline runs; it is **not** evidence of production MCMC convergence or
@@ -114,7 +115,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Residual diagnostics | Durbin-Watson | FR-7 | Current | Decide additional diagnostics |
 | Placebos | Capped historical windows | FR-8 | Current | Approve finite-sample and fallback policy (recorded in the power-methodology spike) |
 | Counterfactual Confidence | Priority cascade | FR-9 | Current | Review thresholds and driver logic |
-| Prospective power | Methodology spike only (`geotestlab/power/`, unapproved) | FR-10, FR-11 | Spike | Production power core gated on methodology approval |
+| Prospective power | Evidence harness (`geotestlab/power/`); approved methodology, no production contract yet | FR-10, FR-11 | Spike / approved method pack | Implement the explicit production power contract |
 | Platform selector | None | FR-12 | Planned | Define first platform profiles |
 | Delivery feasibility | None | FR-13 | Planned | Build profile-driven inputs and calculations |
 | Effect plausibility | None | FR-14 | Planned | Define evidence hierarchy and scenarios |
@@ -174,7 +175,8 @@ The root README should remain a concise installation and orientation document, l
 
 ### P1. Prospective test design
 
-- power-analysis methodology spike (delivered; awaiting methodology approval);
+- power-analysis methodology spike and ADR pack (delivered; methodology
+  approved under ADR-000);
 - selected-design power and MDE;
 - market-share and duration scenarios;
 - design-level export;
@@ -294,10 +296,10 @@ The root README should remain a concise installation and orientation document, l
 
 ## Milestone 4. Power-analysis methodology prototype
 
-**Status:** Delivered as an unapproved spike and strengthened by the PR2
-calibration/evidence remediation; the production power core
-(`feature/power-analysis-core`) is gated on explicit methodology approval in
-`docs/product/decisions/ADR-000-power-methodology-approval-gate.md`.
+**Status:** Delivered as an evidence-strengthened spike; the methodology ADR
+pack is approved under
+`docs/product/decisions/ADR-000-power-methodology-approval-gate.md`, and the
+production power core is now the active next stage under those conditions.
 
 ### Deliverables
 
@@ -316,8 +318,9 @@ calibration/evidence remediation; the production power core
 
 ## Milestone 5. Power-analysis MVP
 
-**Status:** Planned (gated on the explicit product-owner approval record in
-ADR-000; the documentation PR alone does not satisfy the gate).
+**Status:** In progress after explicit product-owner methodology approval;
+production implementation must preserve the approved method/version and
+support-status conditions.
 
 ### Deliverables
 
@@ -396,14 +399,16 @@ ADR-000; the documentation PR alone does not satisfy the gate).
 
 ## 9. Suggested pull-request sequence for the new capability
 
-Items 1–5 below are delivered on `main` as of the reviewed baseline; the remaining items are still pending (items 6–7 are gated on methodology approval).
+Items 1–5 below are delivered on `main` as of the reviewed baseline; the
+methodology pack is approved and item 6 is now in progress. Items 7 onward
+remain pending.
 
 1. `docs/canonical-product-prd` — delivered
 2. `refactor/validation-core` — delivered
 3. `refactor/bayesian-core` — delivered
 4. `feature/experiment-identity-and-freeze` — delivered (foundations)
-5. `spike/power-analysis-methodology` — delivered (awaiting approval)
-6. `feature/power-analysis-core` — gated on methodology approval
+5. `spike/power-analysis-methodology` — delivered; methodology pack approved
+6. `feature/power-analysis-core` — next implementation stage
 7. `feature/power-analysis-ui`
 8. `feature/platform-profile-schema`
 9. `feature/media-delivery-feasibility`

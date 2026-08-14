@@ -1,6 +1,6 @@
 # ADR-014: MDE bounds and tolerance
 
-- **Status:** Proposed — pending product-owner approval
+- **Status:** Approved — product-owner approval recorded in ADR-000
 - **Date:** 2026-08-14
 
 ## Decision proposal
@@ -22,4 +22,5 @@ This does not establish adequacy for untested KPI scales or effect shapes.
 
 ## Affected requirements and implementation status
 
-FR-10, FR-11 and TS-FR1. The production defaults remain unapproved.
+FR-10, FR-11 and TS-FR1. The production contract must receive these settings
+explicitly until product-level defaults are separately specified.

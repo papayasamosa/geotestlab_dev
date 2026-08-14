@@ -17,8 +17,8 @@ packages under `geotestlab/`:
   serialisable result.
 - `geotestlab/experiment/` — experiment identity, stage fingerprints,
   staleness, and immutable design-freeze foundations.
-- `geotestlab/power/` — **an unapproved methodology prototype** for prospective
-  power analysis; a spike, not the production power engine.
+- `geotestlab/power/` — **an experimental evidence harness** for prospective
+  power analysis; it remains separate from the production power engine.
 
 Validation and Bayesian logic no longer live substantially in the application
 script; they have been extracted into `geotestlab/validation/` and
@@ -119,9 +119,9 @@ The current UI has four tabs:
 The target product model (see `docs/product/PRD.md`) defines **five stages**:
 define and match regions; validate the design; size and power the test;
 measure completed-test impact; and Bayesian analysis and reporting.
-Prospective power analysis and test sizing are **planned, not yet
-implemented** — the current empirical power preview is not the approved
-product capability.
+Prospective power analysis and test sizing are **under production
+implementation**; the current empirical power preview is not the production
+power capability.
 
 ## Dependency management
 
@@ -178,7 +178,11 @@ a time:
 - `geotestlab/validation/` — typed counterfactual validation: frequency config, model matrix, regularised models, rolling-origin validation, placebo, Counterfactual Confidence and the `run_validation` service.
 - `geotestlab/bayesian/` — typed Bayesian TBR core: AR(1), priors, features, model construction, prediction, diagnostics and the `run_bayesian` service; the PyMC trace is kept separate from the serialisable `BayesianResult` summary.
 - `geotestlab/experiment/` — experiment identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints, stage-scoped staleness, immutable frozen design versions, and a local experiment-record export (foundations of FR-16 and FR-22, not the complete contracts).
-- `geotestlab/power/` — **methodology spike only**: synthetic power cases, model-based counterfactual simulation, placebo/residual methods, MDE search and fit-method comparison evidence. **Not approved for production**; the production power engine (FR-10/FR-11) is gated on explicit methodology approval.
+- `geotestlab/power/` — **methodology evidence harness**: synthetic power cases,
+  model-based counterfactual simulation, placebo/residual methods, MDE search
+  and fit-method comparison evidence. The methodology pack is approved under
+  ADR-000; this experimental harness is still not the production power engine
+  (FR-10/FR-11).
 
 The Streamlit app keeps `@st.cache_data` wrappers around the pure package functions (aggregation, metric caching, KPI workbook parsing, NN pre-processing) so caching behaviour is unchanged. Numerical characterisation goldens (`tests/test_numerical_characterisation.py`) guard that every extraction is behaviour-preserving.
 

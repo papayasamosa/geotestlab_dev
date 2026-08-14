@@ -1,14 +1,14 @@
 # ADR-001: Primary power-analysis simulation method
 
-- **Status:** Proposed — pending product-owner approval
+- **Status:** Approved — product-owner approval recorded in ADR-000
 - **Date:** 2026-08-14
 - **Evidence:** `power-methodology-evidence-v2-summary.json`, scenario suite 2.1.0
 
 ## Decision proposal
 
-Do not approve a primary production simulation method in this pack. Keep the
-choice explicitly open between `model_simulation` and `residual_simulation`
-until the remaining calibration failures are resolved. Keep
+Do not select an implicit primary production simulation method. Keep the
+choice explicit between `model_simulation` and `residual_simulation` while the
+remaining calibration limitations are carried into support status. Keep
 `placebo_empirical` as a cross-check, not as the production absolute-power
 engine.
 
@@ -34,9 +34,10 @@ support approval.
 - Select placebo empirical power as primary.
 - Defer the choice until supported-scenario calibration is acceptable.
 
-The fourth alternative is the recommendation in this ADR. The evidence does
-not yet establish a safe winner, and placebo windows do not provide an
-independent prospective null for absolute power.
+The fourth alternative is the approved policy in this ADR. The evidence does
+not establish a safe universal winner, and placebo windows do not provide an
+independent prospective null for absolute power. A production caller must
+therefore choose and record the method explicitly.
 
 ## Affected requirements and implementation status
 

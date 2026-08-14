@@ -1,6 +1,6 @@
 # ADR-004: Placebo finite-sample and overlap policy
 
-- **Status:** Proposed — pending product-owner approval
+- **Status:** Approved — product-owner approval recorded in ADR-000
 - **Date:** 2026-08-14
 
 ## Decision proposal
