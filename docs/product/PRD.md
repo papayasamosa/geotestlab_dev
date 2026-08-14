@@ -712,7 +712,7 @@ The application distinguishes externally supplied forecasts from values calculat
 
 ## FR-14. Effect plausibility and spend sufficiency
 
-**Status:** Planned.
+**Status:** Partially implemented — evidence/scenario contracts and MDE comparison exist; approved evidence quality and integrated spend sufficiency remain planned.
 
 GeoTestLab shall only conclude that planned spend is likely to produce a detectable KPI effect when an explicit bridge exists between media delivery and KPI response.
 
