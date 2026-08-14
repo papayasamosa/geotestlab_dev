@@ -50,6 +50,25 @@ def test_evidence_scenarios_compare_with_mde_and_retain_separate_delivery_status
     assert result.to_dict()["evidence"]["source"] == "experiment-2025-07"
 
 
+def test_one_sided_direction_rejects_an_opposite_signed_effect():
+    positive = assess_effect_plausibility(
+        _evidence(), mde_pct=5.0, effect_direction="one_sided_negative"
+    )
+
+    assert [comparison.meets_mde for comparison in positive.comparisons] == [False, False, False]
+    negative = _evidence(
+        scenarios=(
+            EffectScenario("low", -9.0),
+            EffectScenario("central", -5.0),
+            EffectScenario("high", -2.0),
+        )
+    )
+    result = assess_effect_plausibility(
+        negative, mde_pct=5.0, effect_direction="one_sided_negative"
+    )
+    assert [comparison.meets_mde for comparison in result.comparisons] == [True, True, False]
+
+
 def test_analyst_scenarios_are_conditional_and_icpa_carries_uncertainty_warning():
     evidence = _evidence(evidence_type="incremental_cpa", quality="low")
     result = assess_effect_plausibility(evidence, mde_pct=5.0)
@@ -59,6 +78,10 @@ def test_analyst_scenarios_are_conditional_and_icpa_carries_uncertainty_warning(
 
     analyst = _evidence(evidence_type="analyst_assumption", quality="low")
     assert assess_effect_plausibility(analyst).status is EffectPlausibilityStatus.CONDITIONAL
+    assert (
+        assess_effect_plausibility(_evidence(quality="unknown")).status
+        is EffectPlausibilityStatus.CONDITIONAL
+    )
 
 
 def test_adjusted_evidence_cannot_silently_become_central():

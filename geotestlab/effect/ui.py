@@ -30,6 +30,7 @@ def render_effect_plausibility_tab() -> None:
     power_result = st.session_state.get("production_power_result")
     delivery_result = st.session_state.get("media_delivery_result")
     power_mde = getattr(power_result, "mde", None) if power_result else None
+    power_direction = getattr(power_result, "side", None) if power_result else None
     if power_mde is not None:
         st.info(f"Power-stage MDE: {power_mde:.2f}%. Enter or override the comparison MDE below.")
     if delivery_result is not None:
@@ -56,6 +57,16 @@ def render_effect_plausibility_tab() -> None:
             min_value=0.0,
             value=float(power_mde) if power_mde is not None else 0.0,
             step=0.5,
+        )
+        direction_options = ("one_sided_positive", "one_sided_negative", "two_sided")
+        effect_direction = st.selectbox(
+            "Effect direction for comparison",
+            direction_options,
+            index=direction_options.index(power_direction)
+            if power_direction in direction_options
+            else 2,
+            format_func=lambda value: value.replace("_", " ").title(),
+            help="Preserve the power-stage one-sided hypothesis when comparing expected uplift with MDE.",
         )
         st.markdown("#### Expected KPI-uplift scenarios")
         low_col, central_col, high_col = st.columns(3)
@@ -106,6 +117,7 @@ def render_effect_plausibility_tab() -> None:
             result = assess_effect_plausibility(
                 evidence,
                 mde_pct=float(mde) if mde > 0 else None,
+                effect_direction=effect_direction,
                 delivery_status=delivery_result.status.value if delivery_result else None,
                 delivery_fingerprint=(
                     delivery_result.input_fingerprint if delivery_result else None
@@ -145,6 +157,7 @@ def render_effect_plausibility_tab() -> None:
             result,
             stored_evidence,
             current_mde,
+            effect_direction,
             delivery_status=delivery_result.status.value if delivery_result else None,
             delivery_fingerprint=(delivery_result.input_fingerprint if delivery_result else None),
         )

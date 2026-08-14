@@ -49,6 +49,7 @@ class EffectPlausibilityStatus(StrEnum):
 
 
 _SCENARIO_LABELS = ("low", "central", "high")
+_EFFECT_DIRECTIONS = ("one_sided_positive", "one_sided_negative", "two_sided")
 
 
 @dataclass(frozen=True)
@@ -142,6 +143,7 @@ class EffectPlausibilityResult:
     input_fingerprint: str
     evidence: EffectEvidence | None
     mde_pct: float | None
+    effect_direction: str
     comparisons: tuple[EffectComparison, ...]
     delivery_status: str | None = None
     blockers: tuple[str, ...] = ()
@@ -154,6 +156,7 @@ class EffectPlausibilityResult:
             "input_fingerprint": self.input_fingerprint,
             "evidence": self.evidence.to_dict() if self.evidence else None,
             "mde_pct": self.mde_pct,
+            "effect_direction": self.effect_direction,
             "comparisons": [comparison.to_dict() for comparison in self.comparisons],
             "delivery_status": self.delivery_status,
             "blockers": list(self.blockers),
@@ -164,6 +167,7 @@ class EffectPlausibilityResult:
 def effect_input_fingerprint(
     evidence: EffectEvidence | None,
     mde_pct: float | None,
+    effect_direction: str = "two_sided",
     delivery_status: str | None = None,
     delivery_fingerprint: str | None = None,
 ) -> str:
@@ -172,6 +176,7 @@ def effect_input_fingerprint(
     payload = {
         "evidence": evidence.to_dict() if evidence else None,
         "mde_pct": mde_pct,
+        "effect_direction": effect_direction,
         "delivery_status": delivery_status,
         "delivery_fingerprint": delivery_fingerprint,
     }
@@ -182,6 +187,7 @@ def effect_input_fingerprint(
 def assess_effect_plausibility(
     evidence: EffectEvidence | None,
     mde_pct: float | None = None,
+    effect_direction: str = "two_sided",
     delivery_status: str | None = None,
     delivery_fingerprint: str | None = None,
 ) -> EffectPlausibilityResult:
@@ -189,7 +195,11 @@ def assess_effect_plausibility(
 
     if mde_pct is not None and (not math.isfinite(float(mde_pct)) or float(mde_pct) < 0):
         raise ValueError("mde_pct must be a finite non-negative number")
-    fingerprint = effect_input_fingerprint(evidence, mde_pct, delivery_status, delivery_fingerprint)
+    if effect_direction not in _EFFECT_DIRECTIONS:
+        raise ValueError(f"effect_direction must be one of {_EFFECT_DIRECTIONS}")
+    fingerprint = effect_input_fingerprint(
+        evidence, mde_pct, effect_direction, delivery_status, delivery_fingerprint
+    )
     if evidence is None:
         return EffectPlausibilityResult(
             schema_version=EFFECT_PLAUSIBILITY_SCHEMA_VERSION,
@@ -197,6 +207,7 @@ def assess_effect_plausibility(
             input_fingerprint=fingerprint,
             evidence=None,
             mde_pct=mde_pct,
+            effect_direction=effect_direction,
             comparisons=(),
             delivery_status=delivery_status,
             warnings=(
@@ -231,16 +242,27 @@ def assess_effect_plausibility(
             "with effect plausibility."
         )
 
+    def effect_distance(effect: float) -> float:
+        if effect_direction == "one_sided_positive":
+            return effect
+        if effect_direction == "one_sided_negative":
+            return -effect
+        return abs(effect)
+
     comparisons = tuple(
         EffectComparison(
             label=scenario.label,
             expected_uplift_pct=scenario.expected_uplift_pct,
             mde_pct=mde_pct,
             meets_mde=(
-                abs(scenario.expected_uplift_pct) >= mde_pct if mde_pct is not None else None
+                effect_distance(scenario.expected_uplift_pct) >= mde_pct
+                if mde_pct is not None
+                else None
             ),
             margin_to_mde_pct=(
-                abs(scenario.expected_uplift_pct) - mde_pct if mde_pct is not None else None
+                effect_distance(scenario.expected_uplift_pct) - mde_pct
+                if mde_pct is not None
+                else None
             ),
         )
         for scenario in evidence.scenarios
@@ -250,6 +272,7 @@ def assess_effect_plausibility(
         if blockers
         else EffectPlausibilityStatus.CONDITIONAL
         if evidence.evidence_type is EvidenceType.ANALYST_ASSUMPTION
+        or evidence.quality is EvidenceQuality.UNKNOWN
         else EffectPlausibilityStatus.EVIDENCE_BACKED
     )
     return EffectPlausibilityResult(
@@ -258,6 +281,7 @@ def assess_effect_plausibility(
         input_fingerprint=fingerprint,
         evidence=evidence,
         mde_pct=mde_pct,
+        effect_direction=effect_direction,
         comparisons=comparisons,
         delivery_status=delivery_status,
         blockers=tuple(blockers),
@@ -269,11 +293,12 @@ def effect_result_is_stale(
     result: EffectPlausibilityResult,
     evidence: EffectEvidence | None,
     mde_pct: float | None,
+    effect_direction: str = "two_sided",
     delivery_status: str | None = None,
     delivery_fingerprint: str | None = None,
 ) -> bool:
     """Return whether evidence, MDE or referenced delivery identity changed."""
 
     return result.input_fingerprint != effect_input_fingerprint(
-        evidence, mde_pct, delivery_status, delivery_fingerprint
+        evidence, mde_pct, effect_direction, delivery_status, delivery_fingerprint
     )
