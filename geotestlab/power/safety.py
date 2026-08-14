@@ -256,9 +256,12 @@ def heteroskedasticity_support(
         max(2, len(r)),
     )
     blocks = [r[start : start + block_length] for start in range(0, len(r), block_length)]
-    rng = np.random.default_rng(
+    # Keep the level-derived variation deterministic without allowing large
+    # negative KPI baselines to produce an invalid NumPy seed.
+    rng_seed = (
         int(policy.heteroskedasticity_random_seed) + len(r) + int(np.round(np.sum(lvl)))
-    )
+    ) % (2**32)
+    rng = np.random.default_rng(rng_seed)
     null_statistics = []
     for _ in range(max(1, int(policy.heteroskedasticity_resamples))):
         permuted = np.concatenate([blocks[i] for i in rng.permutation(len(blocks))])[: len(r)]

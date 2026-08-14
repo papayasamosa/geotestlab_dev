@@ -160,6 +160,15 @@ class TestHeteroskedasticitySupport:
         assert first == second
         assert first[2]["scale_association_block_length"] == POLICY.heteroskedasticity_block_length
 
+    def test_large_negative_levels_keep_permutation_seed_valid(self):
+        rng = np.random.default_rng(12)
+        residuals = rng.normal(0.0, 1.0, 120)
+        level = np.full(120, -1_000_000_000.0)
+        first = heteroskedasticity_support(residuals, level, POLICY)
+        second = heteroskedasticity_support(residuals, level, POLICY)
+        assert first == second
+        assert first[0] in (SUPPORTED, BLOCKED)
+
 
 class TestControlMatrixSupport:
     def test_ok_fit_no_removals_supported(self):
