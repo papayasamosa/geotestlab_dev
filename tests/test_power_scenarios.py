@@ -192,6 +192,92 @@ def test_locked_test_regions_must_retain_forced_test_regions():
         )
 
 
+def test_default_power_runner_receives_dataset(monkeypatch):
+    dataset = _dataset()
+    template = _template()
+    received = {}
+
+    def fake_runner(received_dataset, config):
+        received["dataset"] = received_dataset
+        received["config"] = config
+        return _power_result(
+            test_regions=config.test_regions,
+            control_regions=config.control_regions,
+            planned_test_dates=tuple(value.isoformat() for value in config.test_dates),
+        )
+
+    monkeypatch.setattr("geotestlab.power.scenarios.run_production_power", fake_runner)
+    result = size_power_scenarios(
+        dataset,
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=template.historical_end,
+            power_template=template,
+        ),
+        design_assessor=_assessment,
+    )
+
+    assert received["dataset"] is dataset
+    assert result.candidates[0].power_result is not None
+
+
+def test_unavailable_duration_is_retained_as_blocked_candidate():
+    result = size_power_scenarios(
+        _dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1, 2),
+            historical_end=pd.Timestamp("2025-01-19"),
+        ),
+        design_assessor=_assessment,
+    )
+
+    assert len(result.candidates) == 2
+    unavailable = result.candidates[1]
+    assert unavailable.planned_test_dates == ()
+    assert "duration 2 cannot be built" in unavailable.design_assessment.blockers[0]
+    assert unavailable.recommendation_eligible is False
+
+
+def test_design_assessment_blockers_prevent_recommendation():
+    template = _template()
+    result = size_power_scenarios(
+        _dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=template.historical_end,
+            power_template=template,
+            objective="smallest_test_share_then_duration",
+        ),
+        design_assessor=lambda *_args: DesignAssessment(
+            match_status="pass",
+            counterfactual_status="pass",
+            blockers=("contamination risk",),
+        ),
+        power_runner=lambda _config: _power_result(),
+    )
+
+    assert result.selected_candidate is None
+    assert result.candidates[0].recommendation_eligible is False
+    assert "contamination risk" in result.candidates[0].recommendation_blockers
+
+
+def test_power_template_and_sizing_history_must_match():
+    template = _template()
+    with pytest.raises(ValueError, match="historical_end must match"):
+        size_power_scenarios(
+            _dataset(),
+            ScenarioSizingConfig(
+                target_shares=(0.2,),
+                durations=(1,),
+                historical_end=pd.Timestamp("2025-01-12"),
+                power_template=template,
+            ),
+        )
+
+
 def test_poor_design_quality_blocks_recommendation_even_with_power():
     template = _template()
     result = size_power_scenarios(

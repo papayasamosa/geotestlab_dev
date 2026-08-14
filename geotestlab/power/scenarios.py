@@ -305,11 +305,7 @@ def _duration_dates(
             ].unique()
         )
     )
-    if len(dates) < duration:
-        raise ValueError(
-            f"only {len(dates)} post-history dates are available; duration {duration} cannot be built"
-        )
-    return tuple(pd.Timestamp(value).normalize() for value in dates[:duration])
+    return tuple(pd.Timestamp(value).normalize() for value in dates)
 
 
 def _assessment(
@@ -334,6 +330,7 @@ def _recommendation_state(
     target_power: float | None,
 ) -> tuple[bool, tuple[str, ...]]:
     blockers: list[str] = []
+    blockers.extend(assessment.blockers)
     if not assessment.passes_quality:
         blockers.append("match/counterfactual quality does not pass")
     if power is None:
@@ -374,6 +371,12 @@ def size_power_scenarios(
         historical_end = pd.Timestamp(config.power_template.historical_end).normalize()
     else:
         historical_end = pd.Timestamp(config.historical_end).normalize()
+    if config.power_template is not None:
+        template_end = pd.Timestamp(config.power_template.historical_end).normalize()
+        if template_end != historical_end:
+            raise ValueError(
+                "ScenarioSizingConfig.historical_end must match power_template.historical_end"
+            )
     weights = _weights(
         dataset,
         metric,
@@ -401,8 +404,18 @@ def size_power_scenarios(
             tuple(config.locked_control_regions),
         )
         for duration in config.durations:
-            test_dates = _duration_dates(dataset, metric, historical_end, int(duration))
-            assessment = _assessment(design_assessor, test_regions, controls, test_dates)
+            available_dates = _duration_dates(dataset, metric, historical_end, int(duration))
+            if len(available_dates) < int(duration):
+                test_dates = ()
+                assessment = DesignAssessment(
+                    blockers=(
+                        f"only {len(available_dates)} post-history dates are available; "
+                        f"duration {duration} cannot be built",
+                    )
+                )
+            else:
+                test_dates = available_dates[: int(duration)]
+                assessment = _assessment(design_assessor, test_regions, controls, test_dates)
             power_result = None
             if config.power_template is not None or runner is not None:
                 if config.power_template is None:
@@ -414,7 +427,10 @@ def size_power_scenarios(
                     control_regions=controls,
                     test_dates=test_dates,
                 )
-                power_result = (runner or run_production_power)(candidate_config)
+                if runner is None:
+                    power_result = run_production_power(dataset, candidate_config)
+                else:
+                    power_result = runner(candidate_config)
             eligible, blockers = _recommendation_state(
                 assessment,
                 power_result,
