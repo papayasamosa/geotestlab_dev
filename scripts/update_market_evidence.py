@@ -76,16 +76,29 @@ def _canonicalise_json_numbers(value):
     The v1 report is byte-compared in CI.  Windows and Linux linear-algebra
     backends can differ by a few final-bit ULPs in diagnostics such as AR
     estimates and condition numbers, even when the methodology result is the
-    same.  Twelve decimal places preserve decision-level precision while
-    removing those meaningless serialization differences.
+    same.  Twelve decimal places preserve decision-level precision for the
+    primary results.  The two diagnostics below need slightly wider bins:
+    their platform drift in the full matrix is larger than one trillionth,
+    while still being far below any decision-relevant precision.
     """
-    if isinstance(value, float):
-        return round(value, 12)
-    if isinstance(value, dict):
-        return {key: _canonicalise_json_numbers(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_canonicalise_json_numbers(item) for item in value]
-    return value
+
+    def round_digits(key):
+        if key == "condition_number":
+            return 8
+        if key in {"variance_high_level", "variance_low_level"}:
+            return 11
+        return 12
+
+    def canonicalise(item, key=None):
+        if isinstance(item, float):
+            return round(item, round_digits(key))
+        if isinstance(item, dict):
+            return {name: canonicalise(child, name) for name, child in item.items()}
+        if isinstance(item, list):
+            return [canonicalise(child, key) for child in item]
+        return item
+
+    return canonicalise(value)
 
 
 def main(argv=None) -> int:
