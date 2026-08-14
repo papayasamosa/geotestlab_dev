@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 import pandas as pd
@@ -45,6 +46,8 @@ def _parse_weekly_pattern(value: str) -> tuple[dict[str, float] | None, str | No
         amounts = [float(item.strip()) for item in cleaned.split(",")]
     except ValueError:
         return None, "Weekly budget pattern must be comma-separated non-negative numbers."
+    if any(not math.isfinite(amount) for amount in amounts):
+        return None, "Weekly budget pattern must contain only finite numbers."
     if any(amount < 0 for amount in amounts):
         return None, "Weekly budget pattern must not contain negative values."
     return {f"week_{index}": amount for index, amount in enumerate(amounts, start=1)}, None

@@ -95,6 +95,7 @@ class DeliveryAssessment:
     values: dict[str, MediaValue]
     thresholds: DeliveryThresholds
     scope: ExperimentMediaScope
+    custom_fields: dict[str, MediaValue] = field(default_factory=dict)
     checks: dict[str, dict[str, Any]] = field(default_factory=dict)
     calculated_fields: tuple[str, ...] = ()
     missing_fields: tuple[str, ...] = ()
@@ -110,6 +111,9 @@ class DeliveryAssessment:
             "status": self.status.value,
             "input_fingerprint": self.input_fingerprint,
             "values": {key: self.values[key].to_dict() for key in sorted(self.values)},
+            "custom_fields": {
+                key: self.custom_fields[key].to_dict() for key in sorted(self.custom_fields)
+            },
             "thresholds": self.thresholds.to_dict(),
             "scope": self.scope.to_dict(),
             "checks": self.checks,
@@ -124,11 +128,12 @@ def delivery_input_fingerprint(
     plan: MediaPlan,
     thresholds: DeliveryThresholds | None = None,
     scope: ExperimentMediaScope | None = None,
+    profile: PlatformProfile | None = None,
 ) -> str:
     """Hash the raw plan, thresholds and analytical scope for staleness checks."""
 
     payload = {
-        "plan": plan.to_dict(),
+        "plan": plan.to_dict(profile),
         "thresholds": (thresholds or DeliveryThresholds()).to_dict(),
         "scope": (scope or ExperimentMediaScope()).to_dict(),
     }
@@ -167,7 +172,7 @@ def _pattern_total(values: dict[str, MediaValue]) -> float | None:
             numeric = float(amount)
         except (TypeError, ValueError):
             return None
-        if numeric < 0:
+        if not math.isfinite(numeric) or numeric < 0:
             return None
         amounts.append(numeric)
     return sum(amounts) if amounts else None
@@ -184,7 +189,9 @@ def assess_media_delivery(
     selected_thresholds = thresholds or DeliveryThresholds()
     selected_scope = scope or ExperimentMediaScope()
     validation_errors = plan.validation_errors(profile)
-    fingerprint = delivery_input_fingerprint(plan, selected_thresholds, selected_scope)
+    fingerprint = delivery_input_fingerprint(
+        plan, selected_thresholds, selected_scope, profile=profile
+    )
     values = dict(plan.values)
     blockers = list(validation_errors)
     warnings: list[str] = []
@@ -284,11 +291,11 @@ def assess_media_delivery(
         checks[key] = {
             "observed": observed,
             "minimum": float(minimum),
-            "passes": passes,
+            "passes": None if observed is None else passes,
             "provenance": values[key].provenance.value if key in values else None,
         }
 
-    failed_checks = [key for key, check in checks.items() if not check["passes"]]
+    failed_checks = [key for key, check in checks.items() if check["passes"] is False]
     if failed_checks:
         blockers.extend(f"{key} is below its minimum delivery threshold" for key in failed_checks)
 
@@ -309,6 +316,7 @@ def assess_media_delivery(
         values=values,
         thresholds=selected_thresholds,
         scope=selected_scope,
+        custom_fields=dict(plan.custom_fields),
         checks=checks,
         calculated_fields=tuple(calculated_fields),
         missing_fields=tuple(missing_fields),
@@ -322,7 +330,10 @@ def delivery_result_is_stale(
     plan: MediaPlan,
     thresholds: DeliveryThresholds | None = None,
     scope: ExperimentMediaScope | None = None,
+    profile: PlatformProfile | None = None,
 ) -> bool:
     """Return whether raw media inputs, thresholds or analytical scope changed."""
 
-    return result.input_fingerprint != delivery_input_fingerprint(plan, thresholds, scope)
+    return result.input_fingerprint != delivery_input_fingerprint(
+        plan, thresholds, scope, profile=profile
+    )

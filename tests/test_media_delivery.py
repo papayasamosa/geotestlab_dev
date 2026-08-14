@@ -11,6 +11,8 @@ from geotestlab.media import (
     assess_media_delivery,
     delivery_result_is_stale,
 )
+from geotestlab.media.profiles import MediaField, PlatformProfile
+from geotestlab.media.ui import _parse_weekly_pattern
 
 
 def test_budget_cpm_frequency_and_audience_calculate_delivery_metrics():
@@ -102,3 +104,40 @@ def test_scope_regions_are_normalized_for_reproducible_exports():
 
     assert scope.excluded_from_experiment == ("Oslo", "Stockholm")
     assert scope.to_dict()["excluded_from_experiment"] == ["Oslo", "Stockholm"]
+
+
+def test_non_finite_weekly_budget_is_rejected_by_form_parser():
+    pattern, error = _parse_weekly_pattern("1000, nan")
+
+    assert pattern is None
+    assert error == "Weekly budget pattern must contain only finite numbers."
+
+
+def test_missing_threshold_observation_remains_incomplete():
+    result = assess_media_delivery(
+        MediaPlan("meta_auction_social"), DeliveryThresholds(min_impressions=100)
+    )
+
+    assert result.status is DeliveryStatus.INCOMPLETE
+    assert result.checks["impressions"]["passes"] is None
+    assert result.blockers == ()
+
+
+def test_custom_profile_and_fields_survive_delivery_assessment_export():
+    profile = PlatformProfile(
+        profile_id="custom_social",
+        display_name="Custom social",
+        channel_family="auction_social",
+        fields=(MediaField("impressions", "Impressions", "numeric"),),
+    )
+    plan = MediaPlan(
+        "custom_social",
+        values={"impressions": MediaValue(1000, "historical_observed")},
+        custom_fields={"agency_model": MediaValue("v2", "analyst_assumption")},
+    )
+
+    result = assess_media_delivery(plan, profile=profile)
+
+    assert result.status is DeliveryStatus.FEASIBLE
+    assert result.to_dict()["custom_fields"]["agency_model"]["value"] == "v2"
+    assert not delivery_result_is_stale(result, plan, profile=profile)
