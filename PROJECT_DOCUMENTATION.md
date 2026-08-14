@@ -124,7 +124,9 @@ Path: `DATA_PATH = "data/Population Stats for Geo Tests - Master Sheet Only v2 (
 
 ### 3.6 Uploaded KPI Excel file
 
-Handled by `load_and_reshape_kpi()`. Expected shape (wide format):
+Handled by the canonical `prepare_regional_kpi()` contract, with
+`load_and_reshape_kpi()` retained as a compatibility adapter. Expected shape
+(wide format):
 
 | Region / Adobe Reference | Metric | 2024-01-01 | 2024-01-08 | ... |
 |---|---|---|---|---|
@@ -136,7 +138,13 @@ Handled by `load_and_reshape_kpi()`. Expected shape (wide format):
 - **Remaining columns**: one column per date/period, parsed as dates (`pd.to_datetime(..., errors="coerce")`).
 - **Cell values**: the KPI observation for that region/metric/date.
 
-The app reshapes this from wide to long format (`melt`), coerces KPI values to numeric, and **drops rows with an invalid date or missing/non-numeric KPI** (it does not fill missing values with 0 — missing data is dropped, not treated as zero activity). Region names are then mapped to the selected geography level and the KPI values are aggregated by summing across any raw regions that map to the same geography (`apply_geo_aggregation`).
+The canonical contract reshapes this from wide to long format (`melt`),
+coerces KPI values to numeric, preserves missing values as missing, and
+aggregates raw rows to one `(region, metric, date)` key using
+`sum(min_count=1)`. The compatibility adapter exposes the historical
+unaggregated, non-missing long frame used by the current validation UI. Region
+names are then mapped to the selected geography level and the KPI values are
+aggregated across mapped regions (`apply_geo_aggregation`).
 
 > ⚠️ **Watch for**: if the "Metric" column contains multiple different KPIs mixed together, the user is expected to have already filtered to a single metric before upload, or to select the metric of interest downstream — check the current UI (`selected_metric` in the validation tabs) for how metric selection is actually exposed at the point you're reading this, as the code may filter after upload rather than requiring pre-filtering.
 
@@ -144,14 +152,33 @@ The app reshapes this from wide to long format (`melt`), coerces KPI values to n
 
 ### 3.7 KPI Pattern mode: sidebar setup file
 
-When **KPI Pattern** is selected as the matching method (see §4.A2), the sidebar's "1. Data Source" section replaces the Market/Geography Level selectors from Structural mode with a single file upload, parsed by `read_kpi_pattern_excel()` (cached on the file's raw bytes, so the workbook is only parsed once per upload regardless of how many times Streamlit reruns the script) — not `load_and_reshape_kpi()`. Expected shape is the same **aggregated** wide format described in §3.6 (raw key column, one or more aggregation-level columns, a `Metric` column, then date columns), but here it is used to build the region-level dataset that KPI Pattern matching runs on, not to validate an already-matched pair:
+When **KPI Pattern** is selected as the matching method (see §4.A2), the
+sidebar's "1. Data Source" section replaces the Market/Geography Level
+selectors from Structural mode with a single file upload. The raw workbook
+peek remains cached by `read_kpi_pattern_excel()`, while the selected file and
+configuration are prepared through `prepare_regional_kpi()` — the same
+canonical contract used by validation. Expected shape is the same
+**aggregated** wide format described in §3.6 (raw key column, one or more
+aggregation-level columns, a `Metric` column, then date columns), but here it
+is used to build the region-level dataset that KPI Pattern matching runs on,
+not to validate an already-matched pair:
 
 - The user picks which column is the **aggregation level** (this becomes `geo_col`, replacing "Geography Level") and which value in the `Metric` column to use.
 - The user picks a **pre-period date range** via two side-by-side Start date / End date dropdowns (`dd mmm yy` labels) — this should be the historical window used for matching, excluding any dates inside the planned test period.
 - Rows with a blank aggregation-level cell are dropped **before** aggregating, so unmapped/unclassified raw keys never silently inflate another region's total.
 - Values are summed by aggregation level and date, then **each region is indexed to its own mean over the selected range = 100** — this is what makes "distance between regions" comparable for regions with very different raw KPI volume; matching compares the *shape* of each region's trend, not its absolute size.
 - The resulting per-region weekly features are named `wk_YYYYMMDD` (one per date in range) and become `active_features` for matching, exactly as demographic columns would in Structural mode.
-- `POPULATION_COL` ("Population") is **repurposed** in this mode to hold each region's **total (un-indexed) KPI volume** over the selected range, not a real population figure — this is what "Test/Control Population Share" measures throughout the matching UI in KPI Pattern mode. User-facing labels are adjusted automatically wherever they'd otherwise say "population" (`kpi_share_label()`), and table columns that would otherwise show `wk_YYYYMMDD` values or a "Population" header are instead displayed as `dd mmm yy` dates and the chosen metric label respectively (`kpi_feature_date_label()`, `kpi_pattern_display_rename_map()`) — see §4.A2.
+- `POPULATION_COL` ("Population") remains a **compatibility output** in this
+  mode and holds each region's **total (un-indexed) KPI volume** over the
+  selected range, not a real population figure. New power/test-sizing code
+  must use the canonical dataset's explicit `market_size_measure` semantics;
+  it must not propagate this compatibility alias or use percentage of regions
+  as percentage of market. User-facing labels are adjusted automatically
+  wherever they'd otherwise say "population" (`kpi_share_label()`), and table
+  columns that would otherwise show `wk_YYYYMMDD` values or a "Population"
+  header are instead displayed as `dd mmm yy` dates and the chosen metric
+  label respectively (`kpi_feature_date_label()`,
+  `kpi_pattern_display_rename_map()`) — see §4.A2.
 
 ---
 

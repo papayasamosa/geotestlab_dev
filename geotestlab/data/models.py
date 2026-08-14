@@ -3,14 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
+if TYPE_CHECKING:
+    from .regional import RegionalKPIDataset
+
 # Schema versions so callers can detect and handle report-shape changes.
-DATA_QUALITY_REPORT_SCHEMA_VERSION = 2
-# Bumped 1 -> 2 when `covered_regions` changed the report shape (callers must
-# tolerate schema_version=1 reports that predate `covered_regions`).
+DATA_QUALITY_REPORT_SCHEMA_VERSION = 3
+# Bumped 1 -> 2 when `covered_regions` changed the report shape, and 2 -> 3
+# when canonical regional KPI provenance/fingerprint fields were added.
 REGION_MAPPING_REPORT_SCHEMA_VERSION = 2
+
+
+class MarketSizeMeasure(StrEnum):
+    """Explicit market-size semantics for candidate test-share calculations."""
+
+    HISTORICAL_KPI_VOLUME = "historical_kpi_volume"
+    POPULATION = "population"
+    CUSTOM_WEIGHT = "custom_weight"
 
 
 @dataclass(frozen=True)
@@ -61,6 +74,15 @@ class DataQualityReport:
     # --- Schema ---
     schema_version: int = DATA_QUALITY_REPORT_SCHEMA_VERSION
 
+    # --- Canonical regional KPI contract ---
+    # These fields are optional so the legacy ingestion report remains
+    # backwards-compatible while canonical consumers can inspect the same
+    # source fingerprint and pre-aggregation diagnostics.
+    source_data_fingerprint: str | None = None
+    canonical_observations: int = 0
+    duplicate_analytical_key_rows: int = 0
+    duplicate_analytical_key_groups: int = 0
+
 
 @dataclass(frozen=True)
 class RegionMappingReport:
@@ -94,6 +116,7 @@ class ParsedKPIData:
     data: pd.DataFrame
     quality: DataQualityReport
     rejected_rows: pd.DataFrame | None = None
+    regional_dataset: RegionalKPIDataset | None = None
 
 
 def compute_mapping_report(mapped_frame: pd.DataFrame) -> RegionMappingReport:

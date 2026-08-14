@@ -109,6 +109,37 @@ A user may access detectability-only analysis before final media forecasts are a
 
 ## 5. Inputs
 
+### 5.0 Canonical regional KPI source contract
+
+The historical KPI workbook is prepared once into a typed
+`RegionalKPIDataset` shared by KPI Pattern matching, historical validation and
+future power/test-sizing code. The contract supports both existing layouts:
+
+- simple: `Region | Metric | date columns`;
+- aggregated: `Raw Key | one or more classification/aggregation columns | Metric | date columns`.
+
+For aggregated files the analyst selects the aggregation column used as the
+experiment region, the metric column and, where needed, the metric value. The
+preparation contract then:
+
+- coerces KPI cells to numeric without replacing missing values with zero;
+- aggregates all contributing raw rows by `(region, metric, date)` using
+  `sum(min_count=1)`;
+- reports blank classifications, non-numeric or missing cells, missing dates
+  and duplicate analytical keys before modelling;
+- retains raw-to-regional provenance, a source-data fingerprint and quality
+  metadata; and
+- exposes canonical long-form fields `region`, `date`, `metric`, `kpi`,
+  `selected_aggregation` and `source_data_fingerprint`.
+
+The dataset may contain multiple metrics and can be restricted to the selected
+metric through a typed adapter. Existing KPI Pattern output that uses the
+compatibility column `Population` to hold historical KPI volume is not a
+production population measure. New sizing code must use an explicit
+`market_size_measure` such as `historical_kpi_volume`, `population` or an
+explicit custom weight; it must never infer market share from the number of
+regions.
+
 ## 5.1 Experiment definition
 
 Required:

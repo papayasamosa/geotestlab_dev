@@ -28,6 +28,7 @@ from .constraints import (
 from .kpi_pattern import (
     build_kpi_pattern_agg_df,
     build_kpi_pattern_wide,
+    build_kpi_pattern_wide_from_regional,
     coerce_kpi_date_values,
     filter_kpi_rows,
     index_kpi_series_to_100,
@@ -114,6 +115,7 @@ __all__ = [
     "filter_kpi_rows",
     "coerce_kpi_date_values",
     "build_kpi_pattern_wide",
+    "build_kpi_pattern_wide_from_regional",
     "retain_kpi_dates",
     "index_kpi_series_to_100",
     "build_kpi_pattern_agg_df",
