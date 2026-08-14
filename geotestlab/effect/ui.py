@@ -152,6 +152,9 @@ def render_effect_plausibility_tab() -> None:
 
     current_mde = float(mde) if mde > 0 else None
     stored_evidence = st.session_state.get("effect_plausibility_evidence")
+    st.session_state.effect_plausibility_current_evidence = evidence
+    st.session_state.effect_plausibility_current_mde = current_mde
+    st.session_state.effect_plausibility_current_direction = effect_direction
     if stored_evidence is not None:
         stale = effect_result_is_stale(
             result,

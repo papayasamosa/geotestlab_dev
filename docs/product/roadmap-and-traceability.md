@@ -118,8 +118,8 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Prospective power | Evidence harness plus approved production contract and selected-design UI | FR-10, FR-11 | Current | Continue design-share and duration UX hardening |
 | Platform selector | Generic profile schema with registered Meta profile | FR-12 | In progress | Complete dynamic selector and approve first profile set |
 | Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | In progress | Add further profiles and production delivery integrations |
-| Effect plausibility | Typed evidence/scenario layer with MDE comparison | FR-14 | In progress | Approve evidence hierarchy and build integrated recommendation |
-| Integrated recommendation | Matching recommendations only | FR-15 | Planned | Build after power and delivery layers |
+| Effect plausibility | Typed evidence/scenario layer with MDE comparison | FR-14 | Current / strengthened | Keep evidence hierarchy pending and link scenarios to recommendation |
+| Integrated recommendation | Separate gate comparison, explicit objective, limiting factors and override rationale | FR-15 | Partially implemented | Complete unified experiment export and approved-design persistence |
 | Design freeze | Versioned frozen-design foundations (immutable versions, fingerprints) | FR-16 | Partially implemented | Complete the FR-16 approved-design-freeze contract |
 | Impact measurement | Actual/counterfactual and uplift | FR-17 | Current | Link to approved design |
 | Bayesian TBR | Core extracted into `geotestlab/bayesian/`; reduced-sampling smoke CI | FR-18 | Current | Bayesian assurance (production sampling quality) |
@@ -360,7 +360,7 @@ broader profiles and production integrations remain planned.
 
 ## Milestone 7. Effect plausibility and spend recommendation
 
-**Status:** Effect-plausibility evidence/scenario layer in progress; integrated recommendation remains planned.
+**Status:** Effect-plausibility and integrated-recommendation layers are implemented; product decisions and unified export remain in progress.
 
 ### Deliverables
 
@@ -400,9 +400,8 @@ broader profiles and production integrations remain planned.
 
 ## 9. Suggested pull-request sequence for the new capability
 
-Items 1–7 below are delivered on `main` as of the reviewed baseline; the
-methodology pack is approved and item 8 is now in progress. Items 9 onward
-remain pending.
+Items 1–10 below are delivered on `main` as of the reviewed baseline; the
+methodology pack is approved. Item 11 is now in progress.
 
 1. `docs/canonical-product-prd` — delivered
 2. `refactor/validation-core` — delivered
@@ -413,8 +412,8 @@ remain pending.
 7. `feature/power-analysis-ui` — delivered
 8. `feature/platform-profile-schema` — delivered
 9. `feature/media-delivery-feasibility` — delivered
-10. `feature/effect-plausibility-scenarios` — in progress
-11. `feature/integrated-design-recommendation`
+10. `feature/effect-plausibility-scenarios` — delivered
+11. `feature/integrated-design-recommendation` — in progress
 12. `feature/unified-experiment-export`
 13. `docs/user-and-methodology-guides`
 

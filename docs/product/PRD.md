@@ -1,17 +1,18 @@
 # GeoTestLab Product Requirements Document
 
 **Document type:** Canonical product requirements document  
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Draft for product-owner review
 **Date:** 14 August 2026
 **Product owner:** Repository owner
 **Implementation repository:** `papayasamosa/geotestlab_dev`  
-**Repository baseline reviewed:** `main` at commit `6380c46d124535baa6702341d0ce02f6d2fe5478`
+**Repository baseline reviewed:** `main` at commit `09da0e28f855818fd5628ce5d08cb39ed4220d79`
 **Primary application:** Streamlit application launched from `geotestmatch.py`  
 
-**Change summary:** Reconciled the reviewed baseline after PR2 power-methodology
-evidence remediation and linked the proposed methodology ADR pack and manual
-approval gate. No production power capability is approved by this update.
+**Change summary:** Reconciled the reviewed baseline after the production
+power, media-delivery and effect-plausibility stages, and documented the
+integrated design-recommendation contract. The recommendation objective
+remains pending product-owner decision.
 
 ## 1. Document purpose
 
@@ -628,7 +629,7 @@ GeoTestLab shall provide a summary assessment of counterfactual credibility that
 
 ## FR-10. Prospective power analysis
 
-**Status:** Planned.
+**Status:** Partially implemented.
 
 GeoTestLab shall estimate whether a proposed geo-test can detect a target effect before the test begins.
 
@@ -739,7 +740,7 @@ Permitted evidence sources include:
 
 ## FR-15. Integrated design recommendation
 
-**Status:** Planned.
+**Status:** Partially implemented.
 
 GeoTestLab shall compare complete design scenarios and recommend a feasible option.
 
@@ -761,6 +762,12 @@ The product recommends the smallest or least costly qualifying design according 
 If no design qualifies, the product identifies the limiting factor rather than returning a generic failure.
 
 The analyst may override a recommendation, but the override reason is required and exported.
+
+The current implementation compares explicit candidate rows under either a
+smallest-qualifying-design or least-cost-qualifying-design objective. It keeps
+the gates separate, reports limiting factors when no design qualifies, and
+labels conditional effect bridges and overrides separately. Candidate inputs
+are available for the unified experiment export follow-on.
 
 ## FR-16. Approved design freeze
 
