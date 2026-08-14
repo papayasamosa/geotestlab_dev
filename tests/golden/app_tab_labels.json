@@ -1,5 +1,5 @@
 {
-  "app_baseline_commit": "1806dea6b24c0b53c9e34b0b7255b1d7a1b37a80",
+  "app_baseline_commit": "7d41ed7433abfa0d0d855503425419a2c3a3c616",
   "expected": {
     "n_tabs": 6,
     "tab_labels": [
@@ -12,7 +12,7 @@
     ]
   },
   "fixture_version": 1,
-  "golden_created_by_commit": "e852216603320bcd913153e1e86b75d58d389096",
+  "golden_created_by_commit": "7d41ed7433abfa0d0d855503425419a2c3a3c616",
   "known_limitations": [],
   "scenario": "app_tab_labels",
   "schema_version": 1,
