@@ -67,7 +67,25 @@ def generate_full_report() -> dict:
     side = run_market_evidence(**SIDE_CONFIG)
     report = combine_evidence(broad, side)
     report["scenario_names"] = list(MARKET_SCENARIOS)
-    return strip_timing(report)
+    return _canonicalise_json_numbers(strip_timing(report))
+
+
+def _canonicalise_json_numbers(value):
+    """Round floats so deterministic evidence is stable across BLAS platforms.
+
+    The v1 report is byte-compared in CI.  Windows and Linux linear-algebra
+    backends can differ by a few final-bit ULPs in diagnostics such as AR
+    estimates and condition numbers, even when the methodology result is the
+    same.  Twelve decimal places preserve decision-level precision while
+    removing those meaningless serialization differences.
+    """
+    if isinstance(value, float):
+        return round(value, 12)
+    if isinstance(value, dict):
+        return {key: _canonicalise_json_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_canonicalise_json_numbers(item) for item in value]
+    return value
 
 
 def main(argv=None) -> int:
