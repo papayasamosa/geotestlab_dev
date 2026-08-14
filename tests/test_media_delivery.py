@@ -95,3 +95,10 @@ def test_thresholds_reject_invalid_percentages():
         assert "cannot exceed 100" in str(exc)
     else:
         raise AssertionError("invalid reach percentage threshold was accepted")
+
+
+def test_scope_regions_are_normalized_for_reproducible_exports():
+    scope = ExperimentMediaScope((" Stockholm ", "Oslo", "Stockholm"))
+
+    assert scope.excluded_from_experiment == ("Oslo", "Stockholm")
+    assert scope.to_dict()["excluded_from_experiment"] == ["Oslo", "Stockholm"]
