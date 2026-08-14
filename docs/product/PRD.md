@@ -886,7 +886,7 @@ The default interface shall prioritise essential decisions while retaining exper
 
 ## FR-22. Export and reproducibility
 
-**Status:** Current in parts, planned as a complete experiment record.
+**Status:** Partially implemented — the local experiment record now exports unified validation, power, delivery, effect and recommendation summaries; approved-design persistence and package metadata remain follow-on work.
 
 Exports shall contain sufficient information to reproduce and review the analysis.
 

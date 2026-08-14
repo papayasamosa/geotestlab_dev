@@ -51,6 +51,7 @@ from geotestlab.experiment import (
     build_experiment_export,
     build_frozen_data_quality_summary,
     build_frozen_matching_section,
+    build_unified_result_summaries,
     candidate_universe_digest,
     compute_input_fingerprint,
     create_experiment_record,
@@ -1376,65 +1377,22 @@ def _current_planned_periods():
 
 
 def _result_summaries_for_export():
-    """Small serialisable summaries of the current results, keyed by stage."""
-    summaries = {}
-    vres = st.session_state.get("validation_results") or {}
-    if vres.get("results"):
-        _by_method = {}
-        for method, res in vres["results"].items():
-            _by_method[method] = {
-                k: res.get(k)
-                for k in (
-                    "corr",
-                    "r2",
-                    "smape",
-                    "n_selected",
-                    "rolling_smape_mean",
-                    "counterfactual_reliability",
-                )
-                if k in res
-            }
-        summaries["counterfactual_validation"] = _by_method
-    bres = st.session_state.get("bayesian_results")
-    if bres:
-        summaries["observed_impact"] = {
-            k: bres.get(k)
-            for k in (
-                "mean_uplift",
-                "uplift_pct",
-                "prob_pos",
-                "uplift_pi_lower",
-                "uplift_pi_upper",
-                "corr",
-                "r2",
-                "smape",
-            )
-            if k in bres
-        }
-    pres = st.session_state.get("production_power_result")
-    if pres is not None:
-        summaries["statistical_power"] = {
-            k: value
-            for k, value in pres.to_dict().items()
-            if k
-            in {
-                "metric",
-                "method",
-                "fit_method",
-                "support_status",
-                "completed",
-                "usable_for_recommendation",
-                "mde",
-                "mde_reached",
-                "target_effects",
-                "power_at_target_effects",
-                "historical_start",
-                "historical_end",
-                "planned_test_dates",
-                "input_fingerprint",
-            }
-        }
-    return summaries
+    """Build the complete serialisable result section for the current record."""
+
+    return build_unified_result_summaries(
+        validation_results=st.session_state.get("validation_results"),
+        bayesian_results=st.session_state.get("bayesian_results"),
+        power_result=st.session_state.get("production_power_result"),
+        power_config=st.session_state.get("production_power_config"),
+        media_delivery_result=st.session_state.get("media_delivery_result"),
+        media_delivery_plan=st.session_state.get("media_delivery_plan"),
+        media_delivery_thresholds=st.session_state.get("media_delivery_thresholds"),
+        media_delivery_scope=st.session_state.get("media_delivery_scope"),
+        effect_plausibility_result=st.session_state.get("effect_plausibility_result"),
+        recommendation_result=st.session_state.get("design_recommendation_result"),
+        recommendation_scenarios=st.session_state.get("design_recommendation_scenarios", ()),
+        recommendation_objective=st.session_state.get("design_recommendation_objective"),
+    )
 
 
 def _render_mcmc_diagnostics(bayes: dict, trace) -> None:
@@ -1678,7 +1636,8 @@ def render_experiment_record():
         st.caption(
             "The export is a local serialisable record — no database is used. It captures "
             "identity, input fingerprint, stage statuses, frozen design versions, "
-            "planned-vs-analysed, and result summaries."
+            "planned-vs-analysed, and unified validation, power, delivery, effect and "
+            "recommendation result summaries."
         )
 
 
