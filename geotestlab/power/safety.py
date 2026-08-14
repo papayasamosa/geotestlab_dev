@@ -302,9 +302,9 @@ def heteroskedasticity_support(
     if ratio_candidate_blocks or scale_candidate_blocks:
         candidates = []
         if ratio_candidate_blocks:
+            ratio_display = f"{ratio:.12f}" if np.isfinite(ratio) else "inf"
             candidates.append(
-                f"split variance ratio={ratio if np.isfinite(ratio) else 'inf'} "
-                f"outside [{lower:.2f}, {upper:.2f}]"
+                f"split variance ratio={ratio_display} outside [{lower:.2f}, {upper:.2f}]"
             )
         if scale_candidate_blocks:
             candidates.append(
