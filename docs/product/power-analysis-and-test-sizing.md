@@ -44,6 +44,15 @@ the shared matching constraints, preserves match/counterfactual assessment,
 and selects a qualifying candidate only when an optimisation objective is
 explicitly supplied.
 
+The **Power & Test Sizing** app tab now exposes the selected-design production
+power contract after canonical KPI preparation and executed matching. It
+requires explicit method, counterfactual fit, effect direction, history, test
+dates, target effect, power target and simulation settings. Results show the
+support status, MDE, target power, curve table/chart and a JSON export; source
+and input fingerprints remain attached to the experiment record. The tab does
+not infer test/control regions and does not combine statistical detectability
+with media delivery or effect plausibility.
+
 The capability must help an analyst answer:
 
 1. Are the selected test and control regions historically credible?

@@ -101,6 +101,12 @@ from geotestlab.matching import (
 from geotestlab.matching import (
     read_kpi_pattern_excel as _read_kpi_pattern_excel,
 )
+from geotestlab.power.production import (
+    ProductionPowerConfig,
+    production_input_fingerprint,
+    production_result_is_stale,
+    run_production_power,
+)
 
 # Validation core (geotestlab.validation) — pure functions, no Streamlit imports.
 from geotestlab.validation import (
@@ -793,6 +799,13 @@ def _clear_bayesian_state():
     st.session_state.pop("bayesian_trace", None)
 
 
+def _clear_production_power_state():
+    """Clear the production power result and its explicit configuration."""
+
+    st.session_state.production_power_result = None
+    st.session_state.production_power_config = None
+
+
 def reset_results():
     st.session_state.final_controls = None
     st.session_state.test_df = None
@@ -812,6 +825,7 @@ def reset_results():
     st.session_state.validation_results = None
     st.session_state.validation_triggered = False
     _clear_bayesian_state()
+    _clear_production_power_state()
     # Experiment record inputs are cleared too — the record reconciles these
     # stages to "stale" on the next rerun (Stage 4).
     st.session_state.experiment_matching_inputs = None
@@ -840,6 +854,7 @@ def reset_manual_results():
     st.session_state.validation_results = None
     st.session_state.validation_triggered = False
     _clear_bayesian_state()
+    _clear_production_power_state()
     # Experiment record inputs are cleared too — the record reconciles these
     # stages to "stale" on the next rerun (Stage 4).
     st.session_state.experiment_matching_inputs = None
@@ -1216,7 +1231,11 @@ def _current_design_snapshot():
         "tool_version": GEOTESTLAB_TOOL_VERSION,
         "methodology_version": GEOTESTLAB_METHODOLOGY_VERSION,
         "analyst": {"label": "", "notes": []},
-        "approved_power_result": None,  # recorded when the approved power stage runs
+        "approved_power_result": (
+            st.session_state.production_power_result.to_dict()
+            if st.session_state.get("production_power_result") is not None
+            else None
+        ),
     }
 
 
@@ -1293,6 +1312,8 @@ def _reconcile_experiment_record():
     matching = _live_matching_inputs() if has_matching else None
     validation = st.session_state.get("experiment_validation_inputs") or None
     bayesian = st.session_state.get("experiment_bayesian_inputs") or None
+    power_config = st.session_state.get("production_power_config")
+    power_dataset = st.session_state.get("kpi_regional_dataset")
 
     current = {}
     full = {}
@@ -1305,6 +1326,10 @@ def _reconcile_experiment_record():
         full.update(validation)
     if bayesian:
         full.update(bayesian)
+    if power_config is not None and power_dataset is not None:
+        power_fp = production_input_fingerprint(power_dataset, power_config)
+        current["statistical_power"] = power_fp
+        full.update({"statistical_power": power_config.to_dict(), "power_source": power_fp})
 
     if full:
         update_inputs(rec, compute_input_fingerprint(full), _experiment_input_summary())
@@ -1382,6 +1407,29 @@ def _result_summaries_for_export():
                 "smape",
             )
             if k in bres
+        }
+    pres = st.session_state.get("production_power_result")
+    if pres is not None:
+        summaries["statistical_power"] = {
+            k: value
+            for k, value in pres.to_dict().items()
+            if k
+            in {
+                "metric",
+                "method",
+                "fit_method",
+                "support_status",
+                "completed",
+                "usable_for_recommendation",
+                "mde",
+                "mde_reached",
+                "target_effects",
+                "power_at_target_effects",
+                "historical_start",
+                "historical_end",
+                "planned_test_dates",
+                "input_fingerprint",
+            }
         }
     return summaries
 
@@ -2063,8 +2111,14 @@ issue_severity = (
 # =============================================================================
 # Main app – Tabs
 # =============================================================================
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["⚙️ Region Matching", "🔍 Validate Test Design", "📊 Measure Test Impact", "🧠 Bayesian TBR"]
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    [
+        "⚙️ Region Matching",
+        "🔍 Validate Test Design",
+        "📊 Measure Test Impact",
+        "🧠 Bayesian TBR",
+        "📈 Power & Test Sizing",
+    ]
 )
 
 
@@ -2690,6 +2744,7 @@ def render_structural_matching_tab():
             }
             st.session_state.match_results_stale = False
             _stamp_match_quality()
+            _clear_production_power_state()
 
             cleanup_session_state()
             st.success(
@@ -3972,6 +4027,7 @@ def render_time_series_validation(mode: str):
         st.session_state.validation_results = None
         st.session_state.validation_triggered = False
         _clear_bayesian_state()
+        _clear_production_power_state()
         # Experiment record: the validation/Bayesian inputs are gone, so those
         # stages reconcile to stale on the next rerun (Stage 4).
         st.session_state.experiment_validation_inputs = None
@@ -6437,6 +6493,329 @@ with tab4:
                 - The green band (test/post-period) is the 94% posterior predictive interval — the plausible range of *actual counterfactual observations* under the no-test scenario, including observation-level noise. This is what you should compare the actuals against.
                 - When "Allow for noise streaks" is on (the default), the model checks whether noise runs in streaks — a high period followed by another high period. If it does, the green band and the uplift range are widened to match, because streaky noise doesn't cancel out over the test window the way independent noise would. (Technically: an AR(1) error model — e(t) = \u03c1\u00b7e(t\u22121) + noise — fitted via the exact conditional likelihood; the bands are simulated AR(1) residual paths anchored on the last pre-period residual, so multi-period totals inherit the autocorrelation.)
                 """)
+
+
+def _power_region_groups():
+    """Return the last executed test/control groups for the power tab."""
+
+    snapshot = st.session_state.get("match_run_snapshot") or {}
+    test_regions = tuple(sorted(str(value) for value in snapshot.get("test_geos", ()) if value))
+    control_regions = tuple(
+        sorted(str(value) for value in snapshot.get("selected_controls", ()) if value)
+    )
+    if not test_regions:
+        test_regions = tuple(
+            sorted(str(value) for value in st.session_state.get("selected_experiment_regions", ()))
+        )
+    if not control_regions:
+        controls = st.session_state.get("final_controls")
+        geo_col_value = st.session_state.get("geo_col")
+        if controls is not None and geo_col_value in controls.columns:
+            control_regions = tuple(sorted(controls[geo_col_value].dropna().astype(str)))
+    return test_regions, control_regions
+
+
+def _power_date_strings(dataset, metric):
+    frame = dataset.data[dataset.data["metric"].astype(str) == str(metric)]
+    dates = pd.to_datetime(frame["date"], errors="coerce").dropna().dt.normalize().unique()
+    return tuple(sorted(pd.Timestamp(value).date().isoformat() for value in dates))
+
+
+def _power_default_date(options, preferred, fallback_index):
+    if preferred:
+        try:
+            value = pd.Timestamp(preferred).date().isoformat()
+        except (TypeError, ValueError):
+            value = None
+        if value in options:
+            return value
+    return options[min(max(fallback_index, 0), len(options) - 1)]
+
+
+def render_production_power_tab():
+    """Render the approved production statistical-power workflow."""
+
+    st.subheader("📈 Power Analysis & Test Sizing")
+    st.caption(
+        "Run the approved production power contract for the executed regional design. "
+        "This tab reports statistical detectability only; media delivery and effect plausibility "
+        "are separate workflow stages."
+    )
+
+    dataset = st.session_state.get("kpi_regional_dataset")
+    if dataset is None:
+        st.info(
+            "Prepare a canonical KPI dataset in **Validate Test Design** first. "
+            "The production contract will reuse that exact source and its provenance fingerprint."
+        )
+        return
+
+    test_regions, control_regions = _power_region_groups()
+    if not test_regions or not control_regions:
+        st.warning(
+            "Complete and run Region Matching first. Power sizing uses the last executed "
+            "test and control groups and does not infer them from the dataset."
+        )
+        return
+
+    metric_options = tuple(str(value) for value in dataset.metrics)
+    if not metric_options:
+        st.error("The canonical KPI dataset does not contain a selectable metric.")
+        return
+    validation_inputs = st.session_state.get("experiment_validation_inputs") or {}
+    validation_results = st.session_state.get("validation_results") or {}
+    preferred_metric = str(validation_inputs.get("selected_metric") or metric_options[0])
+    metric_index = (
+        metric_options.index(preferred_metric) if preferred_metric in metric_options else 0
+    )
+
+    with st.form("production_power_form"):
+        metric = st.selectbox(
+            "Metric",
+            metric_options,
+            index=metric_index,
+            help="Select the canonical KPI metric used by the production power calculation.",
+        )
+        date_options = _power_date_strings(dataset, metric)
+        if len(date_options) < 2:
+            st.warning(
+                "At least two retained KPI dates are required to define history and a test period."
+            )
+            return
+
+        preferred_start = validation_inputs.get("pre_start")
+        preferred_end = validation_inputs.get("pre_end")
+        default_end_index = max(0, len(date_options) - 2)
+        history_end = st.selectbox(
+            "Historical period end",
+            date_options,
+            index=date_options.index(
+                _power_default_date(date_options, preferred_end, default_end_index)
+            ),
+            help="The last date included in the historical fitting period.",
+        )
+        end_index = date_options.index(history_end)
+        history_start_options = date_options[: end_index + 1]
+        history_start = st.selectbox(
+            "Historical period start",
+            history_start_options,
+            index=history_start_options.index(
+                _power_default_date(history_start_options, preferred_start, 0)
+            ),
+        )
+        test_date_options = date_options[end_index + 1 :]
+        preferred_test_start = validation_results.get("test_start") or validation_inputs.get(
+            "test_start"
+        )
+        preferred_test_end = validation_results.get("test_end") or validation_inputs.get("test_end")
+        default_test_dates = [
+            value
+            for value in test_date_options
+            if (
+                preferred_test_start
+                and preferred_test_end
+                and pd.Timestamp(preferred_test_start).date().isoformat()
+                <= value
+                <= pd.Timestamp(preferred_test_end).date().isoformat()
+            )
+        ]
+        if not default_test_dates:
+            default_test_dates = list(test_date_options[:1])
+        test_dates = st.multiselect(
+            "Planned test dates",
+            test_date_options,
+            default=default_test_dates,
+            help="Dates after the historical period used for the planned test window.",
+        )
+
+        frequency_options = ("weekly", "daily")
+        preferred_frequency = str(validation_inputs.get("time_series_frequency") or "weekly")
+        frequency = st.selectbox(
+            "Frequency",
+            frequency_options,
+            index=(
+                frequency_options.index(preferred_frequency)
+                if preferred_frequency in frequency_options
+                else 0
+            ),
+            format_func=lambda value: value.title(),
+            help=(
+                "Preserve the validated KPI frequency. Daily data is explicitly passed "
+                "to the safety policy and remains blocked until an approved daily model exists."
+            ),
+        )
+
+        method_col, fit_col = st.columns(2)
+        with method_col:
+            method = st.selectbox(
+                "Simulation method",
+                ("model_simulation", "residual_simulation"),
+                help="The primary simulation method must be selected explicitly under the approved methodology.",
+            )
+        with fit_col:
+            fit_method = st.selectbox(
+                "Counterfactual fit",
+                ("ols", "elastic_net", "lasso"),
+                help="The counterfactual fit must be selected explicitly; there is no implicit best fit.",
+            )
+        direction = st.selectbox(
+            "Effect direction",
+            ("one_sided_positive", "one_sided_negative", "two_sided"),
+            format_func=lambda value: {
+                "one_sided_positive": "Positive effect",
+                "one_sided_negative": "Negative effect",
+                "two_sided": "Either direction",
+            }[value],
+        )
+        effect_col, power_col, simulations_col = st.columns(3)
+        with effect_col:
+            target_effect = st.number_input(
+                "Target effect (%)",
+                min_value=0.0,
+                value=10.0,
+                step=1.0,
+                help="Relative effect size used for the target-power estimate.",
+            )
+        with power_col:
+            target_power = st.number_input(
+                "Target power",
+                min_value=0.50,
+                max_value=0.99,
+                value=0.80,
+                step=0.05,
+            )
+        with simulations_col:
+            n_simulations = st.number_input(
+                "Simulations",
+                min_value=100,
+                value=1000,
+                step=100,
+                help="Use a larger value for the final run; the minimum is enforced by the production contract.",
+            )
+        bound_col, history_col = st.columns(2)
+        with bound_col:
+            mde_upper = st.number_input(
+                "MDE upper bound (%)",
+                min_value=1.0,
+                value=50.0,
+                step=1.0,
+            )
+        with history_col:
+            min_history = st.number_input(
+                "Minimum historical periods",
+                min_value=1,
+                value=104,
+                step=1,
+                help="The approved minimum-history policy is recorded in the result support status.",
+            )
+        st.caption(
+            f"Executed design: {len(test_regions)} test region(s), {len(control_regions)} control region(s). "
+            "Frequency is recorded explicitly; the current production safety policy supports weekly data."
+        )
+        run_power = st.form_submit_button("▶ Run production power", type="primary")
+
+    if run_power:
+        if not test_dates:
+            st.error("Select at least one planned test date after the historical period.")
+        elif target_effect > mde_upper:
+            st.error("Target effect must be within the MDE bounds.")
+        else:
+            config = ProductionPowerConfig(
+                method=method,
+                fit_method=fit_method,
+                test_regions=test_regions,
+                control_regions=control_regions,
+                historical_start=pd.Timestamp(history_start),
+                historical_end=pd.Timestamp(history_end),
+                test_dates=tuple(pd.Timestamp(value) for value in test_dates),
+                target_effects=(float(target_effect),),
+                side=direction,
+                frequency=frequency,
+                target_power=float(target_power),
+                n_simulations=int(n_simulations),
+                mde_bounds=(0.0, float(mde_upper)),
+                min_historical_periods=int(min_history),
+                metric_value=metric,
+            )
+            rec = _experiment_record()
+            try:
+                with st.spinner("Running production power simulations..."):
+                    result = run_production_power(dataset, config, experiment_record=rec)
+                st.session_state.production_power_config = config
+                st.session_state.production_power_result = result
+                _save_experiment_record(rec)
+                if result.completed:
+                    st.success(
+                        "Production power run completed and recorded in the experiment record."
+                    )
+                else:
+                    st.warning(
+                        "Production power run is incomplete or blocked; the result was recorded "
+                        "for audit and is not usable for recommendation."
+                    )
+            except (TypeError, ValueError, KeyError) as exc:
+                st.error(f"Production power could not run: {exc}")
+
+    result = st.session_state.get("production_power_result")
+    config = st.session_state.get("production_power_config")
+    if result is None or config is None:
+        st.info(
+            "No production power result yet. Configure the explicit inputs above and run the analysis."
+        )
+        return
+
+    try:
+        stale = production_result_is_stale(result, dataset, config)
+    except (TypeError, ValueError, KeyError):
+        stale = True
+    if stale:
+        st.warning(
+            "This production power result is stale because its dataset or explicit inputs changed. Re-run it before using it."
+        )
+
+    st.markdown("### Production power result")
+    result_cols = st.columns(4)
+    result_cols[0].metric("Support status", result.support_status)
+    result_cols[1].metric("MDE", f"{result.mde:.2f}%" if result.mde is not None else "Not reached")
+    result_cols[2].metric(
+        "Power at target",
+        f"{result.power_at_target_effects[0]:.1%}"
+        if result.power_at_target_effects
+        else "Unavailable",
+    )
+    result_cols[3].metric("Effective test periods", result.effective_test_periods)
+    if result.blockers:
+        for blocker in result.blockers:
+            st.error(blocker)
+    for warning in result.warnings:
+        st.warning(warning)
+
+    curve = pd.DataFrame(
+        {
+            "Effect size": result.effect_grid,
+            "Power": result.power_curve,
+            "Lower interval": result.power_ci_lower,
+            "Upper interval": result.power_ci_upper,
+        }
+    )
+    st.dataframe(curve, width="stretch", hide_index=True)
+    st.line_chart(curve.set_index("Effect size")["Power"])
+    st.download_button(
+        "⬇️ Download production power result (.json)",
+        data=json.dumps(result.to_dict(), indent=2, default=str),
+        file_name="production_power_result.json",
+        mime="application/json",
+        key="download_production_power_result",
+    )
+    st.caption(
+        f"Method: {result.method} · fit: {result.fit_method} · methodology {result.methodology_version} · "
+        f"evidence commit {result.evidence_commit[:12]}… · input fingerprint {result.input_fingerprint}"
+    )
+
+
+with tab5:
+    render_production_power_tab()
+
 
 # ------------------------------------------------------------
 # Experiment record (Stage 4) — reconcile and display

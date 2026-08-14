@@ -318,9 +318,9 @@ production power core is now the active next stage under those conditions.
 
 ## Milestone 5. Power-analysis MVP
 
-**Status:** Production core and candidate scenario engine in progress after
-explicit product-owner methodology approval; implementation must preserve the
-approved method/version and support-status conditions.
+**Status:** Production core, candidate scenario engine and selected-design UI
+in progress after explicit product-owner methodology approval; implementation
+must preserve the approved method/version and support-status conditions.
 
 ### Deliverables
 
@@ -408,8 +408,8 @@ remain pending.
 3. `refactor/bayesian-core` — delivered
 4. `feature/experiment-identity-and-freeze` — delivered (foundations)
 5. `spike/power-analysis-methodology` — delivered; methodology pack approved
-6. `feature/power-analysis-core` — next implementation stage
-7. `feature/power-analysis-ui`
+6. `feature/power-analysis-core` — delivered
+7. `feature/power-analysis-ui` — in progress
 8. `feature/platform-profile-schema`
 9. `feature/media-delivery-feasibility`
 10. `feature/effect-plausibility-scenarios`
