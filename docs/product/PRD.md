@@ -1,13 +1,17 @@
 # GeoTestLab Product Requirements Document
 
 **Document type:** Canonical product requirements document  
-**Version:** 1.0  
-**Status:** Draft for product-owner review  
-**Date:** 4 August 2026  
-**Product owner:** Repository owner  
+**Version:** 1.1
+**Status:** Draft for product-owner review
+**Date:** 14 August 2026
+**Product owner:** Repository owner
 **Implementation repository:** `papayasamosa/geotestlab_dev`  
-**Repository baseline reviewed:** `main` at commit `929cc1e690ef132069da589561f1833c76be7d26`
+**Repository baseline reviewed:** `main` at commit `6380c46d124535baa6702341d0ce02f6d2fe5478`
 **Primary application:** Streamlit application launched from `geotestmatch.py`  
+
+**Change summary:** Reconciled the reviewed baseline after PR2 power-methodology
+evidence remediation and linked the proposed methodology ADR pack and manual
+approval gate. No production power capability is approved by this update.
 
 ## 1. Document purpose
 

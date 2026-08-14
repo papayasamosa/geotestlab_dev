@@ -587,3 +587,25 @@ Status remains **For methodology approval**. PR2 supplies a stronger,
 drift-detectable remediation study; it does not authorise production power
 implementation. The unresolved thresholds, scenario expectations, and
 simulation-method choice move to the ADR decision pack in PR3.
+
+## 11. PR3 methodology decision pack and approval gate
+
+The proposed decisions are recorded in
+[`docs/product/decisions/`](../product/decisions/README.md), beginning with
+[`ADR-000`](../product/decisions/ADR-000-power-methodology-approval-gate.md)
+and the power-method records ADR-001 through ADR-005 and ADR-011 through
+ADR-022. They cover the
+simulation and fit methods, detection and effect semantics, history and data
+quality rules, residual and heteroskedasticity treatment, simulation and MDE
+settings, uncertainty, and candidate scenario grids.
+
+These records are recommendations for product-owner review. They deliberately
+retain unresolved choices where the v2.1 evidence fails the proposed bars:
+mean absolute power bias is **0.102** versus **0.05**, worst supported bias is
+**0.477** versus **0.15**, false-supported rate is **3.3%** versus **0%**, and
+seed-sensitivity power standard deviation is **0.084** versus **0.05**.
+
+The production power core remains blocked until the product owner completes the
+approval record in ADR-000 with the approved methodology version, reviewed
+evidence commit, ADR identifiers, timestamp, identity and conditions. A
+merged ADR PR or passing CI does not satisfy that gate.

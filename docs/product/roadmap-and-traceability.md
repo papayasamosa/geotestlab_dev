@@ -2,8 +2,8 @@
 
 **Document type:** Scope reconciliation, requirement traceability and delivery plan  
 **Parent document:** `PRD.md`  
-**Version:** 1.0  
-**Date:** 4 August 2026  
+**Version:** 1.1
+**Date:** 14 August 2026
 
 ## 1. Purpose
 
@@ -36,7 +36,7 @@ The current production code remains the source of truth for existing behaviour u
 
 - Repository: `papayasamosa/geotestlab_dev`
 - Branch: `main`
-- Commit: `929cc1e690ef132069da589561f1833c76be7d26`
+- Commit: `6380c46d124535baa6702341d0ce02f6d2fe5478`
 - Current application source: `geotestmatch.py` (thin adapters and UI)
 - Extracted packages: `geotestlab/data/`, `geotestlab/matching/`,
   `geotestlab/validation/`, `geotestlab/bayesian/`,
@@ -294,7 +294,10 @@ The root README should remain a concise installation and orientation document, l
 
 ## Milestone 4. Power-analysis methodology prototype
 
-**Status:** Delivered as an unapproved spike (PR `spike/power-analysis-methodology`); the production power core (`feature/power-analysis-core`) is gated on explicit methodology approval.
+**Status:** Delivered as an unapproved spike and strengthened by the PR2
+calibration/evidence remediation; the production power core
+(`feature/power-analysis-core`) is gated on explicit methodology approval in
+`docs/product/decisions/ADR-000-power-methodology-approval-gate.md`.
 
 ### Deliverables
 
@@ -313,7 +316,8 @@ The root README should remain a concise installation and orientation document, l
 
 ## Milestone 5. Power-analysis MVP
 
-**Status:** Planned (gated on methodology approval).
+**Status:** Planned (gated on the explicit product-owner approval record in
+ADR-000; the documentation PR alone does not satisfy the gate).
 
 ### Deliverables
 
