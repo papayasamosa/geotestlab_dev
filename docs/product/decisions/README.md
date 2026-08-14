@@ -42,6 +42,7 @@ entry is marked `Pending` and no approved decision is implied.
 | `ADR-020-residual-autocorrelation.md` | Residual dependence and persistence handling. | Approved |
 | `ADR-021-heteroskedasticity-policy.md` | Heteroskedasticity diagnostics and treatment. | Approved |
 | `ADR-022-power-uncertainty.md` | Conditional and unconditional power uncertainty. | Approved |
+| `ADR-023-recommendation-optimisation-objective.md` | Explicit smallest-design or least-cost candidate selection without a composite score. | Pending |
 
 ## Rules
 

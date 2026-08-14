@@ -109,6 +109,7 @@ from geotestlab.power.production import (
     production_result_is_stale,
     run_production_power,
 )
+from geotestlab.recommendation.ui import render_design_recommendation_tab
 
 # Validation core (geotestlab.validation) — pure functions, no Streamlit imports.
 from geotestlab.validation import (
@@ -2113,7 +2114,7 @@ issue_severity = (
 # =============================================================================
 # Main app – Tabs
 # =============================================================================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
     [
         "⚙️ Region Matching",
         "🔍 Validate Test Design",
@@ -2122,6 +2123,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
         "📈 Power & Test Sizing",
         "📣 Media Delivery Feasibility",
         "🎯 Effect Plausibility",
+        "✅ Integrated Design Recommendation",
     ]
 )
 
@@ -6825,6 +6827,9 @@ with tab6:
 
 with tab7:
     render_effect_plausibility_tab()
+
+with tab8:
+    render_design_recommendation_tab()
 
 
 # ------------------------------------------------------------

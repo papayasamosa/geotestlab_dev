@@ -42,6 +42,16 @@ def test_effect_plausibility_tab_renders_without_evidence():
     assert not app.exception
 
 
+def test_design_recommendation_tab_renders_without_stage_results():
+    app = AppTest.from_file(APP_PATH)
+    app.run(timeout=RUN_TIMEOUT)
+
+    assert any("Integrated Design Recommendation" in item.value for item in app.subheader)
+    assert any(item.label == "Recommendation objective" for item in app.selectbox)
+    assert any("Compare design candidates" in item.label for item in app.button)
+    assert not app.exception
+
+
 def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     app = AppTest.from_file(APP_PATH)
     app.run(timeout=RUN_TIMEOUT)

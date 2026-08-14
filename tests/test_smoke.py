@@ -155,6 +155,7 @@ class TestLiveAppStartup:
             "\U0001f4c8 Power & Test Sizing",
             "\U0001f4e3 Media Delivery Feasibility",
             "\U0001f3af Effect Plausibility",
+            "\u2705 Integrated Design Recommendation",
         ]
 
     @pytest.mark.smoke
