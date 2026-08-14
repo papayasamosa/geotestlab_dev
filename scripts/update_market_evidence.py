@@ -85,7 +85,7 @@ def _canonicalise_json_numbers(value):
     def round_digits(key):
         if key == "condition_number":
             return 8
-        if key in {"variance_high_level", "variance_low_level"}:
+        if key in {"variance_high_level", "variance_low_level", "null_sd_mean"}:
             return 11
         return 12
 
