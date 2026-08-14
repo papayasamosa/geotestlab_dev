@@ -9,6 +9,9 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from geotestlab.effect.plausibility import effect_result_is_stale
+from geotestlab.media.delivery import delivery_result_is_stale
+from geotestlab.power.production import production_result_is_stale
 from geotestlab.recommendation import (
     DesignScenario,
     RecommendationObjective,
@@ -29,6 +32,7 @@ _STATUS_OPTIONS = (
     "unknown",
     "conditional",
     "evidence_backed",
+    "stale",
 )
 
 
@@ -42,19 +46,76 @@ def _number(value: Any, default: float | None = None) -> float | None:
     return numeric if math.isfinite(numeric) else default
 
 
-def _stage_status(key: str) -> str:
+def _stage_quality_status(key: str) -> str:
+    """Return a quality status only when an upstream diagnostic supports it."""
+
     record = st.session_state.get("experiment_record")
     if isinstance(record, dict):
-        status = record.get("stage_status", {}).get(key)
-        if status == "completed":
+        explicit = (record.get("quality_status") or {}).get(key)
+        if explicit:
+            return str(explicit)
+    if key == "counterfactual_validation":
+        results = (st.session_state.get("validation_results") or {}).get("results") or {}
+        reliabilities = [
+            str(result.get("counterfactual_reliability", "")).lower()
+            for result in results.values()
+            if isinstance(result, dict)
+        ]
+        if reliabilities and all("high" in value or "moderate" in value for value in reliabilities):
             return "supported"
     return "not_evaluated"
+
+
+def _delivery_is_current(result) -> bool:
+    plan = st.session_state.get("media_delivery_plan")
+    thresholds = st.session_state.get("media_delivery_thresholds")
+    scope = st.session_state.get("media_delivery_scope")
+    if result is None or plan is None or thresholds is None or scope is None:
+        return False
+    try:
+        return not delivery_result_is_stale(result, plan, thresholds, scope)
+    except (TypeError, ValueError, KeyError):
+        return False
+
+
+def _power_is_current(result) -> bool:
+    dataset = st.session_state.get("kpi_regional_dataset")
+    config = st.session_state.get("production_power_config")
+    if result is None or dataset is None or config is None:
+        return False
+    try:
+        return not production_result_is_stale(result, dataset, config)
+    except (TypeError, ValueError, KeyError):
+        return False
+
+
+def _effect_is_current(result, delivery_current: bool) -> bool:
+    evidence = st.session_state.get("effect_plausibility_current_evidence")
+    if evidence is None:
+        evidence = st.session_state.get("effect_plausibility_evidence")
+    delivery = st.session_state.get("media_delivery_result")
+    if result is None or evidence is None or (delivery is not None and not delivery_current):
+        return False
+    try:
+        return not effect_result_is_stale(
+            result,
+            evidence,
+            st.session_state.get("effect_plausibility_current_mde"),
+            st.session_state.get("effect_plausibility_current_direction", "two_sided"),
+            delivery_status=delivery.status.value if delivery else None,
+            delivery_fingerprint=delivery.input_fingerprint if delivery else None,
+        )
+    except (TypeError, ValueError, KeyError):
+        return False
 
 
 def _default_row() -> dict[str, Any]:
     power = st.session_state.get("production_power_result")
     delivery = st.session_state.get("media_delivery_result")
     effect = st.session_state.get("effect_plausibility_result")
+    delivery_current = _delivery_is_current(delivery)
+    effect_current = _effect_is_current(effect, delivery_current)
+    power_current = _power_is_current(power)
     power_values = tuple(getattr(power, "power_at_target_effects", ()) or ())
     target_power = float(getattr(power, "target_power", 0.8) or 0.8) if power else 0.8
     power_meets = bool(power_values and all(float(value) >= target_power for value in power_values))
@@ -63,29 +124,39 @@ def _default_row() -> dict[str, Any]:
         central = next((item for item in effect.comparisons if item.label == "central"), None)
         effect_meets = central.meets_mde if central is not None else None
     cost = None
-    if delivery is not None:
+    if delivery is not None and delivery_current:
         budget = delivery.values.get("total_budget")
         cost = _number(getattr(budget, "value", None)) if budget is not None else None
     power_status = (
         str(getattr(power, "support_status", "not_evaluated")) if power else "not_evaluated"
     )
-    delivery_status = str(getattr(getattr(delivery, "status", None), "value", "not_evaluated"))
-    effect_status = str(getattr(getattr(effect, "status", None), "value", "not_evaluated"))
+    if not power_current:
+        power_status = "stale" if power is not None else "not_evaluated"
+    delivery_status = (
+        str(getattr(getattr(delivery, "status", None), "value", "not_evaluated"))
+        if delivery_current
+        else ("stale" if delivery is not None else "not_evaluated")
+    )
+    effect_status = (
+        str(getattr(getattr(effect, "status", None), "value", "not_evaluated"))
+        if effect_current
+        else ("stale" if effect is not None else "not_evaluated")
+    )
     return {
         "scenario_id": "selected_design",
         "size_metric": 1.0,
         "duration_periods": int(getattr(power, "requested_test_periods", 1) or 1),
-        "cost": cost if cost is not None else 0.0,
-        "match_status": _stage_status("match_quality"),
-        "counterfactual_status": _stage_status("counterfactual_validation"),
+        "cost": cost,
+        "match_status": _stage_quality_status("match_quality"),
+        "counterfactual_status": _stage_quality_status("counterfactual_validation"),
         "power_status": power_status,
         "power_usable": bool(getattr(power, "usable_for_recommendation", False))
-        if power
+        if power_current
         else False,
-        "power_meets_target": power_meets if power else None,
+        "power_meets_target": power_meets if power_current else None,
         "delivery_status": delivery_status,
         "effect_status": effect_status,
-        "effect_meets_mde": effect_meets,
+        "effect_meets_mde": effect_meets if effect_current else None,
         "region_constraints_status": "not_evaluated",
     }
 
@@ -206,21 +277,28 @@ def render_design_recommendation_tab() -> None:
         st.info("No design comparison yet. Review the candidate gates and run the comparison.")
         return
 
-    if scenarios:
-        try:
-            if recommendation_result_is_stale(
-                result,
-                scenarios,
-                objective,
-                override_scenario_id=override_id.strip() or None,
-                override_reason=override_reason,
-            ):
-                st.warning(
-                    "This recommendation is stale because candidate inputs, the objective or "
-                    "the override changed. Re-run the comparison before using it."
-                )
-        except (TypeError, ValueError, KeyError):
-            st.warning("The current candidate table could not be matched to the stored result.")
+    if parse_error or not scenarios:
+        st.warning(
+            "The stored recommendation is stale because the current candidate table is empty "
+            "or invalid. Add valid candidates and re-run the comparison."
+        )
+        return
+    try:
+        if recommendation_result_is_stale(
+            result,
+            scenarios,
+            objective,
+            override_scenario_id=override_id.strip() or None,
+            override_reason=override_reason,
+        ):
+            st.warning(
+                "This recommendation is stale because candidate inputs, the objective or "
+                "the override changed. Re-run the comparison before using it."
+            )
+            return
+    except (TypeError, ValueError, KeyError):
+        st.warning("The current candidate table could not reproduce the stored result.")
+        return
 
     if result.status is RecommendationStatus.RECOMMENDED:
         st.success(f"Recommended design: {result.selected_scenario_id}")
