@@ -13,6 +13,9 @@ This pack formalises GeoTestLab as a product after the initial application was a
 3. `roadmap-and-traceability.md`  
    Reconciliation of the current repository, the older hardening PRD and the new product plan, with a requirement matrix and implementation sequence.
 
+4. `../user/`, `../methodology/` and `../architecture/`
+   Practical user guidance, methodological interpretation and architecture/data-flow references for the implemented workflow.
+
 ## Recommended repository location
 
 ```text

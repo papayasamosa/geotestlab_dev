@@ -3,7 +3,8 @@
 **Document type:** Functional and methodological product specification  
 **Parent document:** `PRD.md`  
 **Version:** 1.0  
-**Status:** Approved methodology; production implementation in progress
+**Status:** Approved methodology; selected-design production implementation
+delivered, with broader candidate-grid and duration UX in progress
 **Date:** 14 August 2026
 
 ## 1. Purpose
