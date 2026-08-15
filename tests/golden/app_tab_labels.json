@@ -5,12 +5,12 @@
     "tab_labels": [
       "\u2699\ufe0f Region Matching",
       "\ud83d\udd0d Validate Test Design",
-      "\ud83d\udcca Measure Test Impact",
-      "\ud83e\udde0 Bayesian TBR",
       "\ud83d\udcc8 Power & Test Sizing",
       "\ud83d\udce3 Media Delivery Feasibility",
       "\ud83c\udfaf Effect Plausibility",
-      "\u2705 Integrated Design Recommendation"
+      "\u2705 Design Recommendation / Approve Design",
+      "\ud83d\udcca Measure Test Impact",
+      "\ud83e\udde0 Bayesian TBR"
     ]
   },
   "fixture_version": 1,
