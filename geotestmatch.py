@@ -1244,14 +1244,24 @@ def _current_design_snapshot(*, analyst_label="", analyst_notes=(), approval_tim
     power_result = st.session_state.get("production_power_result")
     scenario_config = st.session_state.get("power_scenario_config")
     scenario_result = st.session_state.get("power_scenario_result")
-    selected_candidate = getattr(scenario_result, "selected_candidate", None)
-    selected_candidate_power = getattr(selected_candidate, "power_result", None)
     media_result = st.session_state.get("media_delivery_result")
     media_plan = st.session_state.get("media_delivery_plan")
     effect_result = st.session_state.get("effect_plausibility_result")
     effect_evidence = getattr(effect_result, "evidence", None) if effect_result else None
     recommendation = st.session_state.get("design_recommendation_result")
     recommendation_dict = _freeze_value(recommendation) if recommendation else None
+    selected_candidate = getattr(scenario_result, "selected_candidate", None)
+    if selected_candidate is None and recommendation is not None:
+        _selected_scenario_id = getattr(recommendation, "selected_scenario_id", None)
+        _scenario_candidates = tuple(getattr(scenario_result, "candidates", ()) or ())
+        if _selected_scenario_id and _selected_scenario_id.startswith("candidate_"):
+            try:
+                _candidate_index = int(_selected_scenario_id.rsplit("_", 1)[-1]) - 1
+            except ValueError:
+                _candidate_index = -1
+            if 0 <= _candidate_index < len(_scenario_candidates):
+                selected_candidate = _scenario_candidates[_candidate_index]
+    selected_candidate_power = getattr(selected_candidate, "power_result", None)
     recommendation_objective = st.session_state.get("design_recommendation_objective")
     if recommendation_objective is None:
         recommendation_objective = (recommendation_dict or {}).get("objective")
@@ -4404,15 +4414,24 @@ def render_time_series_validation(mode: str):
             if _controls_df is not None and _geo_key in _controls_df.columns and _frozen_controls:
                 _frozen_control_set = {str(r) for r in _frozen_controls}
                 _available_control_set = set(_controls_df[_geo_key].dropna().astype(str))
-                if _frozen_control_set <= _available_control_set:
-                    st.session_state.final_controls = _controls_df[
-                        _controls_df[_geo_key].astype(str).isin(_frozen_control_set)
-                    ].copy()
-                else:
-                    st.warning(
-                        "Some frozen control regions are not present in the current matching "
-                        "result; the current controls were retained for review."
+                if not _frozen_control_set <= _available_control_set:
+                    st.session_state.pop("evaluate_inherited_frozen_design", None)
+                    st.error(
+                        "The active frozen controls are not available in the current matching "
+                        "result. Inheritance was blocked to prevent evaluating a hybrid design; "
+                        "restore the approved region universe before continuing."
                     )
+                    return
+                st.session_state.final_controls = _controls_df[
+                    _controls_df[_geo_key].astype(str).isin(_frozen_control_set)
+                ].copy()
+            elif _frozen_controls:
+                st.session_state.pop("evaluate_inherited_frozen_design", None)
+                st.error(
+                    "The current matching result cannot restore the active frozen controls. "
+                    "Inheritance was blocked to prevent evaluating a hybrid design."
+                )
+                return
             _frozen_frequency = _active_frozen.get("planned", {}).get(
                 "time_series_frequency"
             ) or _frozen_design.get("frequency")
@@ -4846,6 +4865,12 @@ def render_time_series_validation(mode: str):
             )
         if not _inherited_frozen.get("date_defaults_applied"):
             _frozen_planned = _inherited_frozen.get("planned") or {}
+            _frozen_campaign_dates = list(_frozen_design.get("planned_campaign_dates") or ())
+            _frozen_test_start = _frozen_planned.get("test_start")
+            _frozen_test_end = _frozen_planned.get("test_end")
+            if (_frozen_test_start is None or _frozen_test_end is None) and _frozen_campaign_dates:
+                _frozen_test_start = _frozen_campaign_dates[0]
+                _frozen_test_end = _frozen_campaign_dates[-1]
 
             def _frozen_date_label(value):
                 if value is None:
@@ -4856,14 +4881,14 @@ def render_time_series_validation(mode: str):
                     return None
 
             for _widget_key, _planned_key in (
-                ("evaluate_pre_start", "pre_start"),
-                ("evaluate_pre_end", "pre_end"),
-                ("evaluate_test_start", "test_start"),
-                ("evaluate_test_end", "test_end"),
-                ("evaluate_post_start", "post_start"),
-                ("evaluate_post_end", "post_end"),
+                ("evaluate_pre_start", _frozen_planned.get("pre_start")),
+                ("evaluate_pre_end", _frozen_planned.get("pre_end")),
+                ("evaluate_test_start", _frozen_test_start),
+                ("evaluate_test_end", _frozen_test_end),
+                ("evaluate_post_start", _frozen_planned.get("post_start")),
+                ("evaluate_post_end", _frozen_planned.get("post_end")),
             ):
-                _label = _frozen_date_label(_frozen_planned.get(_planned_key))
+                _label = _frozen_date_label(_planned_key)
                 if _label in date_options:
                     st.session_state[_widget_key] = _label
             st.session_state.evaluate_use_post = bool(_frozen_planned.get("use_post", False))
