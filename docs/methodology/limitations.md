@@ -10,12 +10,12 @@
   sufficiency is unknown.
 - Conditional and overridden recommendations require explicit review. The
   override reason is part of the export.
-- The approved design-freeze contract is not complete. The current record has
-  immutable freeze foundations but does not yet replace organisational
-  approval controls.
-- Local JSON export is reproducible within the recorded source and methodology
-  identities, but package metadata and a production persistence service remain
-  follow-on work.
+- The approved design freeze is a local workflow record, not a replacement for
+  organisational approval controls or a central persistence service. Each
+  approval is immutable and versioned, and later approvals create new versions.
+- Local JSON export records package/dependency metadata and source/methodology
+  identities. It remains a file-based hand-off; production persistence and
+  multi-user access remain follow-on work.
 - Bayesian CI sampling is a path smoke test, not a claim of production
   convergence.
 - Licensing remains undecided.
