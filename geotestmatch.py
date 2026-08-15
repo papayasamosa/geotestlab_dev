@@ -1325,9 +1325,10 @@ def _reconcile_experiment_record():
     media_thresholds = st.session_state.get("media_delivery_thresholds")
     media_scope = st.session_state.get("media_delivery_scope")
     effect_result = st.session_state.get("effect_plausibility_result")
-    effect_evidence = st.session_state.get(
-        "effect_plausibility_current_evidence"
-    ) or st.session_state.get("effect_plausibility_evidence")
+    if "effect_plausibility_current_evidence" in st.session_state:
+        effect_evidence = st.session_state.effect_plausibility_current_evidence
+    else:
+        effect_evidence = st.session_state.get("effect_plausibility_evidence")
 
     current = {}
     full = {}
@@ -1350,8 +1351,9 @@ def _reconcile_experiment_record():
     ):
         media_fp = delivery_input_fingerprint(media_plan, media_thresholds, media_scope)
         current["media_delivery"] = media_fp
-        if "media_delivery" not in rec.stage_fingerprints:
-            record_stage_result(rec, "media_delivery", media_fp)
+        result_fp = str(media_result.input_fingerprint or "")
+        if result_fp and rec.stage_fingerprints.get("media_delivery") != result_fp:
+            record_stage_result(rec, "media_delivery", result_fp)
 
     if effect_result is not None and effect_evidence is not None:
         media_fp = current.get("media_delivery")
@@ -1364,8 +1366,9 @@ def _reconcile_experiment_record():
                 delivery_fingerprint=media_fp,
             )
             current["effect_plausibility"] = effect_fp
-            if "effect_plausibility" not in rec.stage_fingerprints:
-                record_stage_result(rec, "effect_plausibility", effect_fp)
+            result_fp = str(effect_result.input_fingerprint or "")
+            if result_fp and rec.stage_fingerprints.get("effect_plausibility") != result_fp:
+                record_stage_result(rec, "effect_plausibility", result_fp)
 
     if full:
         update_inputs(rec, compute_input_fingerprint(full), _experiment_input_summary())
