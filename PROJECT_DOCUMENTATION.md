@@ -1,6 +1,6 @@
 # GeoTestLab — Project Documentation
 
-> *Reviewed baseline: `147a4d6fec5698346d0c8f985bd9154c7e280f9a`.*
+> *Reviewed baseline: `f3810f848932d52b4b02267cd1641c6fb53ef051`.*
 >
 > **Documentation map**
 > - `PROJECT_DOCUMENTATION.md` documents the **current implementation** as reviewed at the baseline commit above.
@@ -61,7 +61,13 @@ The app does not claim to *prove* causality — it is a toolkit to make an evide
 
 ## 2. High-Level Workflow
 
-The current app is organised into four main workflow areas: **Region Matching**, **Validate Test Design**, **Measure Test Impact**, and **Bayesian TBR** (at the time of writing these correspond to Tabs 1–4 in the UI, but the workflow below is described by area rather than by tab number so it stays accurate even if the tab layout changes).
+The current app exposes eight tabs. The current order is Region Matching,
+Validate Test Design, Measure Test Impact, Bayesian TBR, Power & Test Sizing,
+Media Delivery Feasibility, Effect Plausibility and Integrated Design
+Recommendation. The intended planning lifecycle is Region Matching, Validate
+Test Design, Power & Test Sizing, Media Delivery Feasibility, Effect
+Plausibility, Design Recommendation / Approve Design, then Measure Test Impact
+and Bayesian TBR after completion. Navigation has not yet been reordered.
 
 The intended end-to-end flow, in plain English:
 
@@ -562,11 +568,13 @@ includes:
   stage-scoped staleness, immutable frozen design versions and a local JSON
   experiment-record export. These are foundations of FR-16 (approved design
   freeze) and FR-22 (reproducible export), **not** the complete contracts.
-- **Power methodology spike** — `geotestlab/power/` is an **unapproved
-  methodology prototype** (synthetic cases, model-based counterfactual
-  simulation, placebo/residual methods, MDE search, fit-method comparison
-  evidence). It is not the production power engine; production FR-10/FR-11 work
-  is gated on explicit methodology approval.
+- **Power methodology and production contract** — `geotestlab/power/` contains
+  the separate v2.1 evidence harness and the approved selected-design
+  production contract. ADR-000 records methodology version 0.5.0 and its
+  conditions. Production results preserve explicit simulation/fit methods,
+  support/blocker status and limitations; the candidate-grid UI, complete
+  matched/validated candidate pipeline and future campaign-date horizon remain
+  follow-on work.
 - **CI** — GitHub Actions runs test, lock-verification, numerical-regression
   and Bayesian reduced-sampling smoke jobs on every pull request to `main`.
 - **Numerical regression gates** — `tests/test_numerical_characterisation.py`
@@ -611,6 +619,10 @@ and session-state wiring. It is organised roughly as:
 11. **`render_method_comparison_table(results, mode, test_start, control_regions_val)`** — a self-contained rendering step for the sectioned Method Comparison table (§G2), its captions, and the "How to interpret these results" expander; reads only from the per-method results dict.
 12. **`render_time_series_validation(mode)`** — the shared function powering both Tab 2 ("Design") and Tab 3 ("Evaluate"): settings UI (date windows, frequency radio + mismatch acknowledgment (§F2), lag checkbox, placebo/rolling-origin settings), the KPI file upload with aggregation-level/metric-column carry-over from KPI Pattern setup when applicable (§F), the run button, calls into `run_validation_method()` for each comparison method, results display (per-method control selection details, region role table, KPI Performance by Geography, chart with Excel data download, the Method Comparison table via `render_method_comparison_table()`), and validation-result staleness handling (`clear_validation_state`).
 13. **Tab 4 (Bayesian TBR)** — Evaluate-mode prerequisite gate, method/control selection from the chosen validation method (no silent fallback for empty data-optimised selections), structural/weak prior setup (data-driven sigma bounds — §J), the PyMC model definition and sampling (draws=2000, tune=1000, chains=4, target_accept=0.95), posterior/posterior-predictive computation (fitted-mean HDI for pre-period, predictive intervals for test/post — verified, §K/§L), summary cards, line chart and uplift histogram (both with Excel data downloads), MCMC diagnostics table (incl. divergences), and the "how to interpret" text.
+14. **Tab 5 (Power & Test Sizing)** — Canonical KPI reuse, explicit selected-design production power configuration, support/blocker status, MDE, power curve and JSON export. The current UI does not yet expose the full scenario grid or a future campaign schedule separate from the historical analytical horizon.
+15. **Tab 6 (Media Delivery Feasibility)** — Registered Meta platform profile, delivery-only calculations, supplied/calculated provenance, thresholds, scope and stale-result handling. Broader platform profiles remain future work.
+16. **Tab 7 (Effect Plausibility)** — Evidence source/date/quality, adjustment state, low/central/high scenarios, MDE comparison and separate delivery/effect status.
+17. **Tab 8 (Integrated Design Recommendation)** — Explicit candidate gates, objectives, limiting factors and override rationale. The current candidate table is not yet fed automatically from every upstream analytical result.
 14. **Sidebar footer** — data quality check summary ("5. Data Quality Check").
 
 ### 5.2 Key functions (by name)
@@ -691,7 +703,11 @@ Excel reading uses the `calamine` engine primarily, with a fallback to `openpyxl
 - **New frequencies** (e.g. monthly): extend `get_frequency_config()` and `infer_time_series_frequency()`; everything downstream (lags, defaults, labels) reads from the config dict rather than hardcoding "week".
 - **New Bayesian model features** (e.g. a separate lag-specific prior instead of duplicating the same-period sigma onto lagged terms): modify the model/prior code in `geotestlab/bayesian/` (`model.py`, `priors.py`) and the run handler in the Bayesian TBR tab; keep the HDI-vs-predictive-interval distinction intact when adding new interval types.
 - **Experiment record and staleness**: change identity / fingerprint / freeze / export logic in `geotestlab/experiment/`; the app only wires session state via `_experiment_record()`, `_save_experiment_record()` and `_reconcile_experiment_record()`.
-- **Power analysis**: `geotestlab/power/` is an unapproved methodology spike — do not build production power UI or treat it as the approved engine until methodology approval.
+- **Power analysis**: use the approved production contract in
+  `geotestlab/power/production/` for selected-design detectability and keep the
+  evidence harness separate. Do not add an implicit best simulation or fit
+  method. Future campaign dates must not be relabelled historical analytical
+  dates; the horizon split is an active follow-on contract.
 - **Data-loading robustness**: `load_and_reshape_kpi` and `build_region_mapping` are the most likely places to need hardening if new client KPI export formats need to be supported.
 - **KPI Pattern mode display formatting**: new tables shown in KPI Pattern mode (§A2) should use `kpi_pattern_display_rename_map()` (renames `wk_YYYYMMDD` columns to `dd mmm yy` and `POPULATION_COL` to the metric label) and/or `kpi_feature_date_label()` (single-value date formatting, e.g. for chart axis labels) rather than reimplementing the same renaming logic inline, so all tables stay consistent if the underlying feature-naming convention (`wk_YYYYMMDD`) ever changes.
 

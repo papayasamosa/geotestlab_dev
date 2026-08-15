@@ -18,5 +18,6 @@ aggregate study still fails calibration thresholds.
 
 ## Affected requirements and implementation status
 
-FR-6, FR-7 and FR-10. This is a proposed safety rule, not an approval of the
-production method.
+FR-6, FR-7 and FR-10. The production contract carries the minimum-history and
+frequency-aware safety checks as support/blocker conditions; this ADR does not
+claim that the evidence establishes adequacy for every KPI or history length.

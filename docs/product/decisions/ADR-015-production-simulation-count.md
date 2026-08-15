@@ -22,4 +22,5 @@ seed sensitivity **0.084**, above the proposed **0.05** threshold.
 
 ## Affected requirements and implementation status
 
-FR-10, FR-11 and FR-22. No production simulation count is approved.
+FR-10, FR-11 and FR-22. No universal production simulation count is approved;
+the production caller must provide and export an explicit count and seed.

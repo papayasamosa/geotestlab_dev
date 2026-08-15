@@ -6,9 +6,10 @@
 
 ## Decision proposal
 
-The production power core must remain gated until the product owner explicitly
-approves the methodology decision pack. A green CI run, a merged documentation
-PR, or an agent's interpretation of the evidence is not approval.
+The production power core had to remain gated until the product owner
+explicitly approved the methodology decision pack. A green CI run, a merged
+documentation PR, or an agent's interpretation of the evidence is not
+approval.
 
 The gate may move from `PENDING` to `APPROVED` only when the product owner
 records all of the following in this file or in a linked, immutable decision
@@ -19,8 +20,10 @@ record:
 3. the product-owner identity and UTC approval timestamp; and
 4. the evidence commit reviewed.
 
-Until then, `geotestlab/power/` remains an experimental methodology spike and
-no production power API, UI, or recommendation may be implemented or exposed.
+The approval record below supersedes that pre-approval state. The evidence
+harness remains separate from production, while the production power API and
+UI may use the approved contract only when they preserve the recorded
+limitations, support/blocker statuses and explicit method choices.
 
 ## Current approval record
 
@@ -63,9 +66,11 @@ features.
 ## Consequences
 
 - PR3 can document recommendations and unresolved limitations.
-- PR4 cannot begin until the product owner changes the approval record.
-- A later implementation PR must verify this record and preserve the approved
-  methodology version in its production result contract.
+- Production power implementation may proceed under the conditions in the
+  approval record. Later changes that alter numerical semantics require a new
+  evidence and decision review.
+- The production result contract must preserve the approved methodology
+  version and must not be confused with the separate evidence harness.
 
 ## Affected requirements
 

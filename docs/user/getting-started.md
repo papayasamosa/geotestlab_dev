@@ -31,13 +31,23 @@ the market, geography level, metric, date frequency and data-quality report.
    sampling inputs and diagnostics are appropriate.
 5. **Power & Test Sizing** — run the explicit production power contract for the
    executed design. Method, fit, direction, history, duration and simulation
-   settings are recorded; there is no implicit best method.
+   settings are recorded; there is no implicit best method. The current tab is
+   selected-design power; candidate-grid comparison and future campaign dates
+   separate from the analytical horizon are not yet exposed.
 6. **Media Delivery Feasibility** — assess budget, CPM, impressions, reach,
-   frequency and thresholds using the selected platform profile.
+   frequency and thresholds using the registered Meta platform profile.
 7. **Effect Plausibility** — record a dated evidence bridge and low/central/high
-   KPI-uplift scenarios, then compare them with MDE.
-8. **Integrated Design Recommendation** — compare complete candidate rows
-   under an explicit smallest-design or least-cost objective.
+   KPI-uplift scenarios, then compare them with MDE. The evidence-quality policy
+   remains pending.
+8. **Integrated Design Recommendation** — compare typed candidate rows under an
+   explicit smallest-design or least-cost objective. Full upstream candidate
+   integration remains follow-on work.
+
+For planning, the intended lifecycle is Region Matching → Validate Test Design
+→ Power & Test Sizing → Media Delivery Feasibility → Effect Plausibility →
+Design Recommendation / Approve Design. Measure Test Impact and Bayesian TBR
+follow after the test is complete; the current tab order has not yet been
+reworked.
 
 The experiment-record expander is the audit trail. It shows stage statuses,
 fingerprints, stale results, frozen design versions and the unified JSON export.

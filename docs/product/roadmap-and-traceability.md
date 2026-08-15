@@ -2,8 +2,8 @@
 
 **Document type:** Scope reconciliation, requirement traceability and delivery plan  
 **Parent document:** `PRD.md`  
-**Version:** 1.2
-**Date:** 14 August 2026
+**Version:** 1.3
+**Date:** 15 August 2026
 
 ## 1. Purpose
 
@@ -36,7 +36,7 @@ The current production code remains the source of truth for existing behaviour u
 
 - Repository: `papayasamosa/geotestlab_dev`
 - Branch: `main`
-- Commit: `f64c2fb317985d24628baba89ac931c612518e13`
+- Commit: `f3810f848932d52b4b02267cd1641c6fb53ef051`
 - Current application source: `geotestmatch.py` (thin adapters and UI)
 - Extracted packages: `geotestlab/data/`, `geotestlab/matching/`,
   `geotestlab/validation/`, `geotestlab/bayesian/`,
@@ -101,7 +101,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 |---|---|---|---|---|
 | Market setup | Workbook-driven markets and geography levels | FR-1 | Current | Improve documentation and data-version metadata |
 | Custom geographies | KPI Pattern upload | FR-1, FR-3 | Current | Preserve and improve mapping guidance |
-| KPI ingestion | Simple and aggregated Excel, with canonical regional preparation and provenance | FR-2 | Current / strengthened | Reuse the contract in validation and future power sizing |
+| KPI ingestion | Simple and aggregated Excel, with canonical regional preparation and provenance | FR-2 | Current / strengthened | Reuse the contract across validation and power sizing |
 | Data quality | Typed report, blockers, rejected/unmapped downloads | FR-2 | Current | Add experiment-level quality summary |
 | Structural matching | Demographic and population features | FR-3 to FR-5 | Current | Preserve behaviour during refactor |
 | KPI Pattern matching | Indexed historical KPI shape | FR-3 to FR-5 | Current | Clarify terminology in methodology guide |
@@ -117,18 +117,18 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Residual diagnostics | Durbin-Watson | FR-7 | Current | Decide additional diagnostics |
 | Placebos | Capped historical windows | FR-8 | Current | Approve finite-sample and fallback policy (recorded in the power-methodology spike) |
 | Counterfactual Confidence | Priority cascade | FR-9 | Current | Review thresholds and driver logic |
-| Prospective power | Approved production contract plus selected-design UI; evidence harness remains separate | FR-10, FR-11 | Current / strengthened | Continue candidate-grid and duration UX hardening |
-| Platform selector | Generic profile schema with registered Meta profile | FR-12 | In progress | Complete dynamic selector and approve first profile set |
-| Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | In progress | Add further profiles and production delivery integrations |
+| Prospective power | Approved production contract plus selected-design UI; evidence harness remains separate | FR-10, FR-11 | Current / strengthened | Separate future campaign schedule from analytical horizon; complete candidate-grid UX |
+| Platform selector | Generic profile schema, registered Meta profile and dedicated Meta UI | FR-12 | Current for Meta | Keep broader profile policy pending and add profiles later |
+| Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | Current for Meta | Add further profiles and production delivery integrations later |
 | Effect plausibility | Typed evidence/scenario layer with MDE comparison | FR-14 | Current / strengthened | Keep evidence hierarchy pending and link scenarios to recommendation |
-| Integrated recommendation | Separate gate comparison, explicit objective, limiting factors and override rationale | FR-15 | Partially implemented | Complete unified experiment export and approved-design persistence |
+| Integrated recommendation | Separate gate comparison, explicit objective, limiting factors and override rationale | FR-15 | Partially integrated | Consume typed upstream scenario, validation, power, delivery and effect results |
 | Design freeze | Versioned frozen-design foundations (immutable versions, fingerprints) | FR-16 | Partially implemented | Complete the FR-16 approved-design-freeze contract |
 | Impact measurement | Actual/counterfactual and uplift | FR-17 | Current | Link to approved design |
 | Bayesian TBR | Core extracted into `geotestlab/bayesian/`; reduced-sampling smoke CI | FR-18 | Current | Bayesian assurance (production sampling quality) |
 | Result hierarchy | Partial | FR-19 | Partially implemented | Redesign top-level summary |
 | Workflow state | Stage fingerprints + stage-scoped staleness (experiment foundations) | FR-20 | Partially implemented | Complete workflow state model |
 | Guided UX | Some help and expanders | FR-21 | Partially implemented | Introduce stage-based guidance |
-| Exports | Local JSON experiment-record export with unified validation, power, delivery, effect and recommendation summaries | FR-22 | Partially implemented | Add approved-design persistence, package metadata and stakeholder views |
+| Exports | Local JSON experiment-record export with unified validation, power, delivery, effect and recommendation summaries | FR-22 | Partially implemented | Add approved-design persistence, package metadata, reload and stakeholder views |
 | Error handling | Some domain errors and technical expanders | FR-23 | Partially implemented | Complete domain exception boundary |
 | Accessibility | Theme and focus improvements | FR-24 | Partially implemented | Full keyboard and zoom review |
 
@@ -179,35 +179,46 @@ The root README should remain a concise installation and orientation document, l
 
 - power-analysis methodology spike and ADR pack (delivered; methodology
   approved under ADR-000);
-- selected-design power and MDE;
-- market-share and duration scenarios;
-- design-level export;
-- approved design freeze.
+- selected-design power and MDE (delivered);
+- future campaign schedule versus historical power-horizon contract;
+- matched and validated candidate market-share and duration scenarios;
+- design-level export and complete approved design freeze.
 
 ### P1. Media feasibility
 
-- platform selector;
-- common campaign inputs;
-- Meta and agreed first platform profiles;
-- spend-to-delivery calculations;
-- delivery thresholds;
-- scenario comparison.
+- Meta profile selector and common campaign inputs (delivered);
+- spend-to-delivery calculations and thresholds (delivered for Meta);
+- typed delivery results consumed by candidate scenarios;
+- broader platform profiles only after the Meta flow is coherent.
 
 ### P1. Effect plausibility
 
-- evidence hierarchy;
-- effectiveness scenarios;
-- expected KPI effect versus MDE;
-- conditional recommendation.
+- evidence/scenario contract, provenance and MDE comparison (delivered);
+- pending evidence-quality policy;
+- typed effect results consumed by candidate recommendation.
 
 ### P2. Product experience and reporting
 
 - stage-based workflow status;
 - result hierarchy;
 - stakeholder summary;
-- complete experiment export (FR-22; only the local JSON foundation exists so far);
+- complete experiment export (the local JSON foundation and unified summaries
+  are delivered; package metadata, safe reload and stakeholder views remain);
 - accessible narrow-screen behaviour;
 - saved configuration loading.
+
+The next implementation sequence is deliberately dependency-ordered:
+
+1. reconcile product documentation (this update);
+2. fix the prospective power horizon contract;
+3. complete matched candidate construction;
+4. expose scenario sizing in the Power & Test Sizing UI;
+5. integrate typed upstream recommendation evidence;
+6. reorder and guide the lifecycle UX;
+7. complete approved-design freeze;
+8. strengthen reproducibility and reload;
+9. add end-to-end planning and accessibility assurance;
+10. perform release-readiness cleanup.
 
 ### P2. Additional methodology
 
@@ -322,14 +333,15 @@ production power core is now the active next stage under those conditions.
 
 **Status:** Delivered for the selected-design workflow after explicit
 product-owner methodology approval; implementation preserves the approved
-method/version and support-status conditions.
+method/version and support-status conditions. Backend scenario contracts exist,
+but complete matched candidate construction and candidate-grid UX remain
+follow-on work.
 
 ### Deliverables
 
 - selected-design power;
 - MDE;
-- candidate market-share scenarios;
-- duration scenarios;
+- candidate market-share and duration scenario contracts;
 - result table and charts;
 - staleness and export;
 - automated tests.
@@ -362,8 +374,9 @@ broader profiles and production integrations remain planned.
 
 ## Milestone 7. Effect plausibility and spend recommendation
 
-**Status:** Delivered for the current workflow. Effect plausibility,
-integrated recommendation and unified export are implemented; the
+**Status:** Partially integrated for the current workflow. Effect plausibility,
+typed integrated recommendation and unified export are implemented; normal
+recommendation operation still needs upstream candidate results, while the
 evidence-quality policy and recommendation objective remain pending product
 decisions.
 
@@ -426,6 +439,22 @@ remaining product decisions and production-readiness work called out below.
 13. `docs/user-and-methodology-guides` — delivered
 
 Each analytical PR should be small enough to review and should include tests, documentation and explicit numerical change notes where applicable.
+
+### 9.1 Next dependency-ordered sequence
+
+The next work is intentionally sequenced from the current baseline rather than
+stacked on unmerged branches:
+
+1. reconcile current product documentation;
+2. fix the prospective power horizon contract;
+3. complete matched candidate design construction;
+4. expose scenario sizing in the Power & Test Sizing UI;
+5. replace manual recommendation evidence with typed upstream candidates;
+6. reorder and guide lifecycle navigation;
+7. complete approved-design freeze;
+8. strengthen reproducibility and experiment reload;
+9. add deterministic end-to-end planning and accessibility assurance;
+10. complete release-readiness cleanup.
 
 ## 10. Decision log required
 

@@ -24,5 +24,7 @@ would make the effective sample size or null distribution less transparent.
 
 ## Affected requirements and implementation status
 
-FR-8, FR-10 and FR-11. Existing spike behaviour is evidence only; production
-use awaits the gate in ADR-000.
+FR-8, FR-10 and FR-11. The production contract retains placebo results as a
+diagnostic cross-check and preserves the explicit incomplete status when the
+minimum valid window count is not met. Placebo results do not establish
+absolute power calibration by themselves.

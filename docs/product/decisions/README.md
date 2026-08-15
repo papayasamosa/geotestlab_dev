@@ -11,11 +11,12 @@ merged documentation PR could not authorize production power implementation;
 the gate is now satisfied by the explicit product-owner approval recorded in
 that ADR.
 
-The records below are **required future decision records** listed so the open
-questions remain explicitly open. They are scaffold placeholders only; each
-entry is marked `Pending` and no approved decision is implied.
+The records below form the decision register. The power-methodology records
+were approved through ADR-000 and govern the production power contract;
+unrelated product decisions remain explicitly pending. A merged PR or green
+CI run does not approve a pending product decision.
 
-## Required future decision records
+## Decision register
 
 | Record | Topic | Status |
 |---|---|---|

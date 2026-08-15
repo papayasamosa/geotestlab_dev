@@ -23,5 +23,6 @@ not a reason to relax the safety policy.
 
 ## Affected requirements and implementation status
 
-FR-7, FR-9, FR-10 and FR-11. The policy is documented and tested in the spike;
-production status semantics remain gated.
+FR-7, FR-9, FR-10 and FR-11. The production contract records fallback reasons
+and keeps fallback or safety-blocked cases unsupported for formal power or
+recommendation use.

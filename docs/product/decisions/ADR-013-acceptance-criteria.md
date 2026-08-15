@@ -14,10 +14,11 @@ The proposed acceptance thresholds are decision criteria, not tunable targets:
 | False-supported rate | 0.00 | 0.033 |
 | Seed-sensitivity power standard deviation | 0.05 | 0.084 |
 
-Do not approve the methodology while these failures remain unexplained. The
-product owner must decide whether final acceptance is flat across scenarios or
-scenario-weighted, with the weighting and protected scenarios recorded before
-production implementation.
+The product owner approved methodology version 0.5.0 with these calibration
+failures retained as explicit limitations and support/blocker conditions in
+ADR-000. Future evidence work must still decide whether any revised acceptance
+policy is flat across scenarios or scenario-weighted before changing the
+production semantics.
 
 ## Alternatives considered
 
@@ -27,5 +28,6 @@ an approved policy.
 
 ## Affected requirements and implementation status
 
-FR-10 and FR-11. This ADR resolves neither the thresholds nor the approval;
-it makes the open decision explicit.
+FR-10 and FR-11. The current production contract preserves the observed
+limitations and does not reinterpret the proposed thresholds as a hidden
+qualification score.

@@ -28,5 +28,6 @@ and uncertainty difficult to reproduce.
 
 ## Affected requirements and implementation status
 
-FR-6, FR-7, FR-10 and FR-11. This ADR defines the selection rule, not a
-production fit implementation.
+FR-6, FR-7, FR-10 and FR-11. The production contract exposes the explicit fit
+choice and diagnostics; it does not silently replace a failed fit with another
+method.

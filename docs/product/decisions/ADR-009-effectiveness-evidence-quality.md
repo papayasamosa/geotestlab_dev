@@ -44,6 +44,7 @@ workflow contract and does not represent approval of an evidence hierarchy.
 
 ## Implementation status
 
-`geotestlab.effect` contains the evidence/scenario contract, MDE comparison,
-staleness fingerprint and dedicated UI. Integrated recommendation and approved
-evidence-quality policy remain future work.
+`geotestlab.effect` contains the evidence/scenario contract, provenance, MDE
+comparison, staleness fingerprint and dedicated UI. The typed recommendation
+consumer is implemented, but the evidence-quality policy remains pending and
+the normal recommendation path is not yet fully upstream-integrated.
