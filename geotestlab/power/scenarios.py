@@ -14,7 +14,7 @@ from typing import Callable, Mapping
 import numpy as np
 import pandas as pd
 
-from geotestlab.data import MarketSizeMeasure, RegionalKPIDataset
+from geotestlab.data import MarketSizeMeasure, RegionalKPIDataset, infer_frequency
 from geotestlab.matching import (
     MatchConfig,
     MatchConstraints,
@@ -140,6 +140,7 @@ class ScenarioSizingConfig:
     random_seed: int = 42
     objective: str | None = None
     power_template: ProductionPowerConfig | None = None
+    frequency: str | None = None
     matching_strategy: str = "intermediate"
     validation_method: str = "enet"
     match_config: MatchConfig = field(default_factory=MatchConfig)
@@ -152,6 +153,8 @@ class ScenarioSizingConfig:
             object.__setattr__(
                 self, "market_size_measure", MarketSizeMeasure(self.market_size_measure)
             )
+        if self.frequency is not None and self.frequency not in {"daily", "weekly"}:
+            raise ValueError("frequency must be 'daily', 'weekly' or None")
 
 
 @dataclass(frozen=True)
@@ -501,6 +504,23 @@ def _default_control_selector(
         warnings.append(
             "excluded incomplete control candidates from matching: " + ", ".join(missing_controls)
         )
+    forced_requested = tuple(
+        sorted(
+            set(request.constraints.force_control_include) & set(request.eligible_control_regions)
+        )
+    )
+    missing_forced = sorted(set(forced_requested) & set(missing_controls))
+    if missing_forced:
+        return ControlSelection(
+            control_regions=forced_requested,
+            match_status="fail",
+            warnings=tuple(warnings),
+            blockers=(
+                "forced control regions have incomplete historical KPI patterns: "
+                + ", ".join(missing_forced),
+            ),
+            provenance={"strategy": request.matching_strategy, "seed": request.random_seed},
+        )
     if not eligible:
         return ControlSelection(
             control_regions=(),
@@ -512,7 +532,7 @@ def _default_control_selector(
 
     test_df = agg[agg["region"].isin(request.test_regions)].copy()
     pool_df = agg[agg["region"].isin(eligible)].copy()
-    forced = tuple(sorted(set(request.constraints.force_control_include) & set(eligible)))
+    forced = forced_requested
     target_count = max(len(request.test_regions), len(forced))
     if request.locked_control_regions:
         controls = tuple(sorted(set(request.locked_control_regions)))
@@ -541,75 +561,78 @@ def _default_control_selector(
                 provenance={"strategy": request.matching_strategy, "seed": request.random_seed},
             )
 
-        eligible_df = pd.concat([test_df, pool_df], ignore_index=True)
-        eligible_df = impute_missing_features(eligible_df, features)
-        means, stds = fit_structural_stats(eligible_df, features)
-        weights = {feature: 1.0 for feature in features}
-        means_tuple = tuple(float(means[feature]) for feature in features)
-        stds_tuple = tuple(float(stds[feature]) for feature in features)
-        _w_vec, p_scaled, t_cent = preprocess_data(
-            remaining_pool,
-            test_df,
-            features,
-            weights,
-            means_tuple,
-            stds_tuple,
-        )
-        combined = pool_df.set_index("region")
-
-        def score(indices):
-            chosen = list(forced) + [str(value) for value in indices]
-            return calculate_metrics(
-                test_df,
-                combined.loc[chosen].reset_index(),
-                features,
-                weights,
-                means,
-                stds,
-            )
-
-        strategy = request.matching_strategy
-        if strategy == "basic":
-            selected_indices, _metrics = basic_strategy(
-                remaining_pool.set_index("region"),
-                p_scaled,
-                t_cent,
-                remaining_count,
-                score,
-            )
-        elif strategy == "intermediate":
-            selected_indices, _metrics, _convergence = intermediate_strategy(
-                remaining_pool.set_index("region"),
-                p_scaled,
-                t_cent,
-                remaining_count,
-                score,
-                request.match_config.max_hill_climbing_swaps,
-            )
-        elif strategy == "stochastic":
-            nn_start = nearest_neighbor_start(
-                remaining_pool.set_index("region"), p_scaled, t_cent, remaining_count
-            )
-            selected_indices, _metrics, _evaluated, _convergence = stochastic_genetic_search(
-                remaining_pool.set_index("region"),
-                test_df,
-                features,
-                weights,
-                remaining_count,
-                calculate_metrics,
-                means,
-                stds,
-                nn_start_idx=nn_start,
-                n_iterations=request.match_config.genetic_iterations_default,
-                random_state=request.random_seed,
-                fast_metrics_fn=score,
-            )
+        if remaining_count == 0:
+            selected = forced
         else:
-            raise ValueError(
-                "matching_strategy must be one of 'basic', 'intermediate' or 'stochastic'"
+            eligible_df = pd.concat([test_df, pool_df], ignore_index=True)
+            eligible_df = impute_missing_features(eligible_df, features)
+            means, stds = fit_structural_stats(eligible_df, features)
+            weights = {feature: 1.0 for feature in features}
+            means_tuple = tuple(float(means[feature]) for feature in features)
+            stds_tuple = tuple(float(stds[feature]) for feature in features)
+            _w_vec, p_scaled, t_cent = preprocess_data(
+                remaining_pool,
+                test_df,
+                features,
+                weights,
+                means_tuple,
+                stds_tuple,
             )
-        selected_indices = tuple(str(value) for value in selected_indices)
-        selected = tuple(sorted(set(forced) | set(selected_indices)))
+            combined = pool_df.set_index("region")
+
+            def score(indices):
+                chosen = list(forced) + [str(value) for value in indices]
+                return calculate_metrics(
+                    test_df,
+                    combined.loc[chosen].reset_index(),
+                    features,
+                    weights,
+                    means,
+                    stds,
+                )
+
+            strategy = request.matching_strategy
+            if strategy == "basic":
+                selected_indices, _metrics = basic_strategy(
+                    remaining_pool.set_index("region"),
+                    p_scaled,
+                    t_cent,
+                    remaining_count,
+                    score,
+                )
+            elif strategy == "intermediate":
+                selected_indices, _metrics, _convergence = intermediate_strategy(
+                    remaining_pool.set_index("region"),
+                    p_scaled,
+                    t_cent,
+                    remaining_count,
+                    score,
+                    request.match_config.max_hill_climbing_swaps,
+                )
+            elif strategy == "stochastic":
+                nn_start = nearest_neighbor_start(
+                    remaining_pool.set_index("region"), p_scaled, t_cent, remaining_count
+                )
+                selected_indices, _metrics, _evaluated, _convergence = stochastic_genetic_search(
+                    remaining_pool.set_index("region"),
+                    test_df,
+                    features,
+                    weights,
+                    remaining_count,
+                    calculate_metrics,
+                    means,
+                    stds,
+                    nn_start_idx=nn_start,
+                    n_iterations=request.match_config.genetic_iterations_default,
+                    random_state=request.random_seed,
+                    fast_metrics_fn=score,
+                )
+            else:
+                raise ValueError(
+                    "matching_strategy must be one of 'basic', 'intermediate' or 'stochastic'"
+                )
+            selected_indices = tuple(str(value) for value in selected_indices)
+            selected = tuple(sorted(set(forced) | set(selected_indices)))
 
     selected_frame = agg[agg["region"].isin(selected)].copy()
     eligible_df = pd.concat([test_df, pool_df], ignore_index=True)
@@ -942,13 +965,28 @@ def size_power_scenarios(
                     frequency=(
                         config.power_template.frequency
                         if config.power_template is not None
-                        else "weekly"
+                        else config.frequency
+                        or infer_frequency(
+                            dataset.data.loc[
+                                (dataset.data["metric"].astype(str) == metric)
+                                & (
+                                    pd.to_datetime(dataset.data["date"]).dt.normalize()
+                                    <= historical_end
+                                ),
+                                "date",
+                            ]
+                        )
                     ),
                     validation_method=config.validation_method,
                     matching_strategy=config.matching_strategy,
                     random_seed=config.random_seed,
                     match_config=config.match_config,
                 )
+                if request.frequency == "unknown":
+                    raise ValueError(
+                        "frequency could not be inferred for template-free scenario validation; "
+                        "set ScenarioSizingConfig.frequency explicitly"
+                    )
                 if config.design_builder is not None:
                     candidate_design = config.design_builder(dataset, request)
                     if not isinstance(candidate_design, CandidateDesign):

@@ -32,6 +32,16 @@ def _dataset():
     return prepare_regional_kpi(pd.DataFrame(frame), RegionalKPIConfig())
 
 
+def _daily_dataset():
+    dates = pd.date_range("2025-01-05", periods=4, freq="D")
+    regions = ["A", "B", "C", "D", "E", "F", "G", "Large"]
+    weights = [1, 1, 1, 1, 1, 1, 1, 10]
+    frame = {"Region": regions, "Metric": ["Sales"] * len(regions)}
+    for date in dates:
+        frame[date] = [float(weight) for weight in weights]
+    return prepare_regional_kpi(pd.DataFrame(frame), RegionalKPIConfig())
+
+
 def _assessment(*_args) -> DesignAssessment:
     return DesignAssessment(match_status="pass", counterfactual_status="pass")
 
@@ -199,6 +209,67 @@ def test_indivisible_share_outside_tolerance_is_a_candidate_blocker():
         for value in candidate.design_assessment.blockers
     )
     assert candidate.recommendation_eligible is False
+
+
+def test_incomplete_forced_control_is_a_blocker():
+    dates = pd.date_range("2025-01-05", periods=4, freq="7D")
+    regions = ["A", "B", "C", "D", "E", "F", "G", "Large"]
+    weights = [1, 1, 1, 1, 1, 1, 1, 10]
+    frame = {"Region": regions, "Metric": ["Sales"] * len(regions)}
+    for date in dates:
+        frame[date] = [float(weight) for weight in weights]
+    frame[dates[1]][1] = float("nan")
+    result = size_power_scenarios(
+        prepare_regional_kpi(pd.DataFrame(frame), RegionalKPIConfig()),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=dates[2],
+            constraints=MatchConstraints(force_control_include=("B",)),
+        ),
+    )
+
+    candidate = result.candidates[0]
+    assert candidate.control_regions == ("B",)
+    assert any(
+        "forced control regions have incomplete" in value
+        for value in candidate.design_assessment.blockers
+    )
+
+
+def test_all_forced_controls_bypass_zero_size_matching_call():
+    result = size_power_scenarios(
+        _dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=pd.Timestamp("2025-01-19"),
+            locked_test_regions=("A",),
+            constraints=MatchConstraints(force_control_include=("B",)),
+        ),
+    )
+
+    assert result.candidates[0].control_regions == ("B",)
+
+
+def test_template_free_daily_scenarios_infer_daily_validation_frequency():
+    received = {}
+
+    def validator(_dataset, request, design):
+        received["frequency"] = request.frequency
+        return DesignAssessment(match_status="pass", counterfactual_status="pass")
+
+    size_power_scenarios(
+        _daily_dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=pd.Timestamp("2025-01-07"),
+            validation_runner=validator,
+        ),
+    )
+
+    assert received["frequency"] == "daily"
 
 
 def test_locked_test_regions_must_retain_forced_test_regions():
