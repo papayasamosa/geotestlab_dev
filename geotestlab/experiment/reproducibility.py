@@ -12,6 +12,7 @@ import copy
 import importlib.metadata
 import platform
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -45,9 +46,8 @@ SOURCE_LABELS = {
 }
 
 
-def installed_dependency_versions(names=DEFAULT_DISTRIBUTIONS) -> dict[str, str]:
-    """Return installed versions without failing when an optional package is absent."""
-
+@lru_cache(maxsize=8)
+def _installed_dependency_versions_cached(names: tuple[str, ...]) -> dict[str, str]:
     versions = {}
     for name in names:
         try:
@@ -57,12 +57,19 @@ def installed_dependency_versions(names=DEFAULT_DISTRIBUTIONS) -> dict[str, str]
     return versions
 
 
-def dependency_set_identity(
-    project_root=None, filenames=DEFAULT_DEPENDENCY_FILES
+def installed_dependency_versions(names=DEFAULT_DISTRIBUTIONS) -> dict[str, str]:
+    """Return installed versions without failing when an optional package is absent."""
+
+    return dict(_installed_dependency_versions_cached(tuple(map(str, names))))
+
+
+@lru_cache(maxsize=8)
+def _dependency_set_identity_cached(
+    project_root: str, filenames: tuple[str, ...]
 ) -> dict[str, object]:
     """Hash committed dependency declarations without exporting their contents."""
 
-    root = Path(project_root) if project_root is not None else None
+    root = Path(project_root) if project_root else None
     files = []
     if root is not None:
         for filename in filenames:
@@ -80,6 +87,19 @@ def dependency_set_identity(
         "lockfile": lockfile,
         "status": "recorded" if files else "unavailable",
     }
+
+
+def dependency_set_identity(
+    project_root=None, filenames=DEFAULT_DEPENDENCY_FILES
+) -> dict[str, object]:
+    """Hash committed dependency declarations without exporting their contents."""
+
+    root = Path(project_root) if project_root is not None else None
+    return copy.deepcopy(
+        _dependency_set_identity_cached(
+            str(root) if root is not None else "", tuple(map(str, filenames))
+        )
+    )
 
 
 def _run_git(project_root, *arguments) -> str | None:
@@ -117,15 +137,21 @@ def _safe_repository_url(value: str | None) -> str | None:
     )
 
 
-def repository_identity(project_root=None) -> dict[str, str | None]:
-    """Return a safe repository/commit identity when the app runs from a checkout."""
-
-    root = Path(project_root) if project_root is not None else Path.cwd()
+@lru_cache(maxsize=8)
+def _repository_identity_cached(project_root: str) -> dict[str, str | None]:
+    root = Path(project_root)
     return {
         "repository": _safe_repository_url(_run_git(root, "remote", "get-url", "origin")),
         "commit": _run_git(root, "rev-parse", "HEAD"),
         "branch": _run_git(root, "branch", "--show-current"),
     }
+
+
+def repository_identity(project_root=None) -> dict[str, str | None]:
+    """Return a safe repository/commit identity when the app runs from a checkout."""
+
+    root = Path(project_root) if project_root is not None else Path.cwd()
+    return dict(_repository_identity_cached(str(root)))
 
 
 def source_availability(
