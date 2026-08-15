@@ -6499,14 +6499,6 @@ with tab4:
                 """)
 
 
-
-
-
-
-
-
-
-
 with tab5:
     render_power_test_sizing_tab(
         experiment_record_factory=_experiment_record,
