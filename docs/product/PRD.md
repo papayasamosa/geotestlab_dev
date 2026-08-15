@@ -790,9 +790,11 @@ Permitted evidence sources include:
 ## FR-15. Integrated design recommendation
 
 **Status:** Partially integrated — typed gate contracts, explicit objectives,
-limiting factors and override rationale exist, but normal UI operation still
-allows manually supplied candidate evidence and is not yet fed end to end from
-scenario, validation, power, delivery and effect results.
+limiting factors and override rationale exist. The current UI prefills a
+selected-design row from current, non-stale upstream validation, power,
+delivery and effect results, but the row remains editable, uses a placeholder
+size metric and is not yet a complete multi-scenario, constraint-preserving
+candidate pipeline.
 
 GeoTestLab shall compare complete design scenarios and recommend a feasible option.
 

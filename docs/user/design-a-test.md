@@ -93,7 +93,10 @@ conditional recommendation, not a full recommendation. If no candidate passes,
 the output names the limiting factors.
 
 An override requires a reason. The reason and the original gate statuses are
-included in the result and export. Upstream scenario, validation, power,
-delivery and effect results are not yet wired into the normal candidate-table
-path; manual candidate entry should therefore be treated as an analyst
-assumption until that integration stage is complete.
+included in the result and export. When upstream stages have run, the current
+UI prefills a selected-design row from their current, non-stale validation,
+power, delivery and effect results. That row remains editable, uses a
+placeholder size metric, does not yet represent a full scenario grid, and does
+not automatically carry every upstream design constraint. Treat changed or
+additional rows as analyst-supplied assumptions until the complete typed
+candidate integration is delivered.
