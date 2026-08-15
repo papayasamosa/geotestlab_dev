@@ -209,8 +209,8 @@ The root README should remain a concise installation and orientation document, l
 
 The next implementation sequence is deliberately dependency-ordered:
 
-1. reconcile product documentation (this update);
-2. fix the prospective power horizon contract;
+1. reconcile product documentation (delivered in PR1);
+2. fix the prospective power horizon contract (delivered in PR2);
 3. complete matched candidate construction;
 4. expose scenario sizing in the Power & Test Sizing UI;
 5. integrate typed upstream recommendation evidence;
@@ -445,8 +445,8 @@ Each analytical PR should be small enough to review and should include tests, do
 The next work is intentionally sequenced from the current baseline rather than
 stacked on unmerged branches:
 
-1. reconcile current product documentation;
-2. fix the prospective power horizon contract;
+1. reconcile current product documentation (delivered in PR1);
+2. fix the prospective power horizon contract (delivered in PR2);
 3. complete matched candidate design construction;
 4. expose scenario sizing in the Power & Test Sizing UI;
 5. replace manual recommendation evidence with typed upstream candidates;

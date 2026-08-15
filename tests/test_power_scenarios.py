@@ -44,7 +44,8 @@ def _template() -> ProductionPowerConfig:
         control_regions=("B",),
         historical_start=dates[0],
         historical_end=dates[2],
-        test_dates=(dates[3],),
+        historical_holdout_dates=(dates[3],),
+        planned_duration_periods=1,
         target_effects=(5.0,),
         mde_bounds=(0.0, 10.0),
         n_simulations=100,
@@ -53,7 +54,7 @@ def _template() -> ProductionPowerConfig:
 
 def _power_result(**changes) -> ProductionPowerResult:
     values = {
-        "production_contract_version": "1.0.0",
+        "production_contract_version": "1.1.0",
         "methodology_version": "0.5.0",
         "evidence_commit": "evidence",
         "input_fingerprint": "fp1:scenario",
@@ -194,7 +195,7 @@ def test_locked_test_regions_must_retain_forced_test_regions():
 
 def test_default_power_runner_receives_dataset(monkeypatch):
     dataset = _dataset()
-    template = _template()
+    template = replace(_template(), planned_test_dates=(pd.Timestamp("2025-02-02"),))
     received = {}
 
     def fake_runner(received_dataset, config):
@@ -203,7 +204,7 @@ def test_default_power_runner_receives_dataset(monkeypatch):
         return _power_result(
             test_regions=config.test_regions,
             control_regions=config.control_regions,
-            planned_test_dates=tuple(value.isoformat() for value in config.test_dates),
+            planned_test_dates=tuple(value.isoformat() for value in config.planned_test_dates),
         )
 
     monkeypatch.setattr("geotestlab.power.scenarios.run_production_power", fake_runner)
@@ -220,6 +221,7 @@ def test_default_power_runner_receives_dataset(monkeypatch):
 
     assert received["dataset"] is dataset
     assert result.candidates[0].power_result is not None
+    assert result.candidates[0].planned_test_dates == ("2025-02-02T00:00:00",)
 
 
 def test_unavailable_duration_is_retained_as_blocked_candidate():

@@ -6603,14 +6603,14 @@ def render_production_power_tab():
                 _power_default_date(history_start_options, preferred_start, 0)
             ),
         )
-        test_date_options = date_options[end_index + 1 :]
+        holdout_date_options = date_options[end_index + 1 :]
         preferred_test_start = validation_results.get("test_start") or validation_inputs.get(
             "test_start"
         )
         preferred_test_end = validation_results.get("test_end") or validation_inputs.get("test_end")
         default_test_dates = [
             value
-            for value in test_date_options
+            for value in holdout_date_options
             if (
                 preferred_test_start
                 and preferred_test_end
@@ -6620,12 +6620,25 @@ def render_production_power_tab():
             )
         ]
         if not default_test_dates:
-            default_test_dates = list(test_date_options[:1])
-        test_dates = st.multiselect(
-            "Planned test dates",
-            test_date_options,
+            default_test_dates = list(holdout_date_options[:1])
+        historical_holdout_dates = st.multiselect(
+            "Historical analytical holdout dates",
+            holdout_date_options,
             default=default_test_dates,
-            help="Dates after the historical period used for the planned test window.",
+            help=(
+                "Retained historical dates used to simulate the planned duration. "
+                "These are not the future campaign schedule."
+            ),
+        )
+        planned_duration_periods = st.number_input(
+            "Planned campaign duration (periods)",
+            min_value=1,
+            value=max(1, len(default_test_dates)),
+            step=1,
+            help=(
+                "The future campaign duration must match the number of historical "
+                "analytical holdout periods."
+            ),
         )
 
         frequency_options = ("weekly", "daily")
@@ -6643,6 +6656,27 @@ def render_production_power_tab():
                 "Preserve the validated KPI frequency. Daily data is explicitly passed "
                 "to the safety policy and remains blocked until an approved daily model exists."
             ),
+        )
+        schedule_known = st.checkbox(
+            "Future campaign dates are known",
+            value=False,
+            help=(
+                "Optional metadata only. Future campaign dates are never read from "
+                "the KPI source or used as analytical observations."
+            ),
+        )
+        holdout_last = (
+            pd.Timestamp(historical_holdout_dates[-1])
+            if historical_holdout_dates
+            else pd.Timestamp(history_end)
+        )
+        schedule_step = pd.Timedelta(days=7 if frequency == "weekly" else 1)
+        planned_start_default = (holdout_last + schedule_step).date()
+        planned_start = st.date_input(
+            "Planned campaign start date (used when schedule is known)",
+            value=planned_start_default,
+            min_value=planned_start_default,
+            help="The schedule is generated at the selected KPI frequency.",
         )
 
         method_col, fit_col = st.columns(2)
@@ -6715,8 +6749,13 @@ def render_production_power_tab():
         run_power = st.form_submit_button("▶ Run production power", type="primary")
 
     if run_power:
-        if not test_dates:
-            st.error("Select at least one planned test date after the historical period.")
+        if not historical_holdout_dates:
+            st.error("Select at least one historical analytical holdout date.")
+        elif len(historical_holdout_dates) != int(planned_duration_periods):
+            st.error(
+                "The historical analytical holdout must contain exactly the planned "
+                "campaign duration in periods."
+            )
         elif target_effect > mde_upper:
             st.error("Target effect must be within the MDE bounds.")
         else:
@@ -6727,7 +6766,21 @@ def render_production_power_tab():
                 control_regions=control_regions,
                 historical_start=pd.Timestamp(history_start),
                 historical_end=pd.Timestamp(history_end),
-                test_dates=tuple(pd.Timestamp(value) for value in test_dates),
+                historical_holdout_dates=tuple(
+                    pd.Timestamp(value) for value in historical_holdout_dates
+                ),
+                planned_duration_periods=int(planned_duration_periods),
+                planned_test_dates=(
+                    tuple(
+                        pd.date_range(
+                            pd.Timestamp(planned_start),
+                            periods=int(planned_duration_periods),
+                            freq="7D" if frequency == "weekly" else "D",
+                        )
+                    )
+                    if schedule_known
+                    else ()
+                ),
                 target_effects=(float(target_effect),),
                 side=direction,
                 frequency=frequency,

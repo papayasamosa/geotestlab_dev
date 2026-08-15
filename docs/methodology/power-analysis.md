@@ -1,17 +1,18 @@
 # Production power and test sizing
 
 The production contract in `geotestlab/power/production/` accepts the canonical
-regional KPI dataset and an explicit `ProductionPowerConfig`. The current
-config names the metric, regions, historical period, planned test dates, target
-effects, frequency, simulation method, fit method, effect direction and
-approved simulation settings.
+regional KPI dataset and an explicit `ProductionPowerConfig`. The config names
+the metric, regions, historical calibration period, source-backed analytical
+holdout dates, planned duration, optional future campaign dates, target effects,
+frequency, simulation method, fit method, effect direction and approved
+simulation settings.
 
-There is an active prospective-horizon gap: current production execution still
-uses source-available test dates as the analytical window. Planned campaign
-dates, planned duration and the historical calibration/holdout horizon must be
-separated before a genuinely future test is presented as supported. The
-historical horizon must remain auditable and must not be labelled as the actual
-campaign period.
+The prospective horizon is explicit: `planned_test_dates` are campaign
+metadata, while `historical_holdout_dates` are the retained source dates used
+for power estimation. A planned schedule may be genuinely future and absent
+from the source. The analytical holdout must be contiguous, source-backed and
+the same length as `planned_duration_periods`; the historical horizon remains
+auditable and is never labelled as the actual campaign period.
 
 The result includes power curves, target-power estimates, conditional
 Clopper–Pearson intervals, MDE, requested and effective test periods, fit and
