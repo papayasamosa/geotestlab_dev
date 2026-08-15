@@ -1395,6 +1395,8 @@ def _lifecycle_status_rows() -> list[dict[str, str]]:
     recommendation_value = getattr(getattr(recommendation, "status", None), "value", None)
     if recommendation is None:
         recommendation_status = "not_started"
+    elif st.session_state.get("design_recommendation_stale", False):
+        recommendation_status = "needs_attention"
     elif recommendation_value in {"recommended", "conditional"}:
         recommendation_status = "completed"
     else:
@@ -2206,6 +2208,14 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
         "🧠 Bayesian TBR",
     ]
 )
+
+# Render a persistent status surface before any tab-local ``st.stop()`` path.
+# The same slot is refreshed after the tabs complete when the rerun reaches the
+# bottom of the script.
+_lifecycle_status_slot = st.empty()
+_reconcile_experiment_record()
+with _lifecycle_status_slot.container():
+    render_lifecycle_status_summary()
 
 
 # =============================================================================
@@ -6601,7 +6611,9 @@ with tab6:
 # Experiment record (Stage 4) — reconcile and display
 # ------------------------------------------------------------
 _reconcile_experiment_record()
-render_lifecycle_status_summary()
+_lifecycle_status_slot.empty()
+with _lifecycle_status_slot.container():
+    render_lifecycle_status_summary()
 render_experiment_record()
 
 # ------------------------------------------------------------

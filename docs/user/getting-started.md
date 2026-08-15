@@ -25,29 +25,25 @@ the market, geography level, metric, date frequency and data-quality report.
    structural or KPI-pattern matching.
 2. **Validate Test Design** — assess historical counterfactual quality with the
    selected validation method and rolling-origin diagnostics.
-3. **Measure Test Impact** — evaluate a completed test and estimate observed
-   impact.
-4. **Bayesian TBR** — run the Bayesian time-based regression workflow when its
-   sampling inputs and diagnostics are appropriate.
-5. **Power & Test Sizing** — run the explicit production power contract for the
-   executed design. Method, fit, direction, history, duration and simulation
-   settings are recorded; there is no implicit best method. The current tab is
-   selected-design power; the typed backend supports matched candidate-grid
-   construction, but the full grid comparison is not yet exposed in the UI.
-6. **Media Delivery Feasibility** — assess budget, CPM, impressions, reach,
+3. **Power & Test Sizing** — run the explicit production power contract and
+   compare typed candidate shares, durations, MDE and support status.
+4. **Media Delivery Feasibility** — assess budget, CPM, impressions, reach,
    frequency and thresholds using the registered Meta platform profile.
-7. **Effect Plausibility** — record a dated evidence bridge and low/central/high
+5. **Effect Plausibility** — record a dated evidence bridge and low/central/high
    KPI-uplift scenarios, then compare them with MDE. The evidence-quality policy
    remains pending.
-8. **Integrated Design Recommendation** — compare typed candidate rows under an
-   explicit smallest-design or least-cost objective. Full upstream candidate
-   integration remains follow-on work.
+6. **Design Recommendation / Approve Design** — compare typed upstream
+   candidates under an explicit smallest-design or least-cost objective.
+7. **Measure Test Impact** — evaluate a completed test and estimate observed
+   impact.
+8. **Bayesian TBR** — run the Bayesian time-based regression workflow when its
+   sampling inputs and diagnostics are appropriate.
 
-For planning, the intended lifecycle is Region Matching → Validate Test Design
-→ Power & Test Sizing → Media Delivery Feasibility → Effect Plausibility →
-Design Recommendation / Approve Design. Measure Test Impact and Bayesian TBR
-follow after the test is complete; the current tab order has not yet been
-reworked.
+The app follows this lifecycle directly. Region Matching through Design
+Recommendation / Approve Design form the **Plan a Test** phase. Measure Test
+Impact and Bayesian TBR form **Evaluate a Completed Test**. A visible workflow
+status summary shows current, stale and needs-attention states plus the next
+recommended action.
 
 The experiment-record expander is the audit trail. It shows stage statuses,
 fingerprints, stale results, frozen design versions and the unified JSON export.
