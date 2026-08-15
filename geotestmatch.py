@@ -140,7 +140,7 @@ from geotestlab.validation.models import ValidationConfig, ValidationPeriods
 # App configuration
 # ------------------------------------------------------------
 
-st.set_page_config(page_title="TEST GeoTestLab", layout="wide")
+st.set_page_config(page_title="GeoTestLab", layout="wide")
 
 
 def load_css(path: str = "styles.css") -> None:
@@ -175,7 +175,7 @@ div[data-testid="stDownloadButton"] button p {
     unsafe_allow_html=True,
 )
 
-st.title("TEST GeoTestLab")
+st.title("GeoTestLab")
 st.caption(
     "Build statistically balanced test and control groups for geo-testing — no coding required."
 )

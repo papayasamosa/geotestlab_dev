@@ -142,7 +142,7 @@ class TestLiveAppStartup:
     @pytest.mark.smoke
     def test_exact_title(self, live_app):
         assert len(live_app.title) > 0
-        assert live_app.title[0].value == "TEST GeoTestLab"
+        assert live_app.title[0].value == "GeoTestLab"
 
     @pytest.mark.smoke
     def test_exact_tab_labels(self, live_app):

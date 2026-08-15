@@ -7,7 +7,9 @@
 > - `docs/product/PRD.md` defines the **target product** (the canonical product PRD).
 > - `docs/product/roadmap-and-traceability.md` reconciles **current and planned work** and traces it to the PRD.
 >
-> The app's on-screen title currently carries a temporary "TEST " prefix ("TEST GeoTestLab") — remove before any production release.
+> The app's on-screen title is "GeoTestLab". Release posture, deployment
+> boundaries, persistence expectations and remaining owner decisions are
+> recorded in [docs/release-readiness.md](docs/release-readiness.md).
 
 ## 1. Project Overview
 
@@ -601,9 +603,8 @@ and session-state wiring. It is organised roughly as:
 1. **Imports & app config** — imports from the extracted `geotestlab.data`
    (ingestion, models, exceptions, period quality) and `geotestlab.matching`
    (typed models, structural/metrics/KPI-pattern, constraints, strategies)
-   packages; `st.set_page_config` (page title currently "TEST GeoTestLab" —
-   note the temporary "TEST " prefix in both the page title and `st.title` if
-   preparing a production release), `load_css()` (loads an optional external
+   packages; `st.set_page_config` and `st.title` use the release name
+   "GeoTestLab", `load_css()` (loads an optional external
    `styles.css`, plus inline CSS scoped to `st.download_button` sizing),
    `CONFIG` dict of tunable constants (including the `reliability_thresholds`
    traffic-light bands — the single source of truth for §G2's classifiers),
