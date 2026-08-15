@@ -28,8 +28,10 @@ negative effect as meeting the target.
 The scenario engine can build candidate shares and durations using historical
 KPI volume, explicit population weights or custom regional weights. It retains
 region constraints and never substitutes region count for market share. The
-current backend scenario path is not yet a complete matched-and-validated
-candidate pipeline; the Power UI still exposes selected-design execution.
+backend scenario path now constructs matched controls through the existing
+matching strategies and runs historical counterfactual validation for each
+candidate, retaining status, provenance and blockers. The Power UI still
+exposes selected-design execution rather than the full scenario grid.
 
 The approved methodology and evidence gate are recorded in
 [ADR-000](../product/decisions/ADR-000-power-methodology-approval-gate.md).

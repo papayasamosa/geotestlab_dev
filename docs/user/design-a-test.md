@@ -18,10 +18,10 @@ when the design changes.
 ## 2. Validate the counterfactual
 
 Upload or select the canonical KPI dataset in **Validate Test Design**. Select
-the historical and planned test periods and frequency. In the current
-implementation, a supplied planned test period must be backed by source data;
-this is an active limitation for genuinely future campaigns and is separate
-from the prospective power-horizon fix. The current workflow assigns Elastic
+the historical and planned test periods and frequency. The validation tab
+continues to validate source-backed periods; prospective power separately
+retains a source-backed historical holdout and optional future campaign dates.
+The current workflow assigns Elastic
 Net to structurally matched or user-selected controls and LASSO to
 data-optimised controls; it does not expose a validation fit-method selector.
 Review rolling-origin error, bias, overfitting, autocorrelation, placebo
@@ -35,20 +35,19 @@ keeps match quality and counterfactual status as explicit inputs.
 
 In **Power & Test Sizing**, enter or confirm:
 
-- metric and historical period;
-- planned test dates and frequency;
+- metric and historical calibration period;
+- source-backed analytical holdout, planned duration and optional future
+  campaign dates;
 - simulation method and counterfactual fit;
 - positive, negative or two-sided effect direction;
 - target effect, target power and simulation count;
 - MDE bounds and minimum-history policy.
 
 The output reports power curves, target-power estimates, MDE, confidence
-intervals, support status, warnings and blockers. In the current implementation
-the configured test dates also form the analytical window and therefore must be
-present in the source history; do not label a historical holdout as the actual
-future campaign. A result that is incomplete, stale or unsupported is not
-usable for a full recommendation. Separating future campaign metadata from
-the historical calibration/holdout horizon is the next power-contract stage.
+intervals, support status, warnings and blockers. The analytical holdout must
+be contiguous source history immediately after calibration; optional future
+campaign dates are metadata and are never used as observations. A result that
+is incomplete, stale or unsupported is not usable for a full recommendation.
 
 ## 4. Assess media delivery
 

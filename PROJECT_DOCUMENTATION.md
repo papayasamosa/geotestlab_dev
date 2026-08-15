@@ -572,9 +572,9 @@ includes:
   the separate v2.1 evidence harness and the approved selected-design
   production contract. ADR-000 records methodology version 0.5.0 and its
   conditions. Production results preserve explicit simulation/fit methods,
-  support/blocker status and limitations; the candidate-grid UI, complete
-  matched/validated candidate pipeline and future campaign-date horizon remain
-  follow-on work.
+  support/blocker status and limitations; the typed matched/validated
+  candidate pipeline is delivered, while the candidate-grid UI and full
+  upstream recommendation integration remain follow-on work.
 - **CI** — GitHub Actions runs test, lock-verification, numerical-regression
   and Bayesian reduced-sampling smoke jobs on every pull request to `main`.
 - **Numerical regression gates** — `tests/test_numerical_characterisation.py`
@@ -619,7 +619,7 @@ and session-state wiring. It is organised roughly as:
 11. **`render_method_comparison_table(results, mode, test_start, control_regions_val)`** — a self-contained rendering step for the sectioned Method Comparison table (§G2), its captions, and the "How to interpret these results" expander; reads only from the per-method results dict.
 12. **`render_time_series_validation(mode)`** — the shared function powering both Tab 2 ("Design") and Tab 3 ("Evaluate"): settings UI (date windows, frequency radio + mismatch acknowledgment (§F2), lag checkbox, placebo/rolling-origin settings), the KPI file upload with aggregation-level/metric-column carry-over from KPI Pattern setup when applicable (§F), the run button, calls into `run_validation_method()` for each comparison method, results display (per-method control selection details, region role table, KPI Performance by Geography, chart with Excel data download, the Method Comparison table via `render_method_comparison_table()`), and validation-result staleness handling (`clear_validation_state`).
 13. **Tab 4 (Bayesian TBR)** — Evaluate-mode prerequisite gate, method/control selection from the chosen validation method (no silent fallback for empty data-optimised selections), structural/weak prior setup (data-driven sigma bounds — §J), the PyMC model definition and sampling (draws=2000, tune=1000, chains=4, target_accept=0.95), posterior/posterior-predictive computation (fitted-mean HDI for pre-period, predictive intervals for test/post — verified, §K/§L), summary cards, line chart and uplift histogram (both with Excel data downloads), MCMC diagnostics table (incl. divergences), and the "how to interpret" text.
-14. **Tab 5 (Power & Test Sizing)** — Canonical KPI reuse, explicit selected-design production power configuration, support/blocker status, MDE, power curve and JSON export. The current UI does not yet expose the full scenario grid or a future campaign schedule separate from the historical analytical horizon.
+14. **Tab 5 (Power & Test Sizing)** — Canonical KPI reuse, explicit selected-design production power configuration, support/blocker status, MDE, power curve and JSON export. The current UI does not yet expose the full scenario grid; future campaign schedules are kept separate from the historical analytical horizon in the backend contract.
 15. **Tab 6 (Media Delivery Feasibility)** — Registered Meta platform profile, delivery-only calculations, supplied/calculated provenance, thresholds, scope and stale-result handling. Broader platform profiles remain future work.
 16. **Tab 7 (Effect Plausibility)** — Evidence source/date/quality, adjustment state, low/central/high scenarios, MDE comparison and separate delivery/effect status.
 17. **Tab 8 (Integrated Design Recommendation)** — Explicit candidate gates, objectives, limiting factors and override rationale. The current candidate table is not yet fed automatically from every upstream analytical result.
@@ -707,7 +707,8 @@ Excel reading uses the `calamine` engine primarily, with a fallback to `openpyxl
   `geotestlab/power/production/` for selected-design detectability and keep the
   evidence harness separate. Do not add an implicit best simulation or fit
   method. Future campaign dates must not be relabelled historical analytical
-  dates; the horizon split is an active follow-on contract.
+  dates; the horizon split is part of the production contract, while the UI
+  still presents selected-design execution.
 - **Data-loading robustness**: `load_and_reshape_kpi` and `build_region_mapping` are the most likely places to need hardening if new client KPI export formats need to be supported.
 - **KPI Pattern mode display formatting**: new tables shown in KPI Pattern mode (§A2) should use `kpi_pattern_display_rename_map()` (renames `wk_YYYYMMDD` columns to `dd mmm yy` and `POPULATION_COL` to the metric label) and/or `kpi_feature_date_label()` (single-value date formatting, e.g. for chart axis labels) rather than reimplementing the same renaming logic inline, so all tables stay consistent if the underlying feature-naming convention (`wk_YYYYMMDD`) ever changes.
 
