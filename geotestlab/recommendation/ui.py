@@ -513,15 +513,18 @@ def render_design_recommendation_tab() -> None:
             st.session_state.design_recommendation_result = result
             st.session_state.design_recommendation_scenarios = tuple(scenarios)
             st.session_state.design_recommendation_objective = objective
+            st.session_state.design_recommendation_stale = False
         except (TypeError, ValueError, KeyError) as exc:
             st.error(f"Design recommendation could not be assessed: {exc}")
 
     result = st.session_state.get("design_recommendation_result")
     if result is None:
+        st.session_state.design_recommendation_stale = False
         st.info("No design comparison yet. Review the candidate gates and run the comparison.")
         return
 
     if parse_error or not scenarios:
+        st.session_state.design_recommendation_stale = True
         st.warning(
             "The stored recommendation is stale because the current candidate table is empty "
             "or invalid. Add valid candidates and re-run the comparison."
@@ -535,12 +538,15 @@ def render_design_recommendation_tab() -> None:
             override_scenario_id=override_id.strip() or None,
             override_reason=override_reason,
         ):
+            st.session_state.design_recommendation_stale = True
             st.warning(
                 "This recommendation is stale because candidate inputs, the objective or "
                 "the override changed. Re-run the comparison before using it."
             )
             return
+        st.session_state.design_recommendation_stale = False
     except (TypeError, ValueError, KeyError):
+        st.session_state.design_recommendation_stale = True
         st.warning("The current candidate table could not reproduce the stored result.")
         return
 

@@ -150,13 +150,19 @@ class TestLiveAppStartup:
         assert tab_labels == [
             "\u2699\ufe0f Region Matching",
             "\U0001f50d Validate Test Design",
-            "\U0001f4ca Measure Test Impact",
-            "\U0001f9e0 Bayesian TBR",
             "\U0001f4c8 Power & Test Sizing",
             "\U0001f4e3 Media Delivery Feasibility",
             "\U0001f3af Effect Plausibility",
-            "\u2705 Integrated Design Recommendation",
+            "\u2705 Design Recommendation / Approve Design",
+            "\U0001f4ca Measure Test Impact",
+            "\U0001f9e0 Bayesian TBR",
         ]
+
+    @pytest.mark.smoke
+    def test_lifecycle_status_summary_is_visible(self, live_app):
+        assert any(item.value == "Workflow status" for item in live_app.subheader)
+        assert any("Plan a Test" in str(item.value) for item in live_app.dataframe)
+        assert any("Next recommended action" in item.value for item in live_app.info)
 
     @pytest.mark.smoke
     def test_market_selectbox_label(self, live_app):

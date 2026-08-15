@@ -115,26 +115,26 @@ The current UI has eight tabs, in this order:
 
 1. **⚙️ Region Matching** — Select test geographies and match control regions using structural (demographic) similarity or KPI-pattern similarity.
 2. **🔍 Validate Test Design** — Validate a proposed test design against historical KPI data using regularised regression and rolling-origin cross-validation.
-3. **📊 Measure Test Impact** — Evaluate a completed test and estimate uplift.
-4. **🧠 Bayesian TBR** — Estimate impact using Bayesian Time-Based Regression with MCMC diagnostics.
-5. **📈 Power & Test Sizing** — Run the explicit production power contract for the executed design and inspect MDE and support status. Candidate-grid UI and a future campaign schedule separate from the analytical horizon remain follow-on work.
-6. **📣 Media Delivery Feasibility** — Assess Meta platform-profile delivery inputs, thresholds and provenance.
-7. **🎯 Effect Plausibility** — Record evidence quality and low/central/high scenarios against MDE; the evidence-quality policy remains pending.
-8. **✅ Integrated Design Recommendation** — Compare typed candidate designs under an explicit objective and retain limiting factors; normal upstream integration remains follow-on work.
+3. **📈 Power & Test Sizing** — Run the explicit production power contract and compare typed candidate shares, durations, MDE and support status.
+4. **📣 Media Delivery Feasibility** — Assess Meta platform-profile delivery inputs, thresholds and provenance.
+5. **🎯 Effect Plausibility** — Record evidence quality and low/central/high scenarios against MDE; the evidence-quality policy remains pending.
+6. **✅ Design Recommendation / Approve Design** — Compare upstream candidate designs under an explicit objective and retain limiting factors.
+7. **📊 Measure Test Impact** — Evaluate a completed test and estimate uplift.
+8. **🧠 Bayesian TBR** — Estimate impact using Bayesian Time-Based Regression with MCMC diagnostics.
 
-The target planning lifecycle is Region Matching → Validate Test Design →
-Power & Test Sizing → Media Delivery Feasibility → Effect Plausibility →
-Design Recommendation / Approve Design, followed by Measure Test Impact and
-Bayesian TBR when the test is complete. Navigation still follows the current
-tab order above until the lifecycle UX is reworked.
+The planning lifecycle is Region Matching → Validate Test Design → Power & Test
+Sizing → Media Delivery Feasibility → Effect Plausibility → Design
+Recommendation / Approve Design. Measure Test Impact and Bayesian TBR follow in
+the Evaluate a Completed Test phase. The app also shows current/stale stage
+status and the next recommended action above the tabs.
 
 The target product model (see `docs/product/PRD.md`) keeps matching,
 counterfactual validation, power, media delivery, effect plausibility, impact
 and recommendation as separate questions. Selected-design production power,
-Meta delivery feasibility, effect plausibility and typed recommendation
-contracts are implemented. Candidate-grid construction, future-date power
-horizons, upstream recommendation integration and the complete approved-design
-freeze remain partially integrated; broader platform profiles, the
+Meta delivery feasibility, effect plausibility, candidate-grid construction and
+typed upstream recommendation contracts are implemented. Future-date power
+horizons and the complete approved-design freeze remain partially integrated;
+broader platform profiles, the
 evidence-quality policy and production persistence remain follow-on work.
 
 ## Dependency management

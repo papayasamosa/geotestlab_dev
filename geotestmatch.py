@@ -1387,6 +1387,88 @@ def _reconcile_experiment_record():
     _save_experiment_record(rec)
 
 
+def _lifecycle_status_rows() -> list[dict[str, str]]:
+    """Return visible Plan/Evaluate status rows without changing stage semantics."""
+
+    rec = _experiment_record()
+    recommendation = st.session_state.get("design_recommendation_result")
+    recommendation_value = getattr(getattr(recommendation, "status", None), "value", None)
+    if recommendation is None:
+        recommendation_status = "not_started"
+    elif st.session_state.get("design_recommendation_stale", False):
+        recommendation_status = "needs_attention"
+    elif recommendation_value in {"recommended", "conditional"}:
+        recommendation_status = "completed"
+    else:
+        recommendation_status = "needs_attention"
+
+    bayesian_status = (
+        "completed" if st.session_state.get("bayesian_results") is not None else "not_started"
+    )
+    lifecycle = (
+        ("match_quality", "Match quality", "Plan a Test"),
+        ("counterfactual_validation", "Counterfactual validation", "Plan a Test"),
+        ("statistical_power", "Power & test sizing", "Plan a Test"),
+        ("media_delivery", "Media delivery", "Plan a Test"),
+        ("effect_plausibility", "Effect plausibility", "Plan a Test"),
+        ("recommendation", "Design recommendation / approval", "Plan a Test"),
+        ("observed_impact", "Measure test impact", "Evaluate a Completed Test"),
+        ("bayesian", "Bayesian TBR", "Evaluate a Completed Test"),
+    )
+    rows = []
+    for key, label, phase in lifecycle:
+        stale = bool(rec.stage_stale.get(key, False)) if key in STAGE_KEYS else False
+        status = (
+            recommendation_status
+            if key == "recommendation"
+            else bayesian_status
+            if key == "bayesian"
+            else rec.stage_status.get(key, "not_started")
+        )
+        if stale or status == "stale":
+            status = "needs_attention"
+        rows.append({"Lifecycle": phase, "Stage": label, "Status": status})
+    return rows
+
+
+def render_lifecycle_status_summary() -> None:
+    """Render the workflow map and the next action outside collapsible panels."""
+
+    rows = _lifecycle_status_rows()
+    st.subheader("Workflow status")
+    st.caption(
+        "Plan a Test covers matching through design approval. Evaluate a Completed Test covers "
+        "observed impact and Bayesian TBR. Statuses remain separate; a warning is never a pass."
+    )
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    attention = next(
+        (row for row in rows if row["Status"] in {"stale", "needs_attention"}),
+        None,
+    )
+    next_step = next(
+        (
+            row
+            for row in rows
+            if row["Status"] not in {"completed", "not_applicable"}
+            and row["Status"] not in {"stale", "needs_attention"}
+        ),
+        None,
+    )
+    if attention:
+        st.warning(
+            f"Needs attention: {attention['Stage']} is {attention['Status']}. "
+            "Re-run it after correcting or confirming its upstream inputs."
+        )
+    elif next_step:
+        st.info(
+            f"Next recommended action: open **{next_step['Stage']}** in the "
+            f"**{next_step['Lifecycle']}** workflow."
+        )
+    else:
+        st.success("All displayed lifecycle stages have current results.")
+
+
 def _current_planned_periods():
     """Current planned periods from the latest validation run (for freezing)."""
     vres = st.session_state.get("validation_results") or {}
@@ -2118,14 +2200,22 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
     [
         "⚙️ Region Matching",
         "🔍 Validate Test Design",
-        "📊 Measure Test Impact",
-        "🧠 Bayesian TBR",
         "📈 Power & Test Sizing",
         "📣 Media Delivery Feasibility",
         "🎯 Effect Plausibility",
-        "✅ Integrated Design Recommendation",
+        "✅ Design Recommendation / Approve Design",
+        "📊 Measure Test Impact",
+        "🧠 Bayesian TBR",
     ]
 )
+
+# Render a persistent status surface before any tab-local ``st.stop()`` path.
+# The same slot is refreshed after the tabs complete when the rerun reaches the
+# bottom of the script.
+_lifecycle_status_slot = st.empty()
+_reconcile_experiment_record()
+with _lifecycle_status_slot.container():
+    render_lifecycle_status_summary()
 
 
 # =============================================================================
@@ -5884,7 +5974,7 @@ with tab2:
     )
     render_time_series_validation("Design")
 
-with tab3:
+with tab7:
     st.subheader("📊 Measure Test Impact")
     st.caption(
         "Estimate the uplift from your completed geo test and compare results against expected historical variation."
@@ -5894,7 +5984,7 @@ with tab3:
 # =============================================================================
 # TAB 4: BAYESIAN TIME-BASED REGRESSION
 # =============================================================================
-with tab4:
+with tab8:
     st.subheader("🧠 Bayesian Time-Based Regression (TBR)")
     st.caption(
         "Run a Bayesian time-based regression on the results from the Measure Test Impact tab."
@@ -6501,19 +6591,19 @@ with tab4:
                 """)
 
 
-with tab5:
+with tab3:
     render_power_test_sizing_tab(
         experiment_record_factory=_experiment_record,
         save_experiment_record=_save_experiment_record,
     )
 
-with tab6:
+with tab4:
     render_media_delivery_tab()
 
-with tab7:
+with tab5:
     render_effect_plausibility_tab()
 
-with tab8:
+with tab6:
     render_design_recommendation_tab()
 
 
@@ -6521,6 +6611,9 @@ with tab8:
 # Experiment record (Stage 4) — reconcile and display
 # ------------------------------------------------------------
 _reconcile_experiment_record()
+_lifecycle_status_slot.empty()
+with _lifecycle_status_slot.container():
+    render_lifecycle_status_summary()
 render_experiment_record()
 
 # ------------------------------------------------------------
