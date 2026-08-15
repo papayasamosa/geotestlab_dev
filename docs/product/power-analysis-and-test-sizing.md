@@ -4,8 +4,8 @@
 **Parent document:** `PRD.md`  
 **Version:** 1.1
 **Status:** Approved methodology; selected-design production implementation
-delivered, with prospective-horizon, candidate-pipeline and broader
-candidate-grid/duration UX in progress
+delivered, including the prospective-horizon contract; candidate-pipeline and
+broader candidate-grid/duration UX remain in progress
 **Date:** 15 August 2026
 
 ## 1. Purpose
@@ -19,21 +19,23 @@ production contract must preserve the approved method/support conditions and
 must keep media-delivery and effect-plausibility assumptions outside the
 statistical calculation.
 
-## 1.1 Production statistical-power contract (PR4)
+## 1.1 Production statistical-power contract (PR2)
 
 The first production boundary is implemented in
 `geotestlab/power/production/`. It accepts a canonical `RegionalKPIDataset`
 and an explicit `ProductionPowerConfig` containing the metric, historical
-period, test/control regions, planned test dates, target effects, direction,
-simulation method, fit method and approved simulation settings.
+calibration period, historical analytical holdout dates, planned duration,
+optional future campaign dates, test/control regions, target effects,
+direction, simulation method, fit method and approved simulation settings.
 
-The current contract still uses the configured test dates as the analytical
-simulation/holdout window and therefore requires those dates to be represented
-in the source dataset. This is not a valid prospective contract when the
-campaign is genuinely in the future. The next implementation stage must split
-future campaign metadata (`planned_test_dates` and planned duration) from the
-historical calibration/holdout horizon, preserve both in the result/export and
-keep the existing history, continuity and safety gates.
+The contract keeps future campaign metadata (`planned_test_dates` and
+`planned_duration_periods`) separate from the historical analytical holdout
+used by the power simulation (`historical_holdout_dates`). Planned dates may
+be absent or may be absent from the canonical KPI source. The analytical
+holdout must be source-backed, contiguous at the configured frequency, begin
+immediately after the calibration period, and contain exactly the planned
+duration. The result/export preserves both horizons and the selected source
+window; no future observations are fabricated or used in the fit.
 
 It returns a typed `ProductionPowerResult` containing the power curve and
 target-effect estimates, conditional Clopper–Pearson intervals, MDE, effective
@@ -57,11 +59,12 @@ control-selector seam.
 
 The **Power & Test Sizing** app tab exposes the selected-design production
 power contract after canonical KPI preparation and executed matching. It
-requires explicit method, counterfactual fit, effect direction, history, test
-dates, target effect, power target and simulation settings. Results show the
-support status, MDE, target power, curve table/chart and a JSON export; source
-and input fingerprints remain attached to the experiment record. The tab does
-not yet expose the full scenario grid, fixed-duration workflow or complete
+requires explicit method, counterfactual fit, effect direction, history,
+source-backed analytical holdout dates, planned duration, target effect, power
+target and simulation settings. Future campaign dates are optional metadata.
+Results show the support status, MDE, target power, curve table/chart and a
+JSON export; source and input fingerprints remain attached to the experiment
+record. The tab does not yet expose the full scenario grid or complete
 upstream candidate pipeline, and it does not combine statistical detectability
 with media delivery or effect plausibility.
 

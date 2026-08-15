@@ -44,7 +44,8 @@ def _template() -> ProductionPowerConfig:
         control_regions=("B",),
         historical_start=dates[0],
         historical_end=dates[2],
-        test_dates=(dates[3],),
+        historical_holdout_dates=(dates[3],),
+        planned_duration_periods=1,
         target_effects=(5.0,),
         mde_bounds=(0.0, 10.0),
         n_simulations=100,
@@ -53,7 +54,7 @@ def _template() -> ProductionPowerConfig:
 
 def _power_result(**changes) -> ProductionPowerResult:
     values = {
-        "production_contract_version": "1.0.0",
+        "production_contract_version": "1.1.0",
         "methodology_version": "0.5.0",
         "evidence_commit": "evidence",
         "input_fingerprint": "fp1:scenario",
@@ -203,7 +204,9 @@ def test_default_power_runner_receives_dataset(monkeypatch):
         return _power_result(
             test_regions=config.test_regions,
             control_regions=config.control_regions,
-            planned_test_dates=tuple(value.isoformat() for value in config.test_dates),
+            planned_test_dates=tuple(
+                value.isoformat() for value in config.planned_test_dates
+            ),
         )
 
     monkeypatch.setattr("geotestlab.power.scenarios.run_production_power", fake_runner)

@@ -12,7 +12,7 @@ from typing import Any
 
 from geotestlab.power.models import METHODOLOGY_VERSION
 
-PRODUCTION_POWER_CONTRACT_VERSION = "1.0.0"
+PRODUCTION_POWER_CONTRACT_VERSION = "1.1.0"
 APPROVED_METHODOLOGY_VERSION = METHODOLOGY_VERSION
 APPROVED_EVIDENCE_COMMIT = "6380c46d124535baa6702341d0ce02f6d2fe5478"
 
@@ -37,9 +37,14 @@ class ProductionPowerConfig:
     control_regions: tuple[str, ...]
     historical_start: Any
     historical_end: Any
-    test_dates: tuple[Any, ...]
+    historical_holdout_dates: tuple[Any, ...]
+    planned_duration_periods: int
     target_effects: tuple[float, ...]
 
+    # Campaign dates are metadata only. They are deliberately optional because
+    # the campaign may not have been scheduled yet and are never required to
+    # exist in the historical KPI source.
+    planned_test_dates: tuple[Any, ...] = ()
     detection_criterion: str = "interval_excludes_zero"
     effect_injection: str = "relative"
     effect_shape: str = "step"
@@ -63,7 +68,12 @@ class ProductionPowerConfig:
         values = asdict(self)
         values["historical_start"] = _date_value(self.historical_start)
         values["historical_end"] = _date_value(self.historical_end)
-        values["test_dates"] = [_date_value(value) for value in self.test_dates]
+        values["historical_holdout_dates"] = [
+            _date_value(value) for value in self.historical_holdout_dates
+        ]
+        values["planned_test_dates"] = [
+            _date_value(value) for value in self.planned_test_dates
+        ]
         values["test_regions"] = list(self.test_regions)
         values["control_regions"] = list(self.control_regions)
         values["target_effects"] = [float(value) for value in self.target_effects]
@@ -115,6 +125,8 @@ class ProductionPowerResult:
     requested_test_periods: int
     windows_available: int
     windows_used: int
+    historical_holdout_dates: tuple[str, ...] = ()
+    planned_duration_periods: int = 0
     fit_diagnostics: dict = field(default_factory=dict)
     historical_data_sufficiency: dict = field(default_factory=dict)
     support_status: str = "not_applicable"
@@ -134,6 +146,7 @@ class ProductionPowerResult:
         result["test_regions"] = list(self.test_regions)
         result["control_regions"] = list(self.control_regions)
         result["planned_test_dates"] = list(self.planned_test_dates)
+        result["historical_holdout_dates"] = list(self.historical_holdout_dates)
         result["target_effects"] = [float(value) for value in self.target_effects]
         result["power_at_target_effects"] = [float(value) for value in self.power_at_target_effects]
         result["power_ci_at_target_effects"] = [

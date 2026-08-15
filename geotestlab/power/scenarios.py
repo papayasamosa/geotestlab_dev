@@ -425,7 +425,9 @@ def size_power_scenarios(
                     metric_value=metric,
                     test_regions=test_regions,
                     control_regions=controls,
-                    test_dates=test_dates,
+                    historical_holdout_dates=test_dates,
+                    planned_duration_periods=int(duration),
+                    planned_test_dates=(),
                 )
                 if runner is None:
                     power_result = run_production_power(dataset, candidate_config)
@@ -443,7 +445,7 @@ def size_power_scenarios(
                     share_difference=actual_share - float(requested_share),
                     market_size_measure=config.market_size_measure.value,
                     duration_periods=int(duration),
-                    planned_test_dates=tuple(value.isoformat() for value in test_dates),
+                    planned_test_dates=(),
                     test_regions=test_regions,
                     control_regions=controls,
                     design_assessment=assessment,

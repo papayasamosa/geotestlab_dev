@@ -15,7 +15,7 @@ from geotestlab.experiment import (
     stage_is_stale,
     update_inputs,
 )
-from geotestlab.power.models import PowerConfig
+from geotestlab.power.models import FREQUENCIES, PowerConfig
 from geotestlab.power.production.models import (
     APPROVED_EVIDENCE_COMMIT,
     APPROVED_METHODOLOGY_VERSION,
@@ -36,9 +36,22 @@ def _normalise_dates(values: Iterable) -> tuple[pd.Timestamp, ...]:
     return tuple(pd.Timestamp(value).normalize() for value in parsed)
 
 
+def _period_step(frequency: str) -> pd.Timedelta:
+    if frequency == "weekly":
+        return pd.Timedelta(days=7)
+    if frequency == "daily":
+        return pd.Timedelta(days=1)
+    raise ValueError(f"Unknown frequency {frequency!r}; expected one of {FREQUENCIES}")
+
+
 def _validate_config(
     config: ProductionPowerConfig,
-) -> tuple[pd.Timestamp, pd.Timestamp, tuple[pd.Timestamp, ...]]:
+) -> tuple[
+    pd.Timestamp,
+    pd.Timestamp,
+    tuple[pd.Timestamp, ...],
+    tuple[pd.Timestamp, ...],
+]:
     if not config.method:
         raise ValueError("method is required; production power has no implicit method default")
     if not config.fit_method:
@@ -56,15 +69,62 @@ def _validate_config(
     start, end = _normalise_dates((config.historical_start, config.historical_end))
     if start > end:
         raise ValueError("historical_start must be on or before historical_end")
-    test_dates = _normalise_dates(config.test_dates)
-    if not test_dates:
-        raise ValueError("test_dates must contain at least one planned test date")
-    if len(set(test_dates)) != len(test_dates):
-        raise ValueError("test_dates must not contain duplicates")
-    if any(value <= end for value in test_dates):
-        raise ValueError("test_dates must be after historical_end")
-    if tuple(sorted(test_dates)) != test_dates:
-        raise ValueError("test_dates must be sorted chronologically")
+    if config.frequency not in FREQUENCIES:
+        raise ValueError(f"Unknown frequency {config.frequency!r}; expected one of {FREQUENCIES}")
+    step = _period_step(config.frequency)
+
+    holdout_dates = _normalise_dates(config.historical_holdout_dates)
+    if not holdout_dates:
+        raise ValueError("historical_holdout_dates must contain at least one analytical date")
+    if len(set(holdout_dates)) != len(holdout_dates):
+        raise ValueError("historical_holdout_dates must not contain duplicates")
+    if tuple(sorted(holdout_dates)) != holdout_dates:
+        raise ValueError("historical_holdout_dates must be sorted chronologically")
+    if any(value <= end for value in holdout_dates):
+        raise ValueError("historical_holdout_dates must be after historical_end")
+    if holdout_dates[0] != end + step:
+        raise ValueError(
+            "historical_holdout_dates must begin immediately after historical_end "
+            f"at the configured {config.frequency} cadence"
+        )
+    if any(
+        current != previous + step
+        for previous, current in zip(holdout_dates, holdout_dates[1:])
+    ):
+        raise ValueError("historical_holdout_dates must be contiguous at the configured frequency")
+
+    try:
+        planned_duration = int(config.planned_duration_periods)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("planned_duration_periods must be a positive integer") from exc
+    if isinstance(config.planned_duration_periods, bool) or planned_duration <= 0:
+        raise ValueError("planned_duration_periods must be a positive integer")
+    if planned_duration != config.planned_duration_periods:
+        raise ValueError("planned_duration_periods must be a positive integer")
+    if len(holdout_dates) != planned_duration:
+        raise ValueError(
+            "historical_holdout_dates must contain exactly planned_duration_periods dates"
+        )
+
+    planned_dates = _normalise_dates(config.planned_test_dates)
+    if planned_dates:
+        if len(planned_dates) != planned_duration:
+            raise ValueError(
+                "planned_test_dates must contain exactly planned_duration_periods dates"
+            )
+        if len(set(planned_dates)) != len(planned_dates):
+            raise ValueError("planned_test_dates must not contain duplicates")
+        if tuple(sorted(planned_dates)) != planned_dates:
+            raise ValueError("planned_test_dates must be sorted chronologically")
+        if planned_dates[0] <= holdout_dates[-1]:
+            raise ValueError(
+                "planned_test_dates must begin after the historical analytical holdout"
+            )
+        if any(
+            current != previous + step
+            for previous, current in zip(planned_dates, planned_dates[1:])
+        ):
+            raise ValueError("planned_test_dates must be contiguous at the configured frequency")
 
     effects = tuple(float(value) for value in config.target_effects)
     if not effects or any(not np.isfinite(value) or value < 0 for value in effects):
@@ -86,7 +146,7 @@ def _validate_config(
             raise ValueError("effect_grid must include every target_effect")
     if config.min_historical_periods <= 0 or config.n_simulations <= 0:
         raise ValueError("min_historical_periods and n_simulations must be positive")
-    return start, end, test_dates
+    return start, end, holdout_dates, planned_dates
 
 
 def _select_case(
@@ -94,7 +154,7 @@ def _select_case(
     config: ProductionPowerConfig,
     start: pd.Timestamp,
     end: pd.Timestamp,
-    test_dates: tuple[pd.Timestamp, ...],
+    holdout_dates: tuple[pd.Timestamp, ...],
 ) -> tuple[pd.DataFrame, str, tuple[pd.Timestamp, ...]]:
     if config.metric_value is None:
         if len(dataset.metrics) != 1:
@@ -110,14 +170,16 @@ def _select_case(
     pre_dates = tuple(sorted(frame.loc[frame["date"].between(start, end), "date"].unique()))
     if not pre_dates:
         raise ValueError("historical period contains no retained KPI dates")
-    available_test_dates = set(frame["date"].dropna().unique())
-    missing_test_dates = [date for date in test_dates if date not in available_test_dates]
-    if missing_test_dates:
+    available_test_dates = {
+        pd.Timestamp(value).normalize() for value in frame["date"].dropna().unique()
+    }
+    missing_holdout_dates = [date for date in holdout_dates if date not in available_test_dates]
+    if missing_holdout_dates:
         raise ValueError(
-            "planned test dates are not present in the canonical dataset: "
-            + ", ".join(_date_value(value) for value in missing_test_dates)
+            "historical holdout dates are not present in the canonical dataset: "
+            + ", ".join(_date_value(value) for value in missing_holdout_dates)
         )
-    selected_dates = set(pre_dates) | set(test_dates)
+    selected_dates = set(pre_dates) | set(holdout_dates)
     case = frame[frame["date"].isin(selected_dates)][["region", "date", "kpi"]].copy()
     return case, metric, pre_dates
 
@@ -174,8 +236,8 @@ def run_production_power(
     assumptions.
     """
 
-    start, end, test_dates = _validate_config(config)
-    case, metric, pre_dates = _select_case(dataset, config, start, end, test_dates)
+    start, end, holdout_dates, planned_dates = _validate_config(config)
+    case, metric, pre_dates = _select_case(dataset, config, start, end, holdout_dates)
     input_fingerprint = production_input_fingerprint(dataset, config)
     effect_grid = tuple(config.effect_grid)
     if not effect_grid:
@@ -210,7 +272,7 @@ def run_production_power(
         effect_grid=effect_grid,
         test_regions=tuple(config.test_regions),
         control_regions=tuple(config.control_regions),
-        test_dates=test_dates,
+        test_dates=holdout_dates,
     )
     spike_result = run_power_analysis(case, len(pre_dates), spike_config)
     result_effects = tuple(float(value) for value in spike_result.effect_grid)
@@ -229,6 +291,11 @@ def run_production_power(
         "frequency": config.frequency,
         "historical_start": _date_value(start),
         "historical_end": _date_value(end),
+        "historical_holdout_start": _date_value(holdout_dates[0]),
+        "historical_holdout_end": _date_value(holdout_dates[-1]),
+        "historical_holdout_periods": len(holdout_dates),
+        "planned_duration_periods": int(config.planned_duration_periods),
+        "planned_schedule_provided": bool(planned_dates),
         "retained_periods": len(pre_dates),
         "minimum_periods": config.min_historical_periods,
         "minimum_history_status": spike_result.minimum_history_status,
@@ -258,7 +325,7 @@ def run_production_power(
         control_regions=tuple(config.control_regions),
         historical_start=_date_value(start),
         historical_end=_date_value(end),
-        planned_test_dates=tuple(_date_value(value) for value in test_dates),
+        planned_test_dates=tuple(_date_value(value) for value in planned_dates),
         target_effects=tuple(float(value) for value in config.target_effects),
         power_at_target_effects=target_powers,
         power_ci_at_target_effects=target_ci,
@@ -272,9 +339,11 @@ def run_production_power(
         uncertainty_kind="conditional_clopper_pearson",
         uncertainty_is_unconditional=False,
         effective_test_periods=spike_result.effective_test_periods,
-        requested_test_periods=len(test_dates),
+        requested_test_periods=int(config.planned_duration_periods),
         windows_available=spike_result.windows_available,
         windows_used=spike_result.windows_used,
+        historical_holdout_dates=tuple(_date_value(value) for value in holdout_dates),
+        planned_duration_periods=int(config.planned_duration_periods),
         fit_diagnostics=dict(spike_result.matrix_diagnostics),
         historical_data_sufficiency=historical_summary,
         support_status=support_status,
