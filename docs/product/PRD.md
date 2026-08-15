@@ -1,18 +1,19 @@
 # GeoTestLab Product Requirements Document
 
 **Document type:** Canonical product requirements document  
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Draft for product-owner review
 **Date:** 14 August 2026
 **Product owner:** Repository owner
 **Implementation repository:** `papayasamosa/geotestlab_dev`  
-**Repository baseline reviewed:** `main` at commit `09da0e28f855818fd5628ce5d08cb39ed4220d79`
+**Repository baseline reviewed:** `main` at commit `f64c2fb317985d24628baba89ac931c612518e13`
 **Primary application:** Streamlit application launched from `geotestmatch.py`  
 
 **Change summary:** Reconciled the reviewed baseline after the production
-power, media-delivery and effect-plausibility stages, and documented the
-integrated design-recommendation contract. The recommendation objective
-remains pending product-owner decision.
+power, media-delivery, effect-plausibility, integrated-recommendation and
+unified-export stages. Added user, methodology and architecture guides and
+updated the remaining delivery gaps. The recommendation objective and
+evidence-quality policy remain pending product-owner decisions.
 
 ## 1. Document purpose
 
@@ -314,7 +315,10 @@ Protect current numerical behaviour and make future methodology changes explicit
 
 ## 13. Target product workflow
 
-The target workflow contains five product stages. The current four-tab interface may be retained during transition, but the product model should reflect these stages.
+The target product is organised into five logical phases, exposed in the
+current application through eight separate tabs so that matching, validation,
+power, delivery, effect plausibility, impact and recommendation remain
+distinct questions.
 
 ### Stage 1: Define and match regions
 
@@ -367,7 +371,9 @@ The following capabilities are implemented in the reviewed repository and form t
 
 ### 14.1 Application and architecture
 
-- Streamlit application with four workflow tabs.
+- Streamlit application with eight workflow tabs covering matching, validation,
+  impact, Bayesian analysis, power, delivery feasibility, effect plausibility
+  and integrated recommendation.
 - Python 3.11 runtime.
 - Built-in market workbook.
 - `geotestmatch.py` remains the application entry point.
@@ -657,7 +663,9 @@ Detailed requirements are defined in `power-analysis-and-test-sizing.md`.
 
 ## FR-11. Test-size and duration scenarios
 
-**Status:** Planned.
+**Status:** Partially implemented — selected-design power, MDE and explicit
+scenario-comparison contracts exist in the production workflow; broader
+candidate-grid and duration UX remains follow-on work.
 
 The analyst shall be able to compare alternative market shares and durations.
 
@@ -767,11 +775,13 @@ The current implementation compares explicit candidate rows under either a
 smallest-qualifying-design or least-cost-qualifying-design objective. It keeps
 the gates separate, reports limiting factors when no design qualifies, and
 labels conditional effect bridges and overrides separately. Candidate inputs
-are available for the unified experiment export follow-on.
+  are included in the unified experiment-record export.
 
 ## FR-16. Approved design freeze
 
-**Status:** Planned.
+**Status:** Partially implemented — experiment identity, stage fingerprints,
+staleness and immutable frozen-design foundations exist; the approved-design
+record and persistence workflow remain planned.
 
 The analyst shall be able to freeze the approved pre-test design before the test begins.
 
@@ -1211,20 +1221,18 @@ The repository shall maintain:
 - typed result objects beyond data and matching;
 - workflow-level status and fingerprints;
 - guided result hierarchy;
-- full experiment exports;
+- complete experiment exports with package metadata and approved-design
+  persistence;
 - accessibility and responsive workflow;
-- current methodology and architecture documentation.
+- evidence-quality policy and broader platform profiles.
 
 ### Not yet implemented
 
-- prospective power analysis;
-- minimum detectable effect calculator tied to selected regions;
-- test-size and duration scenario comparison;
-- platform-aware media-delivery inputs;
-- spend-to-exposure calculation;
-- effect-plausibility bridge;
-- integrated design recommendation;
-- approved design freeze and versioning.
+- approved design freeze and versioning;
+- broader platform profiles and production delivery integrations;
+- approved evidence-quality and spend-sufficiency policy;
+- persistent production storage and package/version metadata in exports;
+- full accessibility and responsive-workflow review.
 
 ## 22. Delivery roadmap
 

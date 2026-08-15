@@ -2,7 +2,7 @@
 
 **Document type:** Scope reconciliation, requirement traceability and delivery plan  
 **Parent document:** `PRD.md`  
-**Version:** 1.1
+**Version:** 1.2
 **Date:** 14 August 2026
 
 ## 1. Purpose
@@ -36,13 +36,17 @@ The current production code remains the source of truth for existing behaviour u
 
 - Repository: `papayasamosa/geotestlab_dev`
 - Branch: `main`
-- Commit: `6380c46d124535baa6702341d0ce02f6d2fe5478`
+- Commit: `f64c2fb317985d24628baba89ac931c612518e13`
 - Current application source: `geotestmatch.py` (thin adapters and UI)
 - Extracted packages: `geotestlab/data/`, `geotestlab/matching/`,
   `geotestlab/validation/`, `geotestlab/bayesian/`,
-  `geotestlab/experiment/`, and `geotestlab/power/` (methodology spike)
-- Current workflow: four Streamlit tabs
-- Current product documentation: `README.md` and `PROJECT_DOCUMENTATION.md`
+  `geotestlab/experiment/`, `geotestlab/power/`,
+  `geotestlab/media/`, `geotestlab/effect/` and
+  `geotestlab/recommendation/`
+- Current workflow: eight Streamlit tabs, including power, delivery,
+  effect-plausibility and integrated recommendation
+- Current product documentation: `README.md`, the product pack and the user,
+  methodology and architecture guides
 
 ## 4. Reconciliation of the older hardening PRD
 
@@ -58,7 +62,7 @@ The maintainability PRD was accurate as a proposed programme on 27 July 2026, bu
 | Matching logic concentrated in monolith | Matching core extracted into Streamlit-free package | Resolved |
 | Results represented through large untyped dictionaries | Typed result contracts now cover the matching, validation, Bayesian and experiment cores; untyped dicts remain only at the app adapter boundary | Mostly resolved |
 | Session-state invalidation distributed | Stage fingerprints and stage-scoped staleness exist, but no complete workflow state model | Retain as partially implemented |
-| README insufficient | Substantially improved, but full user and methodology docs remain incomplete | Retain as partial documentation gap |
+| README insufficient | README plus user, methodology and architecture guides now document the implemented workflow | Resolved for the current workflow; continue updating with releases |
 | Interface exposes too much at once | Still relevant | Retain as UX requirement |
 | Validation and Bayesian logic tightly coupled to UI | Validation and Bayesian domain logic extracted into Streamlit-free packages; the app keeps thin adapters | Mostly resolved (the UI itself remains a monolith) |
 
@@ -74,16 +78,14 @@ Several capabilities are delivered as **foundations** but are not yet the
   the frozen record, platform and campaign setup, budget and delivery
   assumptions, effect-plausibility assumptions, analyst notes) is not yet
   delivered.
-- **Local JSON export vs the complete FR-22 export.** The app can export a
-  local JSON experiment record containing the current stage results. The
-  complete FR-22 reproducible export (tool and methodology versions, package
-  versions, power and MDE, platform/budget/delivery/effectiveness assumptions,
-  recommendation rationale, etc.) is not yet delivered.
-- **Evidence harness vs production FR-10 and FR-11.** `geotestlab/power/`
-  remains an **experimental evidence harness**, not the production power
-  engine. The methodology is approved under ADR-000, but the production
-  contract must remain separate and preserve its explicit method/support
-  conditions.
+- **Unified local export vs the complete FR-22 export.** The app now exports a
+  local JSON experiment record with compact validation, power, delivery,
+  effect-plausibility and recommendation summaries. Approved-design
+  persistence, package metadata and stakeholder-specific views remain planned.
+- **Evidence harness vs production methodology.** `geotestlab/power/` contains
+  both the production selected-design contract and the separate methodology
+  evidence harness. ADR-000 governs the evidence conditions; the production
+  contract preserves explicit support and method statuses.
 - **Reduced-sampling smoke vs Bayesian assurance.** The Bayesian CI job runs a
   reduced-sampling execution-path smoke test (tiny draws/tune/chains) to prove
   the pipeline runs; it is **not** evidence of production MCMC convergence or
@@ -115,7 +117,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Residual diagnostics | Durbin-Watson | FR-7 | Current | Decide additional diagnostics |
 | Placebos | Capped historical windows | FR-8 | Current | Approve finite-sample and fallback policy (recorded in the power-methodology spike) |
 | Counterfactual Confidence | Priority cascade | FR-9 | Current | Review thresholds and driver logic |
-| Prospective power | Evidence harness plus approved production contract and selected-design UI | FR-10, FR-11 | Current | Continue design-share and duration UX hardening |
+| Prospective power | Approved production contract plus selected-design UI; evidence harness remains separate | FR-10, FR-11 | Current / strengthened | Continue candidate-grid and duration UX hardening |
 | Platform selector | Generic profile schema with registered Meta profile | FR-12 | In progress | Complete dynamic selector and approve first profile set |
 | Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | In progress | Add further profiles and production delivery integrations |
 | Effect plausibility | Typed evidence/scenario layer with MDE comparison | FR-14 | Current / strengthened | Keep evidence hierarchy pending and link scenarios to recommendation |
@@ -360,7 +362,10 @@ broader profiles and production integrations remain planned.
 
 ## Milestone 7. Effect plausibility and spend recommendation
 
-**Status:** Effect-plausibility and integrated-recommendation layers are implemented; product decisions and unified export remain in progress.
+**Status:** Delivered for the current workflow. Effect plausibility,
+integrated recommendation and unified export are implemented; the
+evidence-quality policy and recommendation objective remain pending product
+decisions.
 
 ### Deliverables
 
@@ -380,7 +385,9 @@ broader profiles and production integrations remain planned.
 
 ## Milestone 8. Reporting and production readiness
 
-**Status:** Planned.
+**Status:** In progress — user, methodology and architecture guides now cover
+the released workflow; approved design freeze, accessibility review and
+production release work remain.
 
 ### Deliverables
 
@@ -400,8 +407,8 @@ broader profiles and production integrations remain planned.
 
 ## 9. Suggested pull-request sequence for the new capability
 
-Items 1–10 below are delivered on `main` as of the reviewed baseline; the
-methodology pack is approved. Item 11 is now in progress.
+Items 1–13 below are delivered on `main` as of the reviewed baseline, with the
+remaining product decisions and production-readiness work called out below.
 
 1. `docs/canonical-product-prd` — delivered
 2. `refactor/validation-core` — delivered
@@ -413,9 +420,10 @@ methodology pack is approved. Item 11 is now in progress.
 8. `feature/platform-profile-schema` — delivered
 9. `feature/media-delivery-feasibility` — delivered
 10. `feature/effect-plausibility-scenarios` — delivered
-11. `feature/integrated-design-recommendation` — in progress
-12. `feature/unified-experiment-export`
-13. `docs/user-and-methodology-guides`
+11. `feature/integrated-design-recommendation` — delivered
+12. `feature/unified-experiment-export` — delivered, including export
+    reconciliation follow-ups
+13. `docs/user-and-methodology-guides` — delivered
 
 Each analytical PR should be small enough to review and should include tests, documentation and explicit numerical change notes where applicable.
 
@@ -457,10 +465,13 @@ Every PRD change should include:
 
 ## 12. Immediate next actions
 
-1. Approve the methodology decisions recorded by the power spike (counterfactual fit method, detection criterion, effect direction convention, effect injection, first-release shape, autocorrelation model, sampling design, power uncertainty interpretation, MDE policy, minimum history, fallback policy, simulation count, candidate market shares and durations) — the production power engine is gated on this.
-2. Decide whether power analysis is a dedicated top-level stage or a section within Validate Test Design.
-3. Commit to the production power engine (`feature/power-analysis-core`) only after approval.
-4. Complete the full FR-16 approved-design-freeze and FR-22 export contracts (foundations exist).
-5. Keep distinguishing current implementation documentation from future product requirements.
-6. Continue behaviour-preserving modularisation; full UI modularisation is a separate, later concern.
+1. Decide the recommendation optimisation objective and effectiveness
+   evidence-quality policy recorded in the pending ADRs.
+2. Complete the FR-16 approved-design-freeze record and persistence workflow.
+3. Add broader platform profiles and production delivery integrations.
+4. Extend FR-22 exports with package/version metadata, approved-design
+   persistence and stakeholder-specific views.
+5. Complete accessibility, responsive-workflow and release-readiness review.
+6. Continue behaviour-preserving modularisation; full UI modularisation is a
+   separate, later concern.
 

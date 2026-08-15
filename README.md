@@ -16,9 +16,9 @@ packages under `geotestlab/`:
   service, diagnostics), with the PyMC trace kept separate from the
   serialisable result.
 - `geotestlab/experiment/` — experiment identity, stage fingerprints,
-  staleness, and immutable design-freeze foundations.
-- `geotestlab/power/` — **an experimental evidence harness** for prospective
-  power analysis; it remains separate from the production power engine.
+  staleness, immutable design-freeze foundations and unified result summaries.
+- `geotestlab/power/` — the production selected-design power contract; the
+  separate evidence harness remains available for methodology work.
 
 Validation and Bayesian logic no longer live substantially in the application
 script; they have been extracted into `geotestlab/validation/` and
@@ -26,8 +26,10 @@ script; they have been extracted into `geotestlab/validation/` and
 
 The canonical product requirements live under `docs/product/`: `PRD.md`
 defines the target product, `power-analysis-and-test-sizing.md` defines the
-planned prospective power capability, and `roadmap-and-traceability.md`
-reconciles current, partially implemented and planned work.
+power and sizing contract, and `roadmap-and-traceability.md` reconciles
+current, partially implemented and planned work. User, methodology and
+architecture guides live under `docs/user/`, `docs/methodology/` and
+`docs/architecture/`.
 
 ## Requirements
 
@@ -109,19 +111,23 @@ The app automatically loads the bundled workbook from:
 
 ## Workflow
 
-The current UI has four tabs:
+The current UI has eight tabs:
 
 1. **⚙️ Region Matching** — Select test geographies and match control regions using structural (demographic) similarity or KPI-pattern similarity.
 2. **🔍 Validate Test Design** — Validate a proposed test design against historical KPI data using regularised regression and rolling-origin cross-validation.
 3. **📊 Measure Test Impact** — Evaluate a completed test and estimate uplift.
 4. **🧠 Bayesian TBR** — Estimate impact using Bayesian Time-Based Regression with MCMC diagnostics.
+5. **📈 Power & Test Sizing** — Run the explicit production power contract for the executed design and inspect MDE and support status.
+6. **📣 Media Delivery Feasibility** — Assess platform-profile delivery inputs, thresholds and provenance.
+7. **🎯 Effect Plausibility** — Record evidence quality and low/central/high scenarios against MDE.
+8. **✅ Integrated Design Recommendation** — Compare complete candidate designs under an explicit objective and retain limiting factors.
 
-The target product model (see `docs/product/PRD.md`) defines **five stages**:
-define and match regions; validate the design; size and power the test;
-measure completed-test impact; and Bayesian analysis and reporting.
-Prospective power analysis and test sizing are **under production
-implementation**; the current empirical power preview is not the production
-power capability.
+The target product model (see `docs/product/PRD.md`) keeps matching,
+counterfactual validation, power, media delivery, effect plausibility, impact
+and recommendation as separate questions. The production power, delivery,
+effect and recommendation contracts are implemented, while approved design
+freeze, broader platform profiles, evidence-quality policy and production
+persistence remain follow-on work.
 
 ## Dependency management
 
@@ -177,18 +183,21 @@ a time:
   - `strategies.py` — Basic (Greedy Nearest Neighbor), Intermediate (Hill Climbing), Advanced (Stochastic Genetic Search).
 - `geotestlab/validation/` — typed counterfactual validation: frequency config, model matrix, regularised models, rolling-origin validation, placebo, Counterfactual Confidence and the `run_validation` service.
 - `geotestlab/bayesian/` — typed Bayesian TBR core: AR(1), priors, features, model construction, prediction, diagnostics and the `run_bayesian` service; the PyMC trace is kept separate from the serialisable `BayesianResult` summary.
-- `geotestlab/experiment/` — experiment identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints, stage-scoped staleness, immutable frozen design versions, and a local experiment-record export (foundations of FR-16 and FR-22, not the complete contracts).
-- `geotestlab/power/` — **methodology evidence harness**: synthetic power cases,
-  model-based counterfactual simulation, placebo/residual methods, MDE search
-  and fit-method comparison evidence. The methodology pack is approved under
-  ADR-000; this experimental harness is still not the production power engine
-  (FR-10/FR-11).
+- `geotestlab/experiment/` — experiment identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints, stage-scoped staleness, immutable frozen design versions, and a local experiment-record export with unified validation, power, delivery, effect and recommendation summaries (FR-16/FR-22 foundations; approved freeze and package metadata remain follow-on work).
+- `geotestlab/power/` — the production selected-design power contract for
+  support status, MDE and reproducible configuration. The separate
+  methodology evidence harness covers synthetic power cases, placebo/residual
+  methods and fit-method comparison evidence under ADR-000.
 
 The Streamlit app keeps `@st.cache_data` wrappers around the pure package functions (aggregation, metric caching, KPI workbook parsing, NN pre-processing) so caching behaviour is unchanged. Numerical characterisation goldens (`tests/test_numerical_characterisation.py`) guard that every extraction is behaviour-preserving.
 
 ## Methodology caveat
 
-This is a specialised geo-testing tool for experienced practitioners. Understand the methodology before relying on results. See `docs/methodology.md` (forthcoming) for details.
+This is a specialised geo-testing tool for experienced practitioners.
+Understand the methodology before relying on results. Start with the
+[user guide](docs/user/getting-started.md),
+[power guide](docs/methodology/power-analysis.md) and
+[limitations](docs/methodology/limitations.md).
 
 ## Licence
 
@@ -199,3 +208,6 @@ Licensing is undecided. See discussion in PR #1.
 - [GeoTestLab Core Product Requirements Document](docs/product/PRD.md)
 - [Power Analysis and Test Sizing Specification](docs/product/power-analysis-and-test-sizing.md)
 - [PRD Traceability and Delivery Roadmap](docs/product/roadmap-and-traceability.md)
+- [User guides](docs/user/getting-started.md)
+- [Methodology guides](docs/methodology/power-analysis.md)
+- [Architecture overview](docs/architecture/overview.md)
