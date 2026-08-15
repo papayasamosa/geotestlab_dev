@@ -109,6 +109,11 @@ pytest --cov=geotestlab --cov-report=term-missing --cov-fail-under=90 -q -m "not
 The app automatically loads the bundled workbook from:
 `data/Population Stats for Geo Tests - Master Sheet Only v2 (Standardised).xlsx`
 
+The current deployment and data-handling boundary is deliberately local: the
+app has no central database or multi-user persistence. Review
+[release-readiness.md](docs/release-readiness.md) before deploying it with
+sensitive business data.
+
 ## Workflow
 
 The current UI has eight tabs, in this order:
@@ -214,9 +219,11 @@ Understand the methodology before relying on results. Start with the
 [power guide](docs/methodology/power-analysis.md) and
 [limitations](docs/methodology/limitations.md).
 
-## Licence
+## Licence and release posture
 
-Licensing is undecided. See discussion in PR #1.
+No licence has been selected for this repository. Do not redistribute or make
+legal licensing claims until the owner/legal decision recorded in
+[release-readiness.md](docs/release-readiness.md) is resolved.
 
 ## Product documentation
 
@@ -226,3 +233,4 @@ Licensing is undecided. See discussion in PR #1.
 - [User guides](docs/user/getting-started.md)
 - [Methodology guides](docs/methodology/power-analysis.md)
 - [Architecture overview](docs/architecture/overview.md)
+- [Release readiness and operating boundary](docs/release-readiness.md)
