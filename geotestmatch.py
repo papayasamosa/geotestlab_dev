@@ -38,6 +38,7 @@ from geotestlab.data.mapping import (
 )
 from geotestlab.data.models import compute_mapping_report
 from geotestlab.data.period_quality import compute_period_quality
+from geotestlab.effect.plausibility import effect_input_fingerprint
 from geotestlab.effect.ui import render_effect_plausibility_tab
 
 # Experiment record (geotestlab.experiment) — identity, fingerprints, stage
@@ -103,6 +104,7 @@ from geotestlab.matching import (
 from geotestlab.matching import (
     read_kpi_pattern_excel as _read_kpi_pattern_excel,
 )
+from geotestlab.media.delivery import delivery_input_fingerprint
 from geotestlab.media.ui import render_media_delivery_tab
 from geotestlab.power.production import (
     ProductionPowerConfig,
@@ -1318,6 +1320,14 @@ def _reconcile_experiment_record():
     bayesian = st.session_state.get("experiment_bayesian_inputs") or None
     power_config = st.session_state.get("production_power_config")
     power_dataset = st.session_state.get("kpi_regional_dataset")
+    media_result = st.session_state.get("media_delivery_result")
+    media_plan = st.session_state.get("media_delivery_plan")
+    media_thresholds = st.session_state.get("media_delivery_thresholds")
+    media_scope = st.session_state.get("media_delivery_scope")
+    effect_result = st.session_state.get("effect_plausibility_result")
+    effect_evidence = st.session_state.get(
+        "effect_plausibility_current_evidence"
+    ) or st.session_state.get("effect_plausibility_evidence")
 
     current = {}
     full = {}
@@ -1334,6 +1344,28 @@ def _reconcile_experiment_record():
         power_fp = production_input_fingerprint(power_dataset, power_config)
         current["statistical_power"] = power_fp
         full.update({"statistical_power": power_config.to_dict(), "power_source": power_fp})
+
+    if media_result is not None and all(
+        value is not None for value in (media_plan, media_thresholds, media_scope)
+    ):
+        media_fp = delivery_input_fingerprint(media_plan, media_thresholds, media_scope)
+        current["media_delivery"] = media_fp
+        if "media_delivery" not in rec.stage_fingerprints:
+            record_stage_result(rec, "media_delivery", media_fp)
+
+    if effect_result is not None and effect_evidence is not None:
+        media_fp = current.get("media_delivery")
+        if media_result is None or media_fp:
+            effect_fp = effect_input_fingerprint(
+                effect_evidence,
+                st.session_state.get("effect_plausibility_current_mde"),
+                st.session_state.get("effect_plausibility_current_direction", "two_sided"),
+                delivery_status=media_result.status.value if media_result else None,
+                delivery_fingerprint=media_fp,
+            )
+            current["effect_plausibility"] = effect_fp
+            if "effect_plausibility" not in rec.stage_fingerprints:
+                record_stage_result(rec, "effect_plausibility", effect_fp)
 
     if full:
         update_inputs(rec, compute_input_fingerprint(full), _experiment_input_summary())
