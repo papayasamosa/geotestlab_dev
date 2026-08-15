@@ -1095,6 +1095,12 @@ def _cached_market_sheet(market=None):
         market = st.session_state.get("current_market") or globals().get("market")
     if not market:
         return None
+    # KPI Pattern uploads are self-contained and do not have a corresponding
+    # sheet in the bundled geography workbook.  Avoid probing that workbook
+    # during record/content-digest refreshes; doing so emits a user-visible
+    # "KPI Pattern" worksheet error even though the upload is valid.
+    if str(market) == "KPI Pattern":
+        return None
     key = ("sheet", str(market), _workbook_identity())
     cached = st.session_state.get("experiment_market_sheet_cache")
     if cached and cached[0] == key:
