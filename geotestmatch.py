@@ -804,10 +804,12 @@ def _clear_bayesian_state():
 
 
 def _clear_production_power_state():
-    """Clear the production power result and its explicit configuration."""
+    """Clear cached production and candidate-scenario power results."""
 
     st.session_state.production_power_result = None
     st.session_state.production_power_config = None
+    st.session_state.power_scenario_result = None
+    st.session_state.power_scenario_config = None
 
 
 def reset_results():

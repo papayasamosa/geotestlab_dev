@@ -149,6 +149,7 @@ def _render_selected_design_power(
             )
             return
         preferred_end = validation_inputs.get("pre_end")
+        preferred_start = validation_inputs.get("pre_start")
         history_end = st.selectbox(
             "Historical period end",
             date_options,
@@ -162,7 +163,9 @@ def _render_selected_design_power(
         history_start = st.selectbox(
             "Historical period start",
             history_start_options,
-            index=0,
+            index=history_start_options.index(
+                _power_default_date(history_start_options, preferred_start, 0)
+            ),
         )
         holdout_date_options = date_options[end_index + 1 :]
         preferred_test_start = validation_results.get("test_start") or validation_inputs.get(
@@ -193,10 +196,15 @@ def _render_selected_design_power(
             step=1,
             help="The historical holdout count must match the planned duration.",
         )
+        preferred_frequency = str(validation_inputs.get("time_series_frequency") or "weekly")
         frequency = st.selectbox(
             "Frequency",
             ("weekly", "daily"),
-            index=0,
+            index=(
+                ("weekly", "daily").index(preferred_frequency)
+                if preferred_frequency in {"weekly", "daily"}
+                else 0
+            ),
             format_func=lambda value: value.title(),
         )
         schedule_known = st.checkbox(
