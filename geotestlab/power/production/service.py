@@ -88,8 +88,7 @@ def _validate_config(
             f"at the configured {config.frequency} cadence"
         )
     if any(
-        current != previous + step
-        for previous, current in zip(holdout_dates, holdout_dates[1:])
+        current != previous + step for previous, current in zip(holdout_dates, holdout_dates[1:])
     ):
         raise ValueError("historical_holdout_dates must be contiguous at the configured frequency")
 

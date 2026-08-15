@@ -71,9 +71,7 @@ class ProductionPowerConfig:
         values["historical_holdout_dates"] = [
             _date_value(value) for value in self.historical_holdout_dates
         ]
-        values["planned_test_dates"] = [
-            _date_value(value) for value in self.planned_test_dates
-        ]
+        values["planned_test_dates"] = [_date_value(value) for value in self.planned_test_dates]
         values["test_regions"] = list(self.test_regions)
         values["control_regions"] = list(self.control_regions)
         values["target_effects"] = [float(value) for value in self.target_effects]

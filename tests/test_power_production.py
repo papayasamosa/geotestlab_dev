@@ -146,15 +146,11 @@ def test_future_campaign_dates_are_metadata_and_do_not_need_source_observations(
     result = run_production_power(dataset, config)
 
     assert result.planned_test_dates == tuple(value.isoformat() for value in planned_dates)
-    assert result.historical_holdout_dates == tuple(
-        value.isoformat() for value in dates[104:108]
-    )
+    assert result.historical_holdout_dates == tuple(value.isoformat() for value in dates[104:108])
     assert result.requested_test_periods == 4
     assert set(pd.to_datetime(planned_dates).normalize()).isdisjoint(captured["dates"])
     assert result.historical_data_sufficiency["planned_schedule_provided"] is True
-    assert result.to_dict()["planned_test_dates"] == [
-        value.isoformat() for value in planned_dates
-    ]
+    assert result.to_dict()["planned_test_dates"] == [value.isoformat() for value in planned_dates]
 
 
 def test_holdout_continuity_and_duration_are_enforced():

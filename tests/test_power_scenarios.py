@@ -204,9 +204,7 @@ def test_default_power_runner_receives_dataset(monkeypatch):
         return _power_result(
             test_regions=config.test_regions,
             control_regions=config.control_regions,
-            planned_test_dates=tuple(
-                value.isoformat() for value in config.planned_test_dates
-            ),
+            planned_test_dates=tuple(value.isoformat() for value in config.planned_test_dates),
         )
 
     monkeypatch.setattr("geotestlab.power.scenarios.run_production_power", fake_runner)
