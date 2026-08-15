@@ -15,6 +15,7 @@ The pure experiment-core logic is covered separately in
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +24,12 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from geotestlab.experiment import create_experiment_record, freeze_design, material_file_identity
+from geotestlab.experiment import (
+    build_experiment_export,
+    create_experiment_record,
+    freeze_design,
+    material_file_identity,
+)
 from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 from tests.fixtures.live_scenarios import (
     CONTROL_REGIONS,
@@ -87,6 +93,31 @@ def test_experiment_panel_renders_with_default_stage_statuses():
     assert rec["stage_status"]["media_delivery"] == "planned"
     assert rec["stage_status"]["effect_plausibility"] == "planned"
     assert rec["stage_status"]["counterfactual_validation"] == "not_started"
+
+
+def test_local_record_reload_keeps_sources_explicitly_missing():
+    source_record = create_experiment_record(datetime(2026, 8, 15, tzinfo=UTC))
+    source_record.content_digests = {"source_bytes": "sha256:historical-kpi"}
+    payload = json.dumps(build_experiment_export(source_record)).encode("utf-8")
+
+    app = _new_app()
+    uploader = [
+        item for item in app.file_uploader if item.key == "load_experiment_record_uploader"
+    ][0]
+    uploader.set_value(("experiment.json", payload, "application/json"))
+    app.run(timeout=RUN_TIMEOUT)
+
+    load_button = [b for b in app.button if b.key == "load_experiment_record_btn"][0]
+    assert load_button.disabled is False
+    load_button.click()
+    app.run(timeout=RUN_TIMEOUT)
+
+    loaded = _record(app)
+    assert loaded["experiment_id"] == source_record.experiment_id
+    assert app.session_state["experiment_record_loaded"] is True
+    assert loaded["reproducibility"]["load"]["analytical_state_restored"] is False
+    assert loaded["reproducibility"]["load"]["missing_sources"] == ["uploaded KPI workbook"]
+    assert "kpi_long_df" not in app.session_state or app.session_state["kpi_long_df"] is None
 
 
 def test_matching_completion_stamps_match_quality():
@@ -337,6 +368,9 @@ app._save_experiment_record(rec)
     assert design["approval"]["timestamp"] == frozen["frozen_at"]
     assert design["analyst"]["notes"] == ["Approved after review"]
     assert design["package_metadata"]["dependencies"]
+    assert design["reproducibility"]["methodology"]["power_methodology_version"] == "0.5.0"
+    assert design["reproducibility"]["methodology"]["evidence_suite_version"] == "2.1.0"
+    assert design["reproducibility"]["dependencies"]["dependency_set"]["fingerprint"]
 
 
 def test_evaluate_can_inherit_active_frozen_design():

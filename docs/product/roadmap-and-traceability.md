@@ -83,8 +83,9 @@ Several capabilities are delivered as **foundations** but are not yet the
 - **Unified local export vs the complete FR-22 export.** The app now exports a
   local JSON experiment record with compact validation, power, delivery,
   effect-plausibility and recommendation summaries, every frozen design
-  version, and package/dependency metadata. Central persistence, reload and
-  stakeholder-specific views remain planned.
+  version, package/dependency/repository metadata, and separate stakeholder
+  and technical summaries. Safe local reload is implemented; central
+  persistence and organisational views remain planned.
 - **Evidence harness vs production methodology.** `geotestlab/power/` contains
   both the production selected-design contract and the separate methodology
   evidence harness. ADR-000 governs the evidence conditions; the production
@@ -131,7 +132,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Result hierarchy | Partial | FR-19 | Partially implemented | Redesign top-level summary |
 | Workflow state | Stage fingerprints + stage-scoped staleness (experiment foundations) | FR-20 | Partially implemented | Complete workflow state model |
 | Guided UX | Some help and expanders | FR-21 | Partially implemented | Introduce stage-based guidance |
-| Exports | Local JSON experiment-record export with frozen versions, package metadata and unified validation, power, delivery, effect and recommendation summaries | FR-22 | Current locally | Add central persistence, reload and stakeholder views |
+| Exports | Local JSON experiment-record export with frozen versions, reproducibility metadata, stakeholder/technical summaries and unified validation, power, delivery, effect and recommendation summaries | FR-22 | Current locally | Add central persistence and organisational views |
 | Error handling | Some domain errors and technical expanders | FR-23 | Partially implemented | Complete domain exception boundary |
 | Accessibility | Theme and focus improvements | FR-24 | Partially implemented | Full keyboard and zoom review |
 
@@ -205,8 +206,8 @@ The root README should remain a concise installation and orientation document, l
 - stage-based workflow status;
 - result hierarchy;
 - stakeholder summary;
-- complete experiment export (the local JSON foundation and unified summaries
-  are delivered; package metadata, safe reload and stakeholder views remain);
+- complete experiment export (local reproducibility metadata, safe reload and
+  stakeholder/technical summaries are delivered; central persistence remains);
 - accessible narrow-screen behaviour;
 - saved configuration loading.
 
@@ -501,8 +502,8 @@ Every PRD change should include:
    evidence-quality policy recorded in the pending ADRs.
 2. Complete the FR-16 approved-design-freeze record and persistence workflow.
 3. Add broader platform profiles and production delivery integrations.
-4. Extend FR-22 exports with package/version metadata, approved-design
-   persistence and stakeholder-specific views.
+4. Extend FR-22 with central approved-design persistence and stakeholder-specific
+   views beyond the local JSON reload workflow.
 5. Complete accessibility, responsive-workflow and release-readiness review.
 6. Continue behaviour-preserving modularisation; full UI modularisation is a
    separate, later concern.

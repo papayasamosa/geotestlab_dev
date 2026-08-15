@@ -14,8 +14,10 @@
   organisational approval controls or a central persistence service. Each
   approval is immutable and versioned, and later approvals create new versions.
 - Local JSON export records package/dependency metadata and source/methodology
-  identities. It remains a file-based hand-off; production persistence and
-  multi-user access remain follow-on work.
+  identities, plus compact stakeholder and technical summaries. A loaded record
+  still requires the original source files before recomputation; it remains a
+  file-based hand-off, and production persistence and multi-user access remain
+  follow-on work.
 - Bayesian CI sampling is a path smoke test, not a claim of production
   convergence.
 - Licensing remains undecided.

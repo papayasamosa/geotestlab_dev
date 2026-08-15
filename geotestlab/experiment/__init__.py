@@ -18,6 +18,8 @@ from geotestlab.experiment.content import (
 from geotestlab.experiment.export import (
     EXPORT_SCHEMA_VERSION,
     build_experiment_export,
+    build_stakeholder_summary,
+    build_technical_summary,
     load_experiment_record_from_export,
 )
 from geotestlab.experiment.fingerprints import (
@@ -48,6 +50,15 @@ from geotestlab.experiment.records import (
     touch,
     update_inputs,
 )
+from geotestlab.experiment.reproducibility import (
+    REPRODUCIBILITY_SCHEMA_VERSION,
+    build_reproducibility_metadata,
+    dependency_set_identity,
+    installed_dependency_versions,
+    mark_loaded_from_export,
+    repository_identity,
+    source_availability,
+)
 from geotestlab.experiment.result_summaries import build_unified_result_summaries
 from geotestlab.experiment.stages import (
     STAGE_KEYS,
@@ -70,6 +81,7 @@ __all__ = [
     "ExperimentRecord",
     "FROZEN_SCHEMA_VERSION",
     "FrozenVersion",
+    "REPRODUCIBILITY_SCHEMA_VERSION",
     "RECORD_SCHEMA_VERSION",
     "STAGE_KEYS",
     "STAGE_LABELS",
@@ -81,6 +93,9 @@ __all__ = [
     "build_experiment_export",
     "build_frozen_data_quality_summary",
     "build_frozen_matching_section",
+    "build_reproducibility_metadata",
+    "build_stakeholder_summary",
+    "build_technical_summary",
     "build_unified_result_summaries",
     "candidate_universe_digest",
     "canonical_frame",
@@ -89,10 +104,13 @@ __all__ = [
     "compute_stale_flags",
     "create_experiment_record",
     "default_stage_status",
+    "dependency_set_identity",
     "freeze_design",
     "is_frozen",
+    "installed_dependency_versions",
     "load_experiment_record",
     "load_experiment_record_from_export",
+    "mark_loaded_from_export",
     "market_sheet_digest",
     "material_file_identity",
     "new_experiment_id",
@@ -101,12 +119,14 @@ __all__ = [
     "propagate_staleness",
     "record_stage_method_result",
     "record_stage_result",
+    "repository_identity",
     "set_stage_status",
     "sha256_bytes",
     "sha256_content",
     "stage_has_result",
     "stage_is_stale",
     "stage_label",
+    "source_availability",
     "tool_version",
     "touch",
     "update_inputs",

@@ -138,6 +138,12 @@ stage evidence, immutable versions, approval metadata and explicit optional
 stage statuses; broader platform profiles, the evidence-quality policy and
 production persistence remain follow-on work.
 
+The local experiment-record export also carries package, dependency, repository,
+methodology and source-digest metadata, plus stakeholder and technical
+summaries. It can be loaded again from the experiment-record panel; raw source
+workbooks and analytical observations are never embedded and must be supplied
+again before recomputation.
+
 ## Dependency management
 
 Canonical lock platform: Linux, Python 3.11.

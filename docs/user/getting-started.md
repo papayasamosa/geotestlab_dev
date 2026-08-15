@@ -46,7 +46,8 @@ status summary shows current, stale and needs-attention states plus the next
 recommended action.
 
 The experiment-record expander is the audit trail. It shows stage statuses,
-fingerprints, stale results, frozen design versions and the unified JSON export.
+fingerprints, stale results, frozen design versions, reproducibility metadata,
+stakeholder/technical summaries and the unified JSON export.
 
 After a current recommendation is available, enter an analyst label or notes if
 needed and choose **Freeze approved design**. The frozen snapshot is built from
@@ -59,6 +60,11 @@ When evaluating a completed test, **Measure Test Impact** can load the active
 frozen version's test/control regions and planned periods as defaults. Review
 the source fingerprint and any live-input differences before running the
 evaluation.
+
+To reopen a local JSON export, use **Open local experiment record** in the
+experiment-record expander. The loader restores metadata and frozen versions,
+then explicitly asks for any missing source workbooks; it never embeds or
+pretends to restore sensitive KPI observations.
 
 ## First-run checklist
 

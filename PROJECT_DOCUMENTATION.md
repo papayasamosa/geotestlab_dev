@@ -563,11 +563,12 @@ includes:
   diagnostics, `run_bayesian`); the PyMC trace is stored separately from the
   serialisable `BayesianResult` summary and rendered from session state, with
   MCMC diagnostics rendering guarded when the trace is unavailable.
-- **Experiment foundations** — `geotestlab/experiment/` provides experiment
-  identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints,
-  stage-scoped staleness, immutable frozen design versions and a local JSON
-  experiment-record export. These are foundations of FR-16 (approved design
-  freeze) and FR-22 (reproducible export), **not** the complete contracts.
+- **Experiment record and local reproducibility** — `geotestlab/experiment/`
+  provides experiment identity (`EXP-YYYYMMDD-XXXX`), deterministic stage
+  fingerprints, stage-scoped staleness, immutable frozen design versions,
+  reproducibility metadata, stakeholder/technical summaries and safe local JSON
+  reload. The record never embeds source data; central persistence and
+  organisational controls remain outside the local contract.
 - **Power methodology and production contract** — `geotestlab/power/` contains
   the separate v2.1 evidence harness and the approved selected-design
   production contract. ADR-000 records methodology version 0.5.0 and its
@@ -660,7 +661,11 @@ The app relies heavily on `st.session_state` to persist state across Streamlit r
 - `st.session_state.include_lagged_controls` — the shared lagged-controls flag, plus the setting is also stored inside the saved `validation_results` dict so Bayesian TBR reads a value consistent with the validation run it's built on.
 - `st.session_state.validation_results` — the dict of per-method results from the last `render_time_series_validation` run, including the mode ("Design"/"Evaluate"), date windows, selected metric, and the frequency/lag setup (`time_series_frequency`, `frequency_config`, `include_lagged_controls`) that Bayesian TBR inherits; cleared (`clear_validation_state`, defined inside `render_time_series_validation`) when settings that would invalidate it change (e.g. toggling the lag checkbox or the frequency radio, or re-uploading the KPI file), forcing a re-run before Bayesian TBR can use stale controls.
 - `st.session_state.bayesian_results` — the dict of Bayesian TBR outputs (posterior samples, intervals, chart data, diagnostics). `st.session_state.bayesian_trace` holds the separate PyMC `InferenceData` trace (removed by `_clear_bayesian_state()` whenever results are reset), and the sampling profile is read from session-configurable `bayes_mcmc_draws` / `bayes_mcmc_tune` / `bayes_mcmc_chains` / `bayes_mcmc_target_accept` / `bayes_mcmc_random_seed` (production defaults 2000 / 1000 / 4 / 0.95 / 42).
-- `st.session_state.experiment_record` — the serialised `ExperimentRecord` (identity, stage fingerprints, frozen design versions, content digests); kept in sync by `_reconcile_experiment_record()` and rendered / exported by `render_experiment_record()` (local JSON export).
+- `st.session_state.experiment_record` — the serialised `ExperimentRecord`
+  (identity, stage fingerprints, frozen design versions, content digests and
+  reproducibility metadata); kept in sync by `_reconcile_experiment_record()`
+  and rendered/exported or reloaded by `render_experiment_record()` (local JSON
+  export only, with no raw source data).
 - `st.session_state.eligible_means` / `eligible_stds` — the fixed structural-matching basis for the current run.
 - `st.session_state.force_ctrl_exclude` and related force-include/exclude selections.
 - Various reset callbacks (`reset_results`, `reset_manual_results`, `cleanup_session_state`) fire on relevant widget `on_change` events to invalidate stale downstream state when upstream inputs change.

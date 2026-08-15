@@ -10,11 +10,78 @@ from __future__ import annotations
 
 import copy
 
-from geotestlab.experiment.freeze import FrozenVersion, planned_vs_analysed
+from geotestlab.experiment.freeze import (
+    FrozenVersion,
+    active_frozen_version,
+    planned_vs_analysed,
+)
 from geotestlab.experiment.records import ExperimentRecord
 from geotestlab.experiment.stages import STAGE_KEYS, stage_label
 
 EXPORT_SCHEMA_VERSION = "experiment-record/v2"
+
+
+def build_stakeholder_summary(record: ExperimentRecord, result_summaries=None) -> dict:
+    """Build a short decision-facing summary without inventing analytical values."""
+
+    summaries = result_summaries or {}
+    recommendation = dict(summaries.get("design_recommendation") or {})
+    frozen = active_frozen_version(record)
+    recommendation_status = recommendation.get("status") or "not_supplied"
+    if frozen is not None:
+        approval_status = "approved_design_frozen"
+        next_action = "Review the active frozen design before launch or evaluation."
+    elif recommendation:
+        approval_status = "recommendation_available"
+        next_action = "Review the recommendation and freeze the approved design if appropriate."
+    else:
+        approval_status = "planning_in_progress"
+        next_action = "Complete the upstream planning stages and review their separate gates."
+    return {
+        "experiment_id": record.experiment_id,
+        "approval_status": approval_status,
+        "active_frozen_version": frozen.get("version") if frozen else None,
+        "recommendation": {
+            "status": recommendation_status,
+            "selected_scenario_id": recommendation.get("selected_scenario_id"),
+            "limiting_factors": list(recommendation.get("limiting_factors") or []),
+            "override_applied": bool(recommendation.get("override_applied", False)),
+        },
+        "planned_vs_analysed": planned_vs_analysed(record),
+        "source_data": {
+            "embedded": bool((record.reproducibility.get("source_data") or {}).get("embedded")),
+            "status": (record.reproducibility.get("source_data") or {}).get(
+                "status", "not_recorded"
+            ),
+        },
+        "next_action": next_action,
+    }
+
+
+def build_technical_summary(record: ExperimentRecord, result_summaries=None) -> dict:
+    """Build a technical audit summary from record identities and stage state."""
+
+    return {
+        "record_schema_version": record.schema_version,
+        "input_fingerprint": record.input_fingerprint,
+        "stage_status": dict(record.stage_status or {}),
+        "stage_stale": dict(record.stage_stale or {}),
+        "stage_fingerprints": dict(record.stage_fingerprints or {}),
+        "stage_method_results": copy.deepcopy(dict(record.stage_method_results or {})),
+        "content_digests": copy.deepcopy(dict(record.content_digests or {})),
+        "frozen_versions": [
+            {
+                "version": int(version.version),
+                "frozen_at": version.frozen_at,
+                "input_fingerprint": version.input_fingerprint,
+                "schema_version": version.schema_version,
+            }
+            for version in (record.frozen_versions or [])
+        ],
+        "active_frozen_version": active_frozen_version(record),
+        "planned_vs_analysed": planned_vs_analysed(record),
+        "result_summary_stages": sorted((result_summaries or {}).keys()),
+    }
 
 
 def build_experiment_export(record: ExperimentRecord, result_summaries=None) -> dict:
@@ -37,6 +104,11 @@ def build_experiment_export(record: ExperimentRecord, result_summaries=None) -> 
                 "result_fingerprint": record.stage_fingerprints.get(key),
             }
         )
+    export_summaries = (
+        copy.deepcopy(dict(result_summaries))
+        if result_summaries is not None
+        else copy.deepcopy(dict(record.result_summaries or {}))
+    )
     export = {
         "schema_version": EXPORT_SCHEMA_VERSION,
         "experiment_id": record.experiment_id,
@@ -47,15 +119,19 @@ def build_experiment_export(record: ExperimentRecord, result_summaries=None) -> 
         "input_summary": dict(record.input_summary or {}),
         "stages": stages,
         "frozen_versions": [v.to_dict() for v in (record.frozen_versions or [])],
+        "active_frozen_design": active_frozen_version(record),
         "planned_vs_analysed": comparison,
         "analysed": copy.deepcopy(dict(record.analysed)) if record.analysed else None,
         "content_digests": copy.deepcopy(dict(record.content_digests or {})),
         "stage_method_results": copy.deepcopy(
             {str(k): dict(v) for k, v in (record.stage_method_results or {}).items()}
         ),
+        "reproducibility": copy.deepcopy(dict(record.reproducibility or {})),
         "notes": list(record.notes or []),
-        "result_summaries": dict(result_summaries) if result_summaries else {},
+        "result_summaries": export_summaries,
     }
+    export["stakeholder_summary"] = build_stakeholder_summary(record, export_summaries)
+    export["technical_summary"] = build_technical_summary(record, export_summaries)
     return export
 
 
@@ -91,5 +167,7 @@ def load_experiment_record_from_export(data: dict) -> ExperimentRecord:
         stage_method_results={
             str(k): dict(v) for k, v in (data.get("stage_method_results") or {}).items()
         },
+        reproducibility=copy.deepcopy(dict(data.get("reproducibility") or {})),
+        result_summaries=copy.deepcopy(dict(data.get("result_summaries") or {})),
         notes=list(data.get("notes") or []),
     )

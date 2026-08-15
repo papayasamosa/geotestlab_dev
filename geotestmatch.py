@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 
 import altair as alt
 import numpy as np
@@ -59,11 +60,14 @@ from geotestlab.experiment import (
     build_experiment_export,
     build_frozen_data_quality_summary,
     build_frozen_matching_section,
+    build_reproducibility_metadata,
     build_unified_result_summaries,
     candidate_universe_digest,
     compute_input_fingerprint,
     create_experiment_record,
     freeze_design,
+    load_experiment_record_from_export,
+    mark_loaded_from_export,
     material_file_identity,
     observed_impact_completed,
     planned_vs_analysed,
@@ -114,6 +118,7 @@ from geotestlab.matching import (
 )
 from geotestlab.media.delivery import delivery_input_fingerprint
 from geotestlab.media.ui import render_media_delivery_tab
+from geotestlab.power import EVIDENCE_SUITE_VERSION, METHODOLOGY_VERSION
 from geotestlab.power.production import (
     production_input_fingerprint,
 )
@@ -976,8 +981,9 @@ def cleanup_session_state():
 # The tool version is derived from installed package metadata (must match
 # pyproject.toml), with a tested development fallback — never hardcoded here.
 GEOTESTLAB_TOOL_VERSION = tool_version()
-# Follows the power-analysis methodology spike; not an approved ADR.
-GEOTESTLAB_METHODOLOGY_VERSION = "0.2.0"
+# Match the approved production power and evidence identities in the domain package.
+GEOTESTLAB_METHODOLOGY_VERSION = METHODOLOGY_VERSION
+GEOTESTLAB_EVIDENCE_SUITE_VERSION = EVIDENCE_SUITE_VERSION
 
 
 def _experiment_record() -> ExperimentRecord:
@@ -1089,6 +1095,12 @@ def _cached_market_sheet(market=None):
         market = st.session_state.get("current_market") or globals().get("market")
     if not market:
         return None
+    # KPI Pattern uploads are self-contained and do not have a corresponding
+    # sheet in the bundled geography workbook.  Avoid probing that workbook
+    # during record/content-digest refreshes; doing so emits a user-visible
+    # "KPI Pattern" worksheet error even though the upload is valid.
+    if str(market) == "KPI Pattern":
+        return None
     key = ("sheet", str(market), _workbook_identity())
     cached = st.session_state.get("experiment_market_sheet_cache")
     if cached and cached[0] == key:
@@ -1160,6 +1172,27 @@ def _compute_content_digests():
     )
 
 
+def _current_reproducibility_content_digests():
+    """Reuse live source identities while the Streamlit inputs are unchanged."""
+
+    cache_key = tuple(
+        id(st.session_state.get(key))
+        for key in (
+            "kpi_source_bytes",
+            "kpi_long_df",
+            "experiment_geo_workbook_cache",
+            "experiment_market_sheet_cache",
+            "kpi_candidate_universe",
+        )
+    )
+    cached = st.session_state.get("_reproducibility_content_digest_cache")
+    if cached and cached[0] == cache_key:
+        return dict(cached[1])
+    digests = _compute_content_digests()
+    st.session_state["_reproducibility_content_digest_cache"] = (cache_key, dict(digests))
+    return digests
+
+
 def _freeze_value(value):
     """Convert an executed stage value into a bounded JSON-safe snapshot."""
     if value is None or isinstance(value, (str, int, bool)):
@@ -1195,6 +1228,32 @@ def _dependency_versions() -> dict[str, str]:
     return versions
 
 
+def _current_reproducibility_metadata(rec=None) -> dict:
+    """Refresh portable code/dependency/source identities for the record."""
+
+    rec = rec or _experiment_record()
+    previous = dict(getattr(rec, "reproducibility", {}) or {})
+    current_digests = _current_reproducibility_content_digests() if rec.content_digests else {}
+    source_names = dict((previous.get("source_data") or {}).get("source_names") or {})
+    if rec.input_summary.get("kpi_file_name"):
+        source_names["source_bytes"] = rec.input_summary["kpi_file_name"]
+    metadata = build_reproducibility_metadata(
+        project_root=Path(__file__).resolve().parent,
+        source_digests=dict(rec.content_digests or {}),
+        current_source_digests=current_digests,
+        methodology_version=GEOTESTLAB_METHODOLOGY_VERSION,
+        evidence_suite_version=GEOTESTLAB_EVIDENCE_SUITE_VERSION,
+        source_names=source_names,
+        loaded_from_export=bool(previous.get("loaded_from_export", False)),
+    )
+    if previous.get("load"):
+        metadata["load"] = _freeze_value(previous["load"])
+        metadata["load"]["source_status"] = metadata["source_data"]["status"]
+        metadata["load"]["missing_sources"] = list(metadata["source_data"]["missing"])
+        metadata["load"]["changed_sources"] = list(metadata["source_data"]["changed"])
+    return metadata
+
+
 def _current_design_snapshot(*, analyst_label="", analyst_notes=(), approval_timestamp=None):
     """Complete design snapshot for freezing (available values only; never
     fabricated platform/spend values).
@@ -1204,6 +1263,7 @@ def _current_design_snapshot(*, analyst_label="", analyst_notes=(), approval_tim
     kept strictly separate from time-period exclusions. Data-quality fields
     are stored separately (never a collapsed/uncovered-regions read)."""
     rec = _experiment_record()
+    reproducibility = _current_reproducibility_metadata(rec)
     snapshot = st.session_state.get("match_run_snapshot")
     matching = st.session_state.get("experiment_matching_inputs") or {}
     validation = st.session_state.get("experiment_validation_inputs") or {}
@@ -1437,8 +1497,12 @@ def _current_design_snapshot(*, analyst_label="", analyst_notes=(), approval_tim
             "package_version": GEOTESTLAB_TOOL_VERSION,
             "python_version": sys.version.split()[0],
             "platform": platform.platform(),
-            "dependencies": _dependency_versions(),
+            "dependencies": (reproducibility.get("dependencies") or {}).get(
+                "versions", _dependency_versions()
+            ),
+            "dependency_set": (reproducibility.get("dependencies") or {}).get("dependency_set", {}),
         },
+        "reproducibility": reproducibility,
         "approval": {
             "timestamp": approval_timestamp,
             "analyst_label": str(analyst_label or "").strip(),
@@ -1590,6 +1654,7 @@ def _reconcile_experiment_record():
             rec.stage_stale[stage] = True
             rec.stage_status[stage] = "stale"
     propagate_staleness(rec, current)
+    rec.reproducibility = _current_reproducibility_metadata(rec)
     _save_experiment_record(rec)
 
 
@@ -1716,6 +1781,85 @@ def _result_summaries_for_export():
         recommendation_scenarios=st.session_state.get("design_recommendation_scenarios", ()),
         recommendation_objective=st.session_state.get("design_recommendation_objective"),
     )
+
+
+def _clear_runtime_for_loaded_record() -> None:
+    """Clear live analytical objects before reopening a metadata-only record."""
+
+    reset_results()
+    for key in (
+        "kpi_long_df",
+        "kpi_regional_dataset",
+        "kpi_regional_source_fingerprint",
+        "kpi_quality_report",
+        "kpi_rejected_rows",
+        "kpi_mapping_report",
+        "kpi_mapping_fingerprint",
+        "kpi_available_dates",
+        "kpi_metric_options",
+        "kpi_source_bytes",
+        "kpi_candidate_universe",
+        "media_delivery_result",
+        "media_delivery_plan",
+        "media_delivery_thresholds",
+        "media_delivery_scope",
+        "effect_plausibility_result",
+        "effect_plausibility_evidence",
+        "effect_plausibility_current_evidence",
+        "design_recommendation_result",
+        "design_recommendation_scenarios",
+        "design_recommendation_objective",
+        "evaluate_inherited_frozen_design",
+    ):
+        st.session_state.pop(key, None)
+    st.session_state.file_upload_key = st.session_state.get("file_upload_key", 0) + 1
+    st.session_state.experiment_geo_workbook_cache = None
+    st.session_state.experiment_market_sheet_cache = None
+
+
+def _load_local_experiment_record(uploaded_file) -> None:
+    """Load only the JSON record and make the absent source state explicit."""
+
+    raw = uploaded_file.getvalue()
+    if len(raw) > 5 * 1024 * 1024:
+        st.error("The experiment record is larger than the safe 5 MB local-load limit.")
+        return
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("the top-level JSON value is not an object")
+        schema = str(payload.get("schema_version", ""))
+        if schema and not schema.startswith("experiment-record/"):
+            raise ValueError(f"unsupported export schema {schema!r}")
+        loaded = load_experiment_record_from_export(payload)
+        if not loaded.reproducibility:
+            loaded.reproducibility = build_reproducibility_metadata(
+                project_root=Path(__file__).resolve().parent,
+                source_digests=loaded.content_digests,
+                methodology_version=GEOTESTLAB_METHODOLOGY_VERSION,
+                evidence_suite_version=GEOTESTLAB_EVIDENCE_SUITE_VERSION,
+                source_names={"source_bytes": loaded.input_summary.get("kpi_file_name")}
+                if loaded.input_summary.get("kpi_file_name")
+                else None,
+                loaded_from_export=True,
+            )
+        loaded.reproducibility = mark_loaded_from_export(
+            loaded.reproducibility,
+            current_source_digests={},
+            now=datetime.now(UTC),
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError, KeyError) as exc:
+        st.error(f"Could not load the experiment record: {exc}")
+        return
+
+    _clear_runtime_for_loaded_record()
+    st.session_state.experiment_record = loaded.to_dict()
+    st.session_state.experiment_record_loaded = True
+    st.success(
+        f"Loaded experiment {loaded.experiment_id}. Analytical source data was not embedded; "
+        "restore the listed source files before recomputing."
+    )
+    st.rerun()
 
 
 def _render_mcmc_diagnostics(bayes: dict, trace) -> None:
@@ -1893,12 +2037,54 @@ def render_experiment_record():
         "not_applicable": "⚪",
     }
     with st.expander("🧪 Experiment record & design freeze", expanded=False):
+        st.markdown("**Open local experiment record**")
+        st.caption(
+            "Load a previously exported JSON record to review its frozen design and audit "
+            "metadata. Source workbooks and analytical data are never embedded or restored."
+        )
+        _record_upload = st.file_uploader(
+            "Experiment record JSON",
+            type=["json"],
+            key="load_experiment_record_uploader",
+        )
+        if st.button(
+            "📂 Load experiment record",
+            key="load_experiment_record_btn",
+            disabled=_record_upload is None,
+        ):
+            _load_local_experiment_record(_record_upload)
+
         st.caption(f"**Experiment ID:** `{rec.experiment_id}`")
         st.caption(f"**Created:** {rec.created_at} · **Updated:** {rec.updated_at}")
         if rec.input_fingerprint:
             st.caption(f"**Input fingerprint:** `{rec.input_fingerprint}`")
         else:
             st.caption("**Input fingerprint:** not yet computed — run matching to start.")
+
+        _repro = rec.reproducibility or {}
+        _source_repro = _repro.get("source_data") or {}
+        if _repro.get("loaded_from_export"):
+            _load_info = _repro.get("load") or {}
+            st.warning(
+                "This record was loaded from JSON. Analytical state was not restored; "
+                "source files must be supplied again before any stage is re-run."
+            )
+            _missing_sources = _load_info.get("missing_sources") or _source_repro.get("missing")
+            if _missing_sources:
+                st.caption("Missing source files/data: " + "; ".join(map(str, _missing_sources)))
+        if _source_repro.get("required_digests"):
+            st.caption(
+                "Source data: not embedded; reload status **"
+                f"{_source_repro.get('status', 'not_recorded')}**."
+            )
+        _tool = _repro.get("tool") or {}
+        _dependency_set = (_repro.get("dependencies") or {}).get("dependency_set") or {}
+        if _tool.get("commit") or _dependency_set.get("fingerprint"):
+            st.caption(
+                "Code identity: "
+                f"{_tool.get('commit') or 'unavailable'} · dependency set: "
+                f"{_dependency_set.get('fingerprint') or 'unavailable'}"
+            )
 
         st.markdown("**Workflow stage statuses**")
         for key, label in STAGE_LABELS.items():
@@ -2001,7 +2187,10 @@ def render_experiment_record():
             st.caption("No frozen design version yet — run an evaluation and freeze it.")
 
         st.markdown("**Reproducible export**")
-        _export = build_experiment_export(rec, result_summaries=_result_summaries_for_export())
+        _current_summaries = _result_summaries_for_export()
+        if not _current_summaries and rec.reproducibility.get("loaded_from_export"):
+            _current_summaries = rec.result_summaries
+        _export = build_experiment_export(rec, result_summaries=_current_summaries)
         st.download_button(
             "⬇️ Export experiment record (.json)",
             data=json.dumps(_export, indent=2, default=str),
