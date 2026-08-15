@@ -12,7 +12,7 @@
 **Change summary:** Reconciled the reviewed baseline after the production
 power, media-delivery, effect-plausibility, integrated-recommendation and
 unified-export stages. Selected-design production power and Meta delivery are
-live, while candidate-grid construction, future-date power horizons,
+live, while candidate-grid UX,
 upstream recommendation integration and the complete approved-design freeze
 remain incomplete. The recommendation objective and evidence-quality policy
 remain pending product-owner decisions.
@@ -56,10 +56,10 @@ The existing product supports region matching, historical design validation,
 selected-design production power, Meta delivery feasibility, effect
 plausibility, typed recommendation contracts, completed-test impact
 measurement and Bayesian Time-Based Regression. The next product work is to
-connect those stages into a coherent prospective workflow: candidate-grid
-construction, a future campaign schedule distinct from the historical power
-horizon, upstream recommendation evidence and a complete approved-design
-freeze.
+connect those stages into a coherent prospective workflow: candidate-grid UX,
+a future campaign schedule distinct from the historical power horizon,
+upstream recommendation evidence and a complete approved-design freeze. The
+backend candidate-design construction and validation seam is now in place.
 
 The product must preserve a clear distinction between:
 
@@ -370,10 +370,11 @@ the lifecycle is reworked.
 - determine whether a feasible design exists;
 - freeze the approved design.
 
-The selected-design production contract is delivered. Candidate-grid UI,
-complete matched-and-validated candidate construction, and a future campaign
-schedule separate from the historical calibration/holdout horizon remain
-follow-on work.
+The selected-design production contract and matched/validated backend
+candidate construction are delivered. Candidate-grid UI, upstream
+recommendation integration and the complete approved-design workflow remain
+follow-on work; future campaign scheduling is separate from the historical
+calibration/holdout horizon in the production contract.
 
 ### Stage 4: Measure completed-test impact
 
@@ -689,18 +690,17 @@ For every candidate design, the application reports:
 The power analysis must use the proposed regional design and historical KPI
 behaviour rather than a generic market-level calculator that ignores the
 selected controls. The current production contract supports selected-design
-power, MDE and explicit support/blocker reporting. It still requires the
-analytical horizon to be represented by dates available in the source data;
-future campaign schedule metadata and a separate historical calibration or
-holdout horizon are an active gap.
+power, MDE and explicit support/blocker reporting. Its analytical holdout is
+represented by dates available in the source data, while future campaign
+schedule metadata remains separate from that historical horizon.
 
 Detailed requirements are defined in `power-analysis-and-test-sizing.md`.
 
 ## FR-11. Test-size and duration scenarios
 
 **Status:** Partially implemented — selected-design power, MDE and the backend
-scenario contracts exist; complete matched/validated candidate construction
-and candidate-grid/duration UX remain follow-on work.
+scenario contracts and the typed matched/validated candidate pipeline exist;
+candidate-grid/duration UX remains follow-on work.
 
 The analyst shall be able to compare alternative market shares and durations.
 
@@ -794,7 +794,8 @@ limiting factors and override rationale exist. The current UI prefills a
 selected-design row from current, non-stale upstream validation, power,
 delivery and effect results, but the row remains editable, uses a placeholder
 size metric and is not yet a complete multi-scenario, constraint-preserving
-candidate pipeline.
+candidate-grid UI. The backend candidate pipeline retains matched controls,
+validation evidence and blockers for each candidate.
 
 GeoTestLab shall compare complete design scenarios and recommend a feasible option.
 
@@ -1267,8 +1268,8 @@ The repository shall maintain:
 - modular analytical architecture;
 - typed result objects beyond data and matching;
 - workflow-level status and fingerprints;
-- prospective power horizon separation for future campaign dates;
-- matched and historically validated candidate scenario construction;
+- prospective power horizon separation for future campaign dates (delivered);
+- matched and historically validated candidate scenario construction (delivered);
 - candidate-grid and duration comparison UX;
 - upstream integration of recommendation evidence;
 - guided result hierarchy;
@@ -1306,9 +1307,9 @@ The repository shall maintain:
 
 ### Phase 2. End-to-end prospective planning
 
-- separate future campaign schedule, planned duration and historical power
-  calibration/holdout horizon;
-- construct matched and historically validated candidate designs for each
+- use the separate future campaign schedule, planned duration and historical
+  power calibration/holdout horizon;
+- expose the matched and historically validated candidate designs for each
   requested market-size share;
 - expose fixed-duration and multi-duration scenario comparison in the Power
   & Test Sizing UI;

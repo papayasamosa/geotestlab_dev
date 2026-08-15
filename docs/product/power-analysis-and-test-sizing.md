@@ -4,8 +4,9 @@
 **Parent document:** `PRD.md`  
 **Version:** 1.1
 **Status:** Approved methodology; selected-design production implementation
-delivered, including the prospective-horizon contract; candidate-pipeline and
-broader candidate-grid/duration UX remain in progress
+delivered, including the prospective-horizon contract and matched/validated
+candidate-design pipeline; broader candidate-grid/duration UX remains in
+progress
 **Date:** 15 August 2026
 
 ## 1. Purpose
@@ -52,10 +53,13 @@ effect-plausibility recommendation.
 The scenario boundary in `geotestlab/power/scenarios.py` provides candidate
 test-share and duration construction using explicit historical-KPI, population
 or custom regional weights. It retains requested versus achieved share and
-applies shared constraints, but the current candidate path does not yet
-guarantee a newly matched control group and complete historical validation for
-every candidate. Automatic recommendation must wait for that design-builder /
-control-selector seam.
+applies shared constraints. Each build now passes through typed control
+selection and candidate-design seams, reuses the existing matching strategies,
+records matching provenance, and runs historical counterfactual validation
+before a candidate can qualify. Failed matches, validation confidence and
+share-tolerance violations remain attached as blockers; power cannot promote a
+failed design. The scenario grid and full upstream recommendation integration
+remain follow-on UI/product work.
 
 The **Power & Test Sizing** app tab exposes the selected-design production
 power contract after canonical KPI preparation and executed matching. It
@@ -64,8 +68,8 @@ source-backed analytical holdout dates, planned duration, target effect, power
 target and simulation settings. Future campaign dates are optional metadata.
 Results show the support status, MDE, target power, curve table/chart and a
 JSON export; source and input fingerprints remain attached to the experiment
-record. The tab does not yet expose the full scenario grid or complete
-upstream candidate pipeline, and it does not combine statistical detectability
+record. The tab does not yet expose the full scenario grid or complete upstream
+recommendation integration, and it does not combine statistical detectability
 with media delivery or effect plausibility.
 
 The capability must help an analyst answer:

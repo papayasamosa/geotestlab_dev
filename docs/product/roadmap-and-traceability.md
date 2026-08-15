@@ -117,7 +117,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Residual diagnostics | Durbin-Watson | FR-7 | Current | Decide additional diagnostics |
 | Placebos | Capped historical windows | FR-8 | Current | Approve finite-sample and fallback policy (recorded in the power-methodology spike) |
 | Counterfactual Confidence | Priority cascade | FR-9 | Current | Review thresholds and driver logic |
-| Prospective power | Approved production contract plus selected-design UI; evidence harness remains separate | FR-10, FR-11 | Current / strengthened | Separate future campaign schedule from analytical horizon; complete candidate-grid UX |
+| Prospective power | Approved production contract, selected-design UI and typed matched/validated candidate pipeline; evidence harness remains separate | FR-10, FR-11 | Current / strengthened | Expose complete candidate-grid UX |
 | Platform selector | Generic profile schema, registered Meta profile and dedicated Meta UI | FR-12 | Current for Meta | Keep broader profile policy pending and add profiles later |
 | Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | Current for Meta | Add further profiles and production delivery integrations later |
 | Effect plausibility | Typed evidence/scenario layer with MDE comparison | FR-14 | Current / strengthened | Keep evidence hierarchy pending and link scenarios to recommendation |
@@ -180,8 +180,8 @@ The root README should remain a concise installation and orientation document, l
 - power-analysis methodology spike and ADR pack (delivered; methodology
   approved under ADR-000);
 - selected-design power and MDE (delivered);
-- future campaign schedule versus historical power-horizon contract;
-- matched and validated candidate market-share and duration scenarios;
+- future campaign schedule versus historical power-horizon contract (delivered in PR2);
+- matched and validated candidate market-share and duration scenarios (delivered in PR3);
 - design-level export and complete approved design freeze.
 
 ### P1. Media feasibility
@@ -211,7 +211,7 @@ The next implementation sequence is deliberately dependency-ordered:
 
 1. reconcile product documentation (delivered in PR1);
 2. fix the prospective power horizon contract (delivered in PR2);
-3. complete matched candidate construction;
+3. complete matched candidate construction (delivered in PR3);
 4. expose scenario sizing in the Power & Test Sizing UI;
 5. integrate typed upstream recommendation evidence;
 6. reorder and guide the lifecycle UX;
@@ -333,9 +333,9 @@ production power core is now the active next stage under those conditions.
 
 **Status:** Delivered for the selected-design workflow after explicit
 product-owner methodology approval; implementation preserves the approved
-method/version and support-status conditions. Backend scenario contracts exist,
-but complete matched candidate construction and candidate-grid UX remain
-follow-on work.
+method/version and support-status conditions. The backend now constructs
+matched and historically validated candidates with retained provenance and
+blockers; the candidate-grid UX remains follow-on work.
 
 ### Deliverables
 
@@ -447,7 +447,7 @@ stacked on unmerged branches:
 
 1. reconcile current product documentation (delivered in PR1);
 2. fix the prospective power horizon contract (delivered in PR2);
-3. complete matched candidate design construction;
+3. complete matched candidate design construction (delivered in PR3);
 4. expose scenario sizing in the Power & Test Sizing UI;
 5. replace manual recommendation evidence with typed upstream candidates;
 6. reorder and guide lifecycle navigation;

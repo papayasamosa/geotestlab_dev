@@ -14,9 +14,9 @@ source workbooks
 ```
 
 Power consumes the canonical KPI dataset and explicit regional design. The
-current scenario engine can construct share/duration candidates, but does not
-yet guarantee the complete matched-control and historical-validation pipeline
-shown in the target flow. Media delivery consumes a platform-bound media plan,
+scenario engine constructs share/duration candidates through the existing
+matching strategies and historical-validation service, retaining candidate
+statuses and blockers. Media delivery consumes a platform-bound media plan,
 thresholds and experiment scope. Effect plausibility consumes explicit evidence
 and MDE, with delivery identity recorded separately. Recommendation consumes
 candidate-level statuses; the current UI still permits manually supplied

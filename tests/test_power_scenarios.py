@@ -11,6 +11,7 @@ from geotestlab.data import MarketSizeMeasure, RegionalKPIConfig, prepare_region
 from geotestlab.matching import MatchConstraints
 from geotestlab.power.production import ProductionPowerConfig, ProductionPowerResult
 from geotestlab.power.scenarios import (
+    ControlSelection,
     DesignAssessment,
     PowerScenarioCandidate,
     ScenarioSizingConfig,
@@ -179,6 +180,27 @@ def test_constraints_and_locked_groups_are_retained():
     assert "G" not in candidate.test_regions + candidate.control_regions
 
 
+def test_indivisible_share_outside_tolerance_is_a_candidate_blocker():
+    result = size_power_scenarios(
+        _dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=pd.Timestamp("2025-01-19"),
+            locked_test_regions=("Large",),
+            share_tolerance=0.01,
+        ),
+    )
+
+    candidate = result.candidates[0]
+    assert candidate.actual_share == pytest.approx(10 / 17)
+    assert any(
+        "outside the requested share tolerance" in value
+        for value in candidate.design_assessment.blockers
+    )
+    assert candidate.recommendation_eligible is False
+
+
 def test_locked_test_regions_must_retain_forced_test_regions():
     with pytest.raises(ValueError, match="omit a forced test region"):
         size_power_scenarios(
@@ -222,6 +244,96 @@ def test_default_power_runner_receives_dataset(monkeypatch):
     assert received["dataset"] is dataset
     assert result.candidates[0].power_result is not None
     assert result.candidates[0].planned_test_dates == ("2025-02-02T00:00:00",)
+    assert len(received["config"].control_regions) == len(received["config"].test_regions)
+    assert received["config"].historical_holdout_dates == (pd.Timestamp("2025-01-26"),)
+
+
+def test_default_builder_matches_controls_instead_of_using_all_remaining_regions():
+    result = size_power_scenarios(
+        _dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=pd.Timestamp("2025-01-19"),
+        ),
+    )
+
+    candidate = result.candidates[0]
+    assert len(candidate.control_regions) == len(candidate.test_regions)
+    assert len(candidate.control_regions) < 8 - len(candidate.test_regions)
+    assert candidate.design_assessment.match_metrics["control_group_size"] == len(
+        candidate.control_regions
+    )
+    assert candidate.design_assessment.matching_method == "intermediate"
+    assert candidate.power_result is None
+    assert candidate.recommendation_eligible is False
+
+
+def test_power_uses_actual_matched_design_even_when_validation_blocks():
+    received = {}
+
+    def runner(config):
+        received["config"] = config
+        return _power_result(
+            test_regions=config.test_regions,
+            control_regions=config.control_regions,
+        )
+
+    template = _template()
+    result = size_power_scenarios(
+        _dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=template.historical_end,
+            power_template=template,
+        ),
+        power_runner=runner,
+    )
+
+    candidate = result.candidates[0]
+    assert received["config"].control_regions == candidate.control_regions
+    assert len(received["config"].control_regions) == len(candidate.test_regions)
+    assert candidate.design_assessment.counterfactual_status == "fail"
+    assert candidate.recommendation_eligible is False
+
+
+def test_typed_control_and_validation_seams_receive_the_real_candidate_design():
+    received = {}
+
+    def selector(_dataset, request):
+        received["request"] = request
+        return ControlSelection(
+            control_regions=("B",),
+            match_status="pass",
+            match_metrics={"mean_abs_smd": 0.01},
+            provenance={"source": "test-selector"},
+        )
+
+    def validator(_dataset, request, design):
+        received["design"] = design
+        assert request.test_regions == ("A",)
+        assert request.validation_method == "enet"
+        assert design.control_regions == ("B",)
+        return DesignAssessment(match_status="pass", counterfactual_status="pass")
+
+    result = size_power_scenarios(
+        _dataset(),
+        ScenarioSizingConfig(
+            target_shares=(0.2,),
+            durations=(1,),
+            historical_end=pd.Timestamp("2025-01-19"),
+            locked_test_regions=("A",),
+            control_selector=selector,
+            validation_runner=validator,
+        ),
+    )
+
+    candidate = result.candidates[0]
+    assert received["request"].actual_share == pytest.approx(1 / 17)
+    assert received["design"].control_regions == ("B",)
+    assert candidate.control_regions == ("B",)
+    assert candidate.design_assessment.control_selection_provenance == {"source": "test-selector"}
 
 
 def test_unavailable_duration_is_retained_as_blocked_candidate():
