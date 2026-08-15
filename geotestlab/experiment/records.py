@@ -14,6 +14,7 @@ existing v1 JSON exports via :func:`load_experiment_record_from_export`.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 
 from geotestlab.experiment.identity import utc_now_iso
@@ -48,6 +49,10 @@ class ExperimentRecord:
     # stage -> {method: fingerprint} additional method-level results (e.g.
     # observed_impact -> bayesian_tbr), kept separate from the primary result.
     stage_method_results: dict = field(default_factory=dict)
+    # Reproducibility envelope and imported result summaries. Raw source data is
+    # never stored here; result summaries are compact, JSON-safe values only.
+    reproducibility: dict = field(default_factory=dict)
+    result_summaries: dict = field(default_factory=dict)
     # Chronological human-readable note log.
     notes: list = field(default_factory=list)
 
@@ -70,6 +75,8 @@ class ExperimentRecord:
             "stage_method_results": {
                 str(k): dict(v) for k, v in (self.stage_method_results or {}).items()
             },
+            "reproducibility": copy.deepcopy(dict(self.reproducibility or {})),
+            "result_summaries": copy.deepcopy(dict(self.result_summaries or {})),
             "notes": list(self.notes),
         }
 
@@ -97,6 +104,8 @@ class ExperimentRecord:
             stage_method_results={
                 str(k): dict(v) for k, v in (data.get("stage_method_results") or {}).items()
             },
+            reproducibility=dict(data.get("reproducibility") or {}),
+            result_summaries=dict(data.get("result_summaries") or {}),
             notes=list(data.get("notes") or []),
         )
 
@@ -126,6 +135,8 @@ def create_experiment_record(now=None) -> ExperimentRecord:
         analysed=None,
         content_digests={},
         stage_method_results={},
+        reproducibility={},
+        result_summaries={},
         notes=[f"Experiment created at {stamp}."],
     )
 

@@ -944,7 +944,11 @@ The default interface shall prioritise essential decisions while retaining exper
 
 ## FR-22. Export and reproducibility
 
-**Status:** Partially implemented — the local experiment record now exports unified validation, power, delivery, effect and recommendation summaries; approved-design persistence and package metadata remain follow-on work.
+**Status:** Current locally — the local experiment record exports unified
+validation, power, delivery, effect and recommendation summaries, frozen design
+versions, reproducibility metadata and stakeholder/technical summaries, and can
+be safely reloaded from JSON. Central persistence and organisational controls
+remain follow-on work.
 
 Exports shall contain sufficient information to reproduce and review the analysis.
 
@@ -1273,7 +1277,7 @@ The repository shall maintain:
 - candidate-grid and duration comparison UX;
 - upstream integration of recommendation evidence;
 - guided result hierarchy;
-- complete experiment exports with package metadata and approved-design
+- complete local experiment exports with package metadata and approved-design
   persistence;
 - accessibility and responsive workflow;
 - evidence-quality policy and broader platform profiles.
@@ -1283,7 +1287,7 @@ The repository shall maintain:
 - approved design freeze and versioning;
 - broader platform profiles and production delivery integrations;
 - approved evidence-quality and spend-sufficiency policy;
-- persistent production storage and package/version metadata in exports;
+- persistent production storage and organisational multi-user access;
 - full accessibility and responsive-workflow review.
 
 ## 22. Delivery roadmap
@@ -1322,7 +1326,7 @@ The repository shall maintain:
 - freeze the executed recommendation as an immutable, complete pre-test
   design;
 - inherit the frozen design for completed-test evaluation;
-- add package/version metadata, safe local experiment reload and planned-
+- retain package/version metadata, safe local experiment reload and planned-
   versus-analysed reporting;
 - retain explicit pending decisions for evidence quality, objective governance,
   licensing and persistence architecture.

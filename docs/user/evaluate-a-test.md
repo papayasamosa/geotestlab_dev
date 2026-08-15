@@ -36,3 +36,12 @@ from spend or other unrelated inputs.
 Keep the export with the source-data identity and the methodology version. Do
 not treat a JSON export as approval: approval and design freeze remain explicit
 workflow actions.
+
+## Reopen a local record
+
+Open **Experiment record & design freeze**, choose **Experiment record JSON**,
+and select **Load experiment record**. This restores the local audit record,
+frozen design history, stage identities and compact result summaries. Uploaded
+KPI workbooks and analytical data are intentionally not embedded; the record
+lists missing or changed source identities and must be re-supplied before any
+stage is recomputed.

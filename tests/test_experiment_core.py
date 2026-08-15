@@ -34,6 +34,9 @@ from geotestlab.experiment import (
     build_experiment_export,
     build_frozen_data_quality_summary,
     build_frozen_matching_section,
+    build_reproducibility_metadata,
+    build_stakeholder_summary,
+    build_technical_summary,
     candidate_universe_digest,
     canonical_frame,
     compute_input_fingerprint,
@@ -44,6 +47,7 @@ from geotestlab.experiment import (
     is_frozen,
     load_experiment_record,
     load_experiment_record_from_export,
+    mark_loaded_from_export,
     material_file_identity,
     new_experiment_id,
     observed_impact_completed,
@@ -53,6 +57,7 @@ from geotestlab.experiment import (
     record_stage_result,
     set_stage_status,
     sha256_bytes,
+    source_availability,
     stage_has_result,
     stage_is_stale,
     tool_version,
@@ -495,6 +500,79 @@ class TestFrozenImmutability:
         rec.frozen_versions[0].design["weights"]["x"] = 9.0
         assert export["frozen_versions"][0]["planned"]["planned_test_periods"] == 4
         assert export["frozen_versions"][0]["design"]["weights"] == {"x": 1.0}
+
+    def test_export_contains_stakeholder_and_technical_summaries(self):
+        rec = create_experiment_record(NOW)
+        rec.reproducibility = {"source_data": {"embedded": False, "status": "available"}}
+        summaries = {
+            "design_recommendation": {
+                "status": "recommended",
+                "selected_scenario_id": "candidate_1",
+                "limiting_factors": [],
+            }
+        }
+        export = build_experiment_export(rec, result_summaries=summaries)
+        assert export["stakeholder_summary"]["approval_status"] == "recommendation_available"
+        assert export["active_frozen_design"] is None
+        assert export["technical_summary"]["stage_status"] == rec.stage_status
+        assert export["result_summaries"] == summaries
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility envelope and safe local reload metadata
+# ---------------------------------------------------------------------------
+class TestReproducibility:
+    def test_dependency_and_source_identities_are_digest_only(self, tmp_path):
+        (tmp_path / "requirements.txt").write_text("pandas==3.0.5\n", encoding="utf-8")
+        metadata = build_reproducibility_metadata(
+            project_root=tmp_path,
+            source_digests={"source_bytes": "sha256:source"},
+            current_source_digests={},
+            methodology_version="0.5.0",
+            evidence_suite_version="2.1.0",
+        )
+        assert metadata["schema_version"] == "experiment-reproducibility/v1"
+        assert metadata["dependencies"]["dependency_set"]["fingerprint"].startswith("fp1:")
+        assert metadata["source_data"]["embedded"] is False
+        assert metadata["source_data"]["status"] == "missing"
+        assert metadata["source_data"]["required_digests"] == {"source_bytes": "sha256:source"}
+        assert "pandas==3.0.5" not in json.dumps(metadata)
+
+    def test_source_availability_distinguishes_missing_changed_and_matching(self):
+        required = {"source_bytes": "sha256:expected", "market_sheet": "sha256:market"}
+        missing = source_availability(required, {})
+        assert missing["status"] == "missing"
+        changed = source_availability(required, {"source_bytes": "sha256:other"})
+        assert changed["status"] == "missing"
+        assert "uploaded KPI workbook" in changed["changed"]
+        assert "selected market sheet" in changed["missing"]
+        available = source_availability(required, required)
+        assert available["status"] == "available"
+
+    def test_loaded_export_retains_summary_but_marks_sources_unrestored(self):
+        rec = create_experiment_record(NOW)
+        rec.content_digests = {"source_bytes": "sha256:source"}
+        rec.result_summaries = {"counterfactual_validation": {"OLS": {"corr": 0.9}}}
+        export = build_experiment_export(rec)
+        loaded = load_experiment_record_from_export(export)
+        loaded.reproducibility = build_reproducibility_metadata(
+            source_digests=loaded.content_digests,
+            loaded_from_export=True,
+        )
+        loaded.reproducibility = mark_loaded_from_export(
+            loaded.reproducibility, current_source_digests={}, now=NOW
+        )
+        assert loaded.result_summaries == rec.result_summaries
+        assert loaded.reproducibility["load"]["analytical_state_restored"] is False
+        assert loaded.reproducibility["load"]["missing_sources"] == ["uploaded KPI workbook"]
+
+    def test_summaries_are_streamlit_free_and_json_safe(self):
+        rec = create_experiment_record(NOW)
+        stakeholder = build_stakeholder_summary(rec, {})
+        technical = build_technical_summary(rec, {})
+        json.dumps({"stakeholder": stakeholder, "technical": technical})
+        assert stakeholder["approval_status"] == "planning_in_progress"
+        assert technical["stage_fingerprints"] == {}
 
 
 # ---------------------------------------------------------------------------
