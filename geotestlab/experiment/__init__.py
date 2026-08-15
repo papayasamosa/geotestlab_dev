@@ -48,6 +48,7 @@ from geotestlab.experiment.records import (
     touch,
     update_inputs,
 )
+from geotestlab.experiment.result_summaries import build_unified_result_summaries
 from geotestlab.experiment.stages import (
     STAGE_KEYS,
     STAGE_LABELS,
@@ -80,6 +81,7 @@ __all__ = [
     "build_experiment_export",
     "build_frozen_data_quality_summary",
     "build_frozen_matching_section",
+    "build_unified_result_summaries",
     "candidate_universe_digest",
     "canonical_frame",
     "canonical_json",

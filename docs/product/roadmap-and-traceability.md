@@ -126,7 +126,7 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Result hierarchy | Partial | FR-19 | Partially implemented | Redesign top-level summary |
 | Workflow state | Stage fingerprints + stage-scoped staleness (experiment foundations) | FR-20 | Partially implemented | Complete workflow state model |
 | Guided UX | Some help and expanders | FR-21 | Partially implemented | Introduce stage-based guidance |
-| Exports | Local JSON experiment-record export (foundation); no complete FR-22 record | FR-22 | Partially implemented | Complete the FR-22 export contract |
+| Exports | Local JSON experiment-record export with unified validation, power, delivery, effect and recommendation summaries | FR-22 | Partially implemented | Add approved-design persistence, package metadata and stakeholder views |
 | Error handling | Some domain errors and technical expanders | FR-23 | Partially implemented | Complete domain exception boundary |
 | Accessibility | Theme and focus improvements | FR-24 | Partially implemented | Full keyboard and zoom review |
 
