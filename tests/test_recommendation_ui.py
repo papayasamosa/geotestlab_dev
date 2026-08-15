@@ -24,6 +24,7 @@ def _candidate(*, source_fingerprint: str = "source") -> PowerScenarioCandidate:
     power = SimpleNamespace(
         source_data_fingerprint=source_fingerprint,
         target_power=0.8,
+        mde=4.0,
         power_at_target_effects=(0.86,),
         support_status="supported",
         usable_for_recommendation=True,
@@ -126,6 +127,19 @@ def test_upstream_adapter_uses_actual_share_and_preserves_provenance(monkeypatch
     assert scenario.metadata["market_size_measure"] == MarketSizeMeasure.POPULATION.value
     assert scenario.metadata["test_regions"] == ["A"]
     assert scenario.metadata["control_regions"] == ["B"]
+
+
+def test_effect_gate_uses_each_candidate_mde(monkeypatch):
+    candidate = _candidate()
+    candidate.power_result.mde = 6.0
+    monkeypatch.setattr(recommendation_ui.st, "session_state", _state(candidate))
+    monkeypatch.setattr(recommendation_ui, "_delivery_is_current", lambda result: True)
+    monkeypatch.setattr(recommendation_ui, "_effect_is_current", lambda result, current: True)
+
+    scenario = recommendation_ui._upstream_scenarios()[0]
+
+    assert scenario.effect_status == "evidence_backed"
+    assert scenario.effect_meets_mde is False
 
 
 def test_stale_candidate_power_cannot_become_qualifying_in_adapter(monkeypatch):

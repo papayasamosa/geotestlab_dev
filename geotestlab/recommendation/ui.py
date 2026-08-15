@@ -152,11 +152,27 @@ def _delivery_cost(delivery, current: bool) -> float | None:
     return _number(getattr(budget, "value", budget)) if budget is not None else None
 
 
-def _effect_meets_mde(effect, current: bool) -> bool | None:
-    if effect is None or not current:
+def _effect_meets_mde(effect, current: bool, candidate_mde: float | None) -> bool | None:
+    """Compare the shared central effect with this candidate's own MDE."""
+
+    if effect is None or not current or candidate_mde is None:
         return None
     central = next((item for item in effect.comparisons if item.label == "central"), None)
-    return central.meets_mde if central is not None else None
+    if central is None:
+        return None
+    direction = st.session_state.get(
+        "effect_plausibility_current_direction",
+        getattr(effect, "effect_direction", "two_sided"),
+    )
+    expected = float(central.expected_uplift_pct)
+    effect_distance = (
+        expected
+        if direction == "one_sided_positive"
+        else -expected
+        if direction == "one_sided_negative"
+        else abs(expected)
+    )
+    return effect_distance >= candidate_mde
 
 
 def _result_payload(result) -> Any:
@@ -224,12 +240,7 @@ def _upstream_scenarios() -> tuple[DesignScenario, ...]:
         blockers = tuple(
             str(item) for item in (getattr(candidate, "recommendation_blockers", ()) or ())
         )
-        notes = tuple(
-            [*blockers]
-            + [
-                f"requested market share: {float(candidate.requested_share):.6g}",
-            ]
-        )
+        notes = blockers
         metadata = {
             "source": "power_scenario_result",
             "analyst_supplied": False,
@@ -268,7 +279,11 @@ def _upstream_scenarios() -> tuple[DesignScenario, ...]:
                 power_meets_target=power_meets,
                 delivery_status=delivery_status,
                 effect_status=effect_status,
-                effect_meets_mde=_effect_meets_mde(effect, effect_current),
+                effect_meets_mde=_effect_meets_mde(
+                    effect,
+                    effect_current,
+                    _number(getattr(power, "mde", None)) if power_current else None,
+                ),
                 region_constraints_status=_candidate_constraint_status(candidate, config),
                 history_periods=history_periods,
                 notes=notes,
