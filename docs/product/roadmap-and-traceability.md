@@ -73,15 +73,18 @@ Several capabilities are delivered as **foundations** but are not yet the
 
 - **Experiment foundations vs the complete FR-16 contract.**
   `geotestlab/experiment/` delivers experiment identity, stage fingerprints,
-  stage-scoped staleness and immutable frozen design versions. The complete
-  FR-16 "approved design freeze" (approval timestamp, power result and MDE in
-  the frozen record, platform and campaign setup, budget and delivery
-  assumptions, effect-plausibility assumptions, analyst notes) is not yet
-  delivered.
+  stage-scoped staleness, immutable frozen design versions and local export.
+  The app now freezes the executed design only after a current recommendation,
+  including approval timestamp, power/MDE support and limitations, campaign
+  and delivery assumptions when supplied, effect scenarios when supplied,
+  analyst notes, source/data-quality identities and package metadata. Central
+  persistence and organisational approval controls remain outside this local
+  contract.
 - **Unified local export vs the complete FR-22 export.** The app now exports a
   local JSON experiment record with compact validation, power, delivery,
-  effect-plausibility and recommendation summaries. Approved-design
-  persistence, package metadata and stakeholder-specific views remain planned.
+  effect-plausibility and recommendation summaries, every frozen design
+  version, and package/dependency metadata. Central persistence, reload and
+  stakeholder-specific views remain planned.
 - **Evidence harness vs production methodology.** `geotestlab/power/` contains
   both the production selected-design contract and the separate methodology
   evidence harness. ADR-000 governs the evidence conditions; the production
@@ -122,13 +125,13 @@ Several capabilities are delivered as **foundations** but are not yet the
 | Delivery feasibility | Profile-driven calculations, thresholds and dedicated UI for Meta | FR-13 | Current for Meta | Add further profiles and production delivery integrations later |
 | Effect plausibility | Typed evidence/scenario layer with MDE comparison | FR-14 | Current / strengthened | Keep evidence hierarchy pending and link scenarios to recommendation |
 | Integrated recommendation | Separate gate comparison, explicit objective, limiting factors and override rationale | FR-15 | Partially integrated | Consume typed upstream scenario, validation, power, delivery and effect results |
-| Design freeze | Versioned frozen-design foundations (immutable versions, fingerprints) | FR-16 | Partially implemented | Complete the FR-16 approved-design-freeze contract |
-| Impact measurement | Actual/counterfactual and uplift | FR-17 | Current | Link to approved design |
+| Design freeze | Executed, recommendation-gated, versioned frozen design with export and planned-vs-analysed comparison | FR-16 | Current locally | Add central persistence and organisational controls later |
+| Impact measurement | Actual/counterfactual and uplift with active frozen-design inheritance | FR-17 | Current / strengthened | Preserve planned-vs-analysed review |
 | Bayesian TBR | Core extracted into `geotestlab/bayesian/`; reduced-sampling smoke CI | FR-18 | Current | Bayesian assurance (production sampling quality) |
 | Result hierarchy | Partial | FR-19 | Partially implemented | Redesign top-level summary |
 | Workflow state | Stage fingerprints + stage-scoped staleness (experiment foundations) | FR-20 | Partially implemented | Complete workflow state model |
 | Guided UX | Some help and expanders | FR-21 | Partially implemented | Introduce stage-based guidance |
-| Exports | Local JSON experiment-record export with unified validation, power, delivery, effect and recommendation summaries | FR-22 | Partially implemented | Add approved-design persistence, package metadata, reload and stakeholder views |
+| Exports | Local JSON experiment-record export with frozen versions, package metadata and unified validation, power, delivery, effect and recommendation summaries | FR-22 | Current locally | Add central persistence, reload and stakeholder views |
 | Error handling | Some domain errors and technical expanders | FR-23 | Partially implemented | Complete domain exception boundary |
 | Accessibility | Theme and focus improvements | FR-24 | Partially implemented | Full keyboard and zoom review |
 

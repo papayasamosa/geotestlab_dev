@@ -1,7 +1,14 @@
+import importlib.metadata
 import io
 import json
 import os
+import platform
+import sys
 import unicodedata
+from collections.abc import Mapping
+from dataclasses import asdict, is_dataclass
+from datetime import UTC, datetime
+from enum import StrEnum
 
 import altair as alt
 import numpy as np
@@ -66,6 +73,7 @@ from geotestlab.experiment import (
     sha256_bytes,
     tool_version,
     update_inputs,
+    utc_now_iso,
 )
 
 # Matching core (geotestlab.matching) — pure functions, no Streamlit imports.
@@ -1152,7 +1160,42 @@ def _compute_content_digests():
     )
 
 
-def _current_design_snapshot():
+def _freeze_value(value):
+    """Convert an executed stage value into a bounded JSON-safe snapshot."""
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float):
+        return value if np.isfinite(value) else None
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, np.generic):
+        return _freeze_value(value.item())
+    if hasattr(value, "to_dict"):
+        return _freeze_value(value.to_dict())
+    if is_dataclass(value):
+        return _freeze_value(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _freeze_value(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return [_freeze_value(item) for item in value]
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _dependency_versions() -> dict[str, str]:
+    """Capture only dependency metadata useful for reproducing this export."""
+    names = ("geotestlab", "streamlit", "pandas", "numpy", "scipy", "plotly", "altair")
+    versions = {}
+    for name in names:
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            versions[name] = "not-installed"
+    return versions
+
+
+def _current_design_snapshot(*, analyst_label="", analyst_notes=(), approval_timestamp=None):
     """Complete design snapshot for freezing (available values only; never
     fabricated platform/spend values).
 
@@ -1160,10 +1203,11 @@ def _current_design_snapshot():
     (``match_run_snapshot``), not the live widget state. Region exclusions are
     kept strictly separate from time-period exclusions. Data-quality fields
     are stored separately (never a collapsed/uncovered-regions read)."""
+    rec = _experiment_record()
     snapshot = st.session_state.get("match_run_snapshot")
     matching = st.session_state.get("experiment_matching_inputs") or {}
     validation = st.session_state.get("experiment_validation_inputs") or {}
-    analysed = (_experiment_record().analysed) or {}
+    analysed = rec.analysed or {}
     _map = st.session_state.get("kpi_mapping_report")
     _q = st.session_state.get("kpi_quality_report")
     _rejected = st.session_state.get("kpi_rejected_rows")
@@ -1182,7 +1226,112 @@ def _current_design_snapshot():
     required_regions = test_regions or (
         st.session_state.get("selected_experiment_regions", []) or []
     )
+    quality_summary = build_frozen_data_quality_summary(
+        mapping_report=_map,
+        required_regions=required_regions,
+        blocking_errors=_quality_blocking_errors(),
+        warnings=(tuple(getattr(_q, "warnings", ()) or ()) if _q is not None else ()),
+        observations={
+            "observations_retained": getattr(_q, "observations_retained", None),
+            "observations_removed": getattr(_q, "observations_removed", None),
+            "duplicate_key_rows": getattr(_q, "duplicate_key_rows", None),
+            "rejected_rows": len(_rejected) if _rejected is not None else 0,
+        },
+    )
+    result_summaries = _result_summaries_for_export()
+    dataset = st.session_state.get("kpi_regional_dataset")
+    power_config = st.session_state.get("production_power_config")
+    power_result = st.session_state.get("production_power_result")
+    scenario_config = st.session_state.get("power_scenario_config")
+    scenario_result = st.session_state.get("power_scenario_result")
+    media_result = st.session_state.get("media_delivery_result")
+    media_plan = st.session_state.get("media_delivery_plan")
+    effect_result = st.session_state.get("effect_plausibility_result")
+    effect_evidence = getattr(effect_result, "evidence", None) if effect_result else None
+    recommendation = st.session_state.get("design_recommendation_result")
+    recommendation_dict = _freeze_value(recommendation) if recommendation else None
+    selected_candidate = getattr(scenario_result, "selected_candidate", None)
+    if selected_candidate is None and recommendation is not None:
+        _selected_scenario_id = getattr(recommendation, "selected_scenario_id", None)
+        _scenario_candidates = tuple(getattr(scenario_result, "candidates", ()) or ())
+        if _selected_scenario_id and _selected_scenario_id.startswith("candidate_"):
+            try:
+                _candidate_index = int(_selected_scenario_id.rsplit("_", 1)[-1]) - 1
+            except ValueError:
+                _candidate_index = -1
+            if 0 <= _candidate_index < len(_scenario_candidates):
+                selected_candidate = _scenario_candidates[_candidate_index]
+    selected_candidate_power = getattr(selected_candidate, "power_result", None)
+    recommendation_objective = st.session_state.get("design_recommendation_objective")
+    if recommendation_objective is None:
+        recommendation_objective = (recommendation_dict or {}).get("objective")
+    selected_candidate_dict = _freeze_value(selected_candidate) if selected_candidate else {}
+    power_config_dict = _freeze_value(power_config or scenario_config)
+    power_result_for_snapshot = power_result or selected_candidate_power
+    power_result_dict = _freeze_value(power_result_for_snapshot)
+    planned_campaign_dates = (
+        (power_result_dict or {}).get("planned_test_dates")
+        or (power_config_dict or {}).get("planned_test_dates")
+        or selected_candidate_dict.get("planned_test_dates", [])
+    )
+    planned_duration = (
+        (power_result_dict or {}).get("planned_duration_periods")
+        or (power_config_dict or {}).get("planned_duration_periods")
+        or selected_candidate_dict.get("duration_periods")
+    )
+    region_exclusions = matching_section.get("region_exclusions") or {}
+    excluded_regions = sorted(
+        {str(region) for regions in region_exclusions.values() for region in (regions or [])}
+    )
+    validation_methods = sorted(
+        str(method)
+        for method in (st.session_state.get("validation_results") or {}).get("results", {})
+    )
+    source_fingerprint = getattr(dataset, "source_data_fingerprint", None)
+    if source_fingerprint is None:
+        source_fingerprint = getattr(_q, "source_data_fingerprint", None)
+    media_status = getattr(getattr(media_result, "status", None), "value", None)
+    media_section = {
+        "status": "completed" if media_result is not None else "not_supplied",
+        "platform_profile": getattr(media_plan, "profile_id", None),
+        "budget": _freeze_value(
+            (media_plan.to_dict() if media_plan else {}).get("values", {}).get("total_budget")
+        ),
+        "forecast_and_provenance": _freeze_value(media_plan),
+        "result": _freeze_value(media_result),
+        "delivery_status": media_status,
+    }
+    effect_section = {
+        "status": "completed" if effect_result is not None else "not_supplied",
+        "evidence": _freeze_value(effect_evidence),
+        "scenarios": _freeze_value(getattr(effect_evidence, "scenarios", ()))
+        if effect_evidence
+        else [],
+        "result": _freeze_value(effect_result),
+    }
+    power_section = {
+        "status": "completed" if power_result_for_snapshot is not None else "not_supplied",
+        "configuration": power_config_dict,
+        "result": power_result_dict,
+        "mde": (power_result_dict or {}).get("mde"),
+        "support_status": (power_result_dict or {}).get("support_status", "not_supplied"),
+        "limitations": {
+            "blockers": (power_result_dict or {}).get("blockers", []),
+            "warnings": (power_result_dict or {}).get("warnings", []),
+            "errors": (power_result_dict or {}).get("errors", []),
+        },
+    }
     return {
+        "experiment_identity": {"experiment_id": rec.experiment_id},
+        "experiment_id": rec.experiment_id,
+        "market": matching_section.get("market"),
+        "geography_level": matching_section.get("geography_level"),
+        "aggregation": validation.get("kpi_agg_col"),
+        "classification": snapshot.get("geo_col") if snapshot else None,
+        "frequency": validation.get("time_series_frequency"),
+        "source_data_fingerprint": source_fingerprint,
+        "data_quality_summary": quality_summary,
+        "source_data_quality": _freeze_value(_q),
         "test_regions": test_regions,
         "control_regions": control_regions,
         "kpi": {
@@ -1217,18 +1366,21 @@ def _current_design_snapshot():
             "min_training_periods": validation.get("min_training_periods"),
             "placebo_length_periods": validation.get("placebo_length_periods"),
         },
-        "data_quality_summary": build_frozen_data_quality_summary(
-            mapping_report=_map,
-            required_regions=required_regions,
-            blocking_errors=_quality_blocking_errors(),
-            warnings=(tuple(getattr(_q, "warnings", ()) or ()) if _q is not None else ()),
-            observations={
-                "observations_retained": getattr(_q, "observations_retained", None),
-                "observations_removed": getattr(_q, "observations_removed", None),
-                "duplicate_key_rows": getattr(_q, "duplicate_key_rows", None),
-                "rejected_rows": len(_rejected) if _rejected is not None else 0,
+        "excluded_regions": excluded_regions,
+        "matching_metrics": _freeze_value(st.session_state.get("match_run_metrics") or {}),
+        "matching_method": matching_section.get("matching_method"),
+        "matching_strategy": matching_section.get("executed_strategy"),
+        "validation": {
+            "method": validation_methods,
+            "settings": {
+                "include_lagged_controls": validation.get("include_lagged_controls"),
+                "min_training_periods": validation.get("min_training_periods"),
+                "placebo_length_periods": validation.get("placebo_length_periods"),
             },
-        ),
+            "summary": result_summaries.get("counterfactual_validation", {}),
+        },
+        "validation_method": validation_methods,
+        "validation_summary": result_summaries.get("counterfactual_validation", {}),
         "source_data_digests": dict(validation.get("content_digests") or {}),
         "time_period_exclusions": {
             "manual": sorted(validation.get("manual_excluded_dates", []) or []),
@@ -1236,12 +1388,66 @@ def _current_design_snapshot():
         },
         "tool_version": GEOTESTLAB_TOOL_VERSION,
         "methodology_version": GEOTESTLAB_METHODOLOGY_VERSION,
-        "analyst": {"label": "", "notes": []},
-        "approved_power_result": (
-            st.session_state.production_power_result.to_dict()
-            if st.session_state.get("production_power_result") is not None
-            else None
+        "planned_campaign_dates": planned_campaign_dates,
+        "planned_duration_periods": planned_duration,
+        "power": power_section,
+        "power_configuration": power_config_dict,
+        "power_result": power_result_dict,
+        "power_support_status": power_section["support_status"],
+        "power_limitations": power_section["limitations"],
+        "scenario_sizing": {
+            "configuration": _freeze_value(scenario_config),
+            "result": _freeze_value(scenario_result),
+            "market_size_measure": selected_candidate_dict.get(
+                "market_size_measure", getattr(scenario_result, "market_size_measure", None)
+            ),
+            "requested_test_share": selected_candidate_dict.get("requested_share"),
+            "achieved_test_share": selected_candidate_dict.get("actual_share"),
+        },
+        "market_size_measure": selected_candidate_dict.get(
+            "market_size_measure", getattr(scenario_result, "market_size_measure", None)
         ),
+        "requested_test_share": selected_candidate_dict.get("requested_share")
+        or matching_section.get("test_share", {}).get("target"),
+        "achieved_test_share": selected_candidate_dict.get("actual_share")
+        or matching_section.get("test_share", {}).get("achieved"),
+        "media_delivery": media_section,
+        "media_platform_profile": media_section["platform_profile"],
+        "media_budget": media_section["budget"],
+        "media_delivery_forecast": media_section["forecast_and_provenance"],
+        "media_delivery_result": media_section["result"],
+        "effect_plausibility": effect_section,
+        "effect_evidence": effect_section["evidence"],
+        "effect_scenarios": effect_section["scenarios"],
+        "recommendation": {
+            "status": "completed" if recommendation else "not_supplied",
+            "result": recommendation_dict,
+            "objective": _freeze_value(recommendation_objective),
+            "scenarios": _freeze_value(st.session_state.get("design_recommendation_scenarios", ())),
+            "override": {
+                "scenario_id": (recommendation_dict or {}).get("override_scenario_id"),
+                "reason": (recommendation_dict or {}).get("override_reason"),
+                "applied": bool((recommendation_dict or {}).get("override_applied", False)),
+            },
+        },
+        "recommendation_result": recommendation_dict,
+        "recommendation_objective": _freeze_value(recommendation_objective),
+        "package_metadata": {
+            "package": "geotestlab",
+            "package_version": GEOTESTLAB_TOOL_VERSION,
+            "python_version": sys.version.split()[0],
+            "platform": platform.platform(),
+            "dependencies": _dependency_versions(),
+        },
+        "approval": {
+            "timestamp": approval_timestamp,
+            "analyst_label": str(analyst_label or "").strip(),
+            "analyst_notes": [str(note) for note in (analyst_notes or ()) if str(note).strip()],
+        },
+        "analyst": {
+            "label": str(analyst_label or "").strip(),
+            "notes": [str(note) for note in (analyst_notes or ()) if str(note).strip()],
+        },
     }
 
 
@@ -1703,22 +1909,64 @@ def render_experiment_record():
 
         st.markdown("**Design freeze**")
         _planned = _current_planned_periods()
-        _can_freeze = bool(_planned) and bool(rec.input_fingerprint)
+        _recommendation = st.session_state.get("design_recommendation_result")
+        _recommendation_status = getattr(getattr(_recommendation, "status", None), "value", None)
+        _recommendation_ready = (
+            _recommendation is not None
+            and not st.session_state.get("design_recommendation_stale", False)
+            and _recommendation_status in {"recommended", "conditional"}
+        )
+        _approval_inputs_stale = any(
+            rec.stage_stale.get(stage, False)
+            for stage in (
+                "match_quality",
+                "counterfactual_validation",
+                "statistical_power",
+                "media_delivery",
+                "effect_plausibility",
+            )
+        )
+        if _approval_inputs_stale:
+            st.caption(
+                "One or more upstream results are stale; re-run those stages before approval."
+            )
+        if not _recommendation_ready:
+            st.caption(
+                "Complete a current design recommendation before freezing an approved design. "
+                "A stale, incomplete, or non-qualifying recommendation cannot be approved."
+            )
+        _analyst_label = st.text_input("Analyst label (optional)", key="freeze_analyst_label")
+        _analyst_notes = st.text_area(
+            "Analyst notes (optional)", key="freeze_analyst_notes", height=80
+        )
+        _can_freeze = (
+            bool(_planned)
+            and bool(rec.input_fingerprint)
+            and _recommendation_ready
+            and not _approval_inputs_stale
+        )
         if st.button(
             "🧊 Freeze approved design",
             key="freeze_design_btn",
             disabled=not _can_freeze,
             help=(
-                "Capture the current planned test periods and input fingerprint as an "
-                "approved design version. Planned-vs-analysed compares later runs against "
-                "this frozen design."
+                "Capture the executed matching and analytical results, planned test periods, "
+                "and input fingerprint as an immutable approved design version."
             ),
         ):
+            _approval_time = datetime.now(UTC)
+            _approval_timestamp = utc_now_iso(_approval_time)
             freeze_design(
                 rec,
                 _planned,
                 rec.input_fingerprint,
-                design=_current_design_snapshot(),
+                label=_analyst_label.strip(),
+                design=_current_design_snapshot(
+                    analyst_label=_analyst_label,
+                    analyst_notes=_analyst_notes.splitlines(),
+                    approval_timestamp=_approval_timestamp,
+                ),
+                now=_approval_time,
             )
             _save_experiment_record(rec)
             st.success(
@@ -1730,6 +1978,13 @@ def render_experiment_record():
         st.markdown("**Planned vs analysed**")
         if _cmp["frozen"]:
             st.caption(f"Frozen version {_cmp['version']} at {_cmp['frozen_at']}.")
+            st.caption(
+                "Frozen version history: "
+                + ", ".join(
+                    f"v{version.version} ({version.frozen_at})" for version in rec.frozen_versions
+                )
+                + f". Active version: v{_cmp['version']}."
+            )
             if _cmp["matches"]:
                 st.success("✅ Analysed periods match the frozen design.")
             else:
@@ -1737,7 +1992,11 @@ def render_experiment_record():
                 for diff in _cmp["differences"]:
                     st.caption(f"- {diff}")
             if _cmp.get("design_changed_since_freeze"):
-                st.caption("🟠 Workflow inputs have changed since this design was frozen.")
+                st.warning(
+                    "🟠 Live workflow inputs differ from the active frozen design. "
+                    "Run the affected stages and freeze a new version; existing versions "
+                    "remain unchanged."
+                )
         else:
             st.caption("No frozen design version yet — run an evaluation and freeze it.")
 
@@ -4116,6 +4375,75 @@ def render_time_series_validation(mode: str):
     if "bayesian_interpretation_visible" not in st.session_state:
         st.session_state.bayesian_interpretation_visible = False
 
+    mode_prefix = "design" if mode == "Design" else "evaluate"
+    _active_frozen = active_frozen_version(_experiment_record()) if mode == "Evaluate" else None
+    _inherited_frozen = st.session_state.get("evaluate_inherited_frozen_design")
+    if mode == "Evaluate" and _active_frozen:
+        st.markdown("### Approved design inheritance")
+        st.caption(
+            f"Active frozen design: version {_active_frozen['version']} at "
+            f"{_active_frozen['frozen_at']}. Load its executed regions and planned "
+            "periods as the starting point for this completed-test evaluation."
+        )
+        if _inherited_frozen and _inherited_frozen.get("version") == _active_frozen["version"]:
+            st.success(
+                f"Using active frozen design version {_inherited_frozen['version']} as evaluation defaults. "
+                "Live changes remain visible and will be recorded by the evaluation run."
+            )
+        if st.button(
+            f"📌 Use active frozen design (v{_active_frozen['version']})",
+            key="evaluate_inherit_frozen_design",
+        ):
+            _frozen_design = dict(_active_frozen.get("design") or {})
+            _frozen_matching = dict(_frozen_design.get("matching") or {})
+            _frozen_regions = _frozen_design.get("test_regions") or _frozen_matching.get(
+                "test_regions", []
+            )
+            _frozen_controls = _frozen_design.get("control_regions") or _frozen_matching.get(
+                "selected_controls", []
+            )
+            st.session_state.evaluate_inherited_frozen_design = {
+                "version": _active_frozen["version"],
+                "planned": dict(_active_frozen.get("planned") or {}),
+                "design": _frozen_design,
+            }
+            if _frozen_regions:
+                st.session_state.selected_experiment_regions = list(_frozen_regions)
+            _geo_key = globals().get("geo_col")
+            _controls_df = st.session_state.get("final_controls")
+            if _controls_df is not None and _geo_key in _controls_df.columns and _frozen_controls:
+                _frozen_control_set = {str(r) for r in _frozen_controls}
+                _available_control_set = set(_controls_df[_geo_key].dropna().astype(str))
+                if not _frozen_control_set <= _available_control_set:
+                    st.session_state.pop("evaluate_inherited_frozen_design", None)
+                    st.error(
+                        "The active frozen controls are not available in the current matching "
+                        "result. Inheritance was blocked to prevent evaluating a hybrid design; "
+                        "restore the approved region universe before continuing."
+                    )
+                    return
+                st.session_state.final_controls = _controls_df[
+                    _controls_df[_geo_key].astype(str).isin(_frozen_control_set)
+                ].copy()
+            elif _frozen_controls:
+                st.session_state.pop("evaluate_inherited_frozen_design", None)
+                st.error(
+                    "The current matching result cannot restore the active frozen controls. "
+                    "Inheritance was blocked to prevent evaluating a hybrid design."
+                )
+                return
+            _frozen_frequency = _active_frozen.get("planned", {}).get(
+                "time_series_frequency"
+            ) or _frozen_design.get("frequency")
+            if _frozen_frequency in {"weekly", "daily"}:
+                st.session_state.evaluate_time_series_frequency = _frozen_frequency
+            st.session_state.validation_results = None
+            st.session_state.validation_triggered = False
+            st.session_state.experiment_validation_inputs = None
+            _clear_bayesian_state()
+            _clear_production_power_state()
+            st.rerun()
+
     # -------------------------------------------------------------------------
     # Helper to clear previous validation results
     # -------------------------------------------------------------------------
@@ -4161,7 +4489,6 @@ def render_time_series_validation(mode: str):
         if st.session_state.get("kpi_pattern_mode")
         else None
     )
-    mode_prefix = "design" if mode == "Design" else "evaluate"
     if shared_kpi_dataset is not None:
         if (
             st.session_state.get("kpi_regional_source_fingerprint")
@@ -4523,6 +4850,50 @@ def render_time_series_validation(mode: str):
 
     date_options = {d.strftime("%d %b %y"): d for d in available_dates}
     date_list = list(date_options.keys())
+
+    if mode == "Evaluate" and _inherited_frozen:
+        _frozen_design = _inherited_frozen.get("design") or {}
+        _frozen_source = _frozen_design.get("source_data_fingerprint")
+        _current_source = getattr(
+            st.session_state.get("kpi_regional_dataset"), "source_data_fingerprint", None
+        )
+        if _frozen_source and _current_source and _frozen_source != _current_source:
+            st.warning(
+                "The active frozen design was created from a different KPI source fingerprint. "
+                "Its dates and regions were loaded as defaults, but this evaluation must be "
+                "reviewed against the current source before it is run."
+            )
+        if not _inherited_frozen.get("date_defaults_applied"):
+            _frozen_planned = _inherited_frozen.get("planned") or {}
+            _frozen_campaign_dates = list(_frozen_design.get("planned_campaign_dates") or ())
+            _frozen_test_start = _frozen_planned.get("test_start")
+            _frozen_test_end = _frozen_planned.get("test_end")
+            if (_frozen_test_start is None or _frozen_test_end is None) and _frozen_campaign_dates:
+                _frozen_test_start = _frozen_campaign_dates[0]
+                _frozen_test_end = _frozen_campaign_dates[-1]
+
+            def _frozen_date_label(value):
+                if value is None:
+                    return None
+                try:
+                    return pd.Timestamp(value).strftime("%d %b %y")
+                except Exception:
+                    return None
+
+            for _widget_key, _planned_key in (
+                ("evaluate_pre_start", _frozen_planned.get("pre_start")),
+                ("evaluate_pre_end", _frozen_planned.get("pre_end")),
+                ("evaluate_test_start", _frozen_test_start),
+                ("evaluate_test_end", _frozen_test_end),
+                ("evaluate_post_start", _frozen_planned.get("post_start")),
+                ("evaluate_post_end", _frozen_planned.get("post_end")),
+            ):
+                _label = _frozen_date_label(_planned_key)
+                if _label in date_options:
+                    st.session_state[_widget_key] = _label
+            st.session_state.evaluate_use_post = bool(_frozen_planned.get("use_post", False))
+            _inherited_frozen["date_defaults_applied"] = True
+            st.session_state.evaluate_inherited_frozen_design = _inherited_frozen
 
     # -------------------------------------------------------------------------
     # 3. Configuration (depends on mode) — EXACTLY as in working file

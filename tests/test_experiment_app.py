@@ -4,7 +4,7 @@ AppTest coverage of the live workflow record:
 - the experiment panel renders on a fresh app with default stage statuses;
 - a completed manual match stamps match_quality and stores matching inputs;
 - a completed design validation stamps counterfactual_validation, stores the
-  analysed summary, and enables the design-freeze button;
+  analysed summary, and keeps design freeze disabled until recommendation;
 - freezing records an immutable approved version;
 - changing a validation input (historical period) clears the validation result
   and reconciles the record so counterfactual_validation becomes stale.
@@ -16,13 +16,14 @@ The pure experiment-core logic is covered separately in
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from geotestlab.experiment import material_file_identity
+from geotestlab.experiment import create_experiment_record, freeze_design, material_file_identity
 from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 from tests.fixtures.live_scenarios import (
     CONTROL_REGIONS,
@@ -97,7 +98,7 @@ def test_matching_completion_stamps_match_quality():
     assert app.session_state["experiment_matching_inputs"] is not None
 
 
-def test_validation_completion_stamps_and_freeze(tmp_path: Path):
+def test_validation_completion_stamps_and_requires_recommendation(tmp_path: Path):
     kpi_path = write_correlated_kpi_xlsx(
         tmp_path / "weekly.xlsx",
         TEST_REGION,
@@ -123,28 +124,11 @@ def test_validation_completion_stamps_and_freeze(tmp_path: Path):
     assert rec["analysed"]["planned_test_periods"] is not None
     assert app.session_state["experiment_validation_inputs"] is not None
 
-    # Freeze the approved design.
+    # Validation alone is not approval-ready.
     freeze_btn = [b for b in app.button if b.key == "freeze_design_btn"][0]
-    assert freeze_btn.disabled is False
-    freeze_btn.click()
-    app.run(timeout=RUN_TIMEOUT)
+    assert freeze_btn.disabled is True
 
-    rec = _record(app)
-    assert len(rec["frozen_versions"]) == 1
-    frozen = rec["frozen_versions"][0]
-    assert frozen["version"] == 1
-    assert frozen["schema_version"] == "frozen-design/v1"
-    assert frozen["planned"]["planned_test_periods"] == rec["analysed"]["planned_test_periods"]
-    # A complete design snapshot is captured, not just a fingerprint + periods.
-    assert frozen["design"]["test_regions"]
-    assert frozen["design"]["control_regions"]
-    assert frozen["design"]["tool_version"]
-    assert frozen["design"]["methodology_version"]
-    assert (
-        frozen["design"]["planned_test_period"]["planned_test_periods"]
-        == rec["analysed"]["planned_test_periods"]
-    )
-    assert frozen["design"]["source_data_digests"]["source_bytes"].startswith("sha256:")
+    assert _record(app)["frozen_versions"] == []
 
 
 def test_changing_validation_input_marks_stage_stale(tmp_path: Path):
@@ -243,11 +227,8 @@ def test_design_validation_does_not_complete_observed_impact(tmp_path: Path):
     assert "observed_impact" not in rec["stage_fingerprints"]
 
 
-def test_freeze_stores_executed_matching_and_quality_fields(tmp_path: Path):
-    """The frozen design's matching section is reconstructed from the executed
-    match snapshot (method, mode, setup, regions, controls, exclusions, weights,
-    share, market, geography level, KPI pattern) and the data-quality summary
-    stores separate fields (never a collapsed uncovered_regions)."""
+def test_freeze_requires_recommendation_before_snapshot(tmp_path: Path):
+    """A completed validation cannot create an approved snapshot by itself."""
     kpi_path = write_correlated_kpi_xlsx(
         tmp_path / "weekly_freeze.xlsx",
         TEST_REGION,
@@ -264,48 +245,134 @@ def test_freeze_stores_executed_matching_and_quality_fields(tmp_path: Path):
     run_btn.click()
     app.run(timeout=RUN_TIMEOUT)
     freeze_btn = [b for b in app.button if b.key == "freeze_design_btn"][0]
-    freeze_btn.click()
+    assert freeze_btn.disabled is True
+    assert _record(app)["frozen_versions"] == []
+
+
+def test_current_snapshot_captures_executed_stage_contracts():
+    """The complete freeze payload is assembled from final-stage state."""
+    script = """
+from datetime import UTC, datetime
+from types import SimpleNamespace
+import geotestmatch as app
+from geotestlab.experiment import freeze_design
+
+app.st.session_state.selected_experiment_regions = ["Test A"]
+app.st.session_state.match_run_snapshot = {
+    "market": "UK",
+    "geography_level": "Local Authority Area",
+    "geo_col": "Local Authority Area",
+    "matching_method": "Structural",
+    "match_mode": "User Selected",
+    "setup_mode": "Manual Selection (Pick Both)",
+    "executed_strategy": "User Selected",
+    "test_geos": ["Test A"],
+    "selected_controls": ["Control A"],
+    "global_exclusions": ["Excluded A"],
+    "test_only_exclusions": [],
+    "control_only_exclusions": [],
+    "forced_test_regions": [],
+    "forced_control_eligibility": [],
+    "guided_seed": 42,
+    "target_test_share": 25,
+    "test_share": 20.0,
+    "weights": {"Population": 1.0},
+}
+app.st.session_state.match_run_metrics = {"mean_abs_smd": 0.1}
+app.st.session_state.experiment_matching_inputs = {"matching_method": "Structural"}
+app.st.session_state.experiment_validation_inputs = {
+    "kpi_file_name": "weekly.xlsx",
+    "kpi_file_size": 123,
+    "selected_metric": "Sales",
+    "kpi_agg_col": "Local Authority Area",
+    "time_series_frequency": "weekly",
+    "pre_start": "2025-01-06T00:00:00",
+    "pre_end": "2025-03-24T00:00:00",
+    "test_start": "2025-03-31T00:00:00",
+    "test_end": "2025-04-21T00:00:00",
+    "use_post": False,
+    "content_digests": {"source_bytes": "sha256:source"},
+}
+app.st.session_state.validation_results = {
+    "results": {"Elastic Net": {"corr": 0.9, "r2": 0.8, "smape": 5.0}},
+}
+app.st.session_state.kpi_regional_dataset = SimpleNamespace(
+    source_data_fingerprint="regional-fingerprint"
+)
+app.st.session_state.kpi_quality_report = SimpleNamespace(
+    warnings=("one warning",),
+    observations_retained=10,
+    observations_removed=1,
+    duplicate_key_rows=0,
+    blocking_errors=(),
+    source_data_fingerprint="regional-fingerprint",
+)
+app.st.session_state.kpi_rejected_rows = None
+rec = app._experiment_record()
+rec.input_fingerprint = "fp1:current"
+app._save_experiment_record(rec)
+stamp = "2026-08-15T00:00:00Z"
+design = app._current_design_snapshot(
+    analyst_label="Analyst",
+    analyst_notes=["Approved after review"],
+    approval_timestamp=stamp,
+)
+freeze_design(rec, app._current_planned_periods(), rec.input_fingerprint,
+              label="Approved", design=design,
+              now=datetime(2026, 8, 15, tzinfo=UTC))
+app._save_experiment_record(rec)
+"""
+    app = AppTest.from_string(script)
     app.run(timeout=RUN_TIMEOUT)
 
     frozen = _record(app)["frozen_versions"][0]
-    matching = frozen["design"]["matching"]
-    # executed-match values (from match_run_snapshot, not live widget state)
-    assert matching["matching_method"] == "Structural"
-    assert matching["match_mode"] == "User Selected"
-    assert matching["setup_mode"] == "Manual Selection (Pick Both)"
-    assert matching["executed_strategy"] == "User Selected"
-    assert matching["market"] == "UK"
-    assert matching["geography_level"] == "Local Authority Area"
-    assert TEST_REGION in matching["test_regions"]
-    assert set(matching["selected_controls"]) == set(CONTROL_REGIONS)
-    assert matching["feature_weights"]
-    # region exclusions are separate from time-period exclusions
-    assert set(matching["region_exclusions"]) == {
-        "global",
-        "test_only",
-        "control_only",
-        "forced_test_regions",
-        "forced_control_eligibility",
-    }
-    assert set(matching["time_period_exclusions"]) == {"manual", "tracking_outages"}
-    assert matching["test_share"]["target"] == 25
-    assert matching["test_share"]["achieved"] is not None
+    design = frozen["design"]
+    assert design["experiment_identity"]["experiment_id"].startswith("EXP-")
+    assert design["source_data_fingerprint"] == "regional-fingerprint"
+    assert design["matching_metrics"]["mean_abs_smd"] == 0.1
+    assert design["validation_method"] == ["Elastic Net"]
+    assert design["power"]["status"] == "not_supplied"
+    assert design["media_delivery"]["status"] == "not_supplied"
+    assert design["effect_plausibility"]["status"] == "not_supplied"
+    assert design["approval"]["timestamp"] == frozen["frozen_at"]
+    assert design["analyst"]["notes"] == ["Approved after review"]
+    assert design["package_metadata"]["dependencies"]
 
-    # data-quality summary stores separate fields
-    dq = frozen["design"]["data_quality_summary"]
-    assert "uncovered_regions" not in dq
-    assert "raw_regions" in dq
-    assert "unmapped_raw_regions" in dq
-    assert "covered_regions" in dq
-    assert "required_regions_without_coverage" in dq
-    assert "blocking_errors" in dq
-    assert "warnings" in dq
-    assert TEST_REGION in dq["covered_regions"]
 
-    # tool version is derived from package metadata (never hardcoded 0.3.0)
-    from geotestlab.experiment import tool_version
+def test_evaluate_can_inherit_active_frozen_design():
+    app = _new_app()
+    _manual_match(app)
+    rec = create_experiment_record(datetime(2026, 8, 15, tzinfo=UTC))
+    rec.input_fingerprint = "fp1:approved"
+    freeze_design(
+        rec,
+        {
+            "pre_start": "2025-01-06T00:00:00",
+            "pre_end": "2025-03-24T00:00:00",
+            "test_start": "2025-03-31T00:00:00",
+            "test_end": "2025-04-21T00:00:00",
+            "use_post": False,
+            "time_series_frequency": "weekly",
+        },
+        rec.input_fingerprint,
+        design={
+            "test_regions": [TEST_REGION],
+            "control_regions": list(CONTROL_REGIONS),
+            "source_data_fingerprint": "regional-fingerprint",
+            "frequency": "weekly",
+        },
+        now=datetime(2026, 8, 15, tzinfo=UTC),
+    )
+    app.session_state["experiment_record"] = rec.to_dict()
+    app.run(timeout=RUN_TIMEOUT)
 
-    assert frozen["design"]["tool_version"] == tool_version()
+    inherit = [b for b in app.button if b.key == "evaluate_inherit_frozen_design"][0]
+    inherit.click()
+    app.run(timeout=RUN_TIMEOUT)
+
+    inherited = app.session_state["evaluate_inherited_frozen_design"]
+    assert inherited["version"] == 1
+    assert app.session_state["selected_experiment_regions"] == [TEST_REGION]
 
 
 def test_same_content_workbook_replacement_invalidates_caches(tmp_path, monkeypatch):

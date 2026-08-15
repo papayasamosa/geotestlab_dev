@@ -48,6 +48,18 @@ recommended action.
 The experiment-record expander is the audit trail. It shows stage statuses,
 fingerprints, stale results, frozen design versions and the unified JSON export.
 
+After a current recommendation is available, enter an analyst label or notes if
+needed and choose **Freeze approved design**. The frozen snapshot is built from
+executed matching and analytical results, records the source-data fingerprint,
+power and recommendation evidence, and keeps optional media/effect stages
+explicitly marked when they were not supplied. A later approval creates a new
+version; it does not overwrite earlier versions.
+
+When evaluating a completed test, **Measure Test Impact** can load the active
+frozen version's test/control regions and planned periods as defaults. Review
+the source fingerprint and any live-input differences before running the
+evaluation.
+
 ## First-run checklist
 
 - Confirm the uploaded data contains the required region, metric and date

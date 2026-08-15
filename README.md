@@ -132,10 +132,11 @@ The target product model (see `docs/product/PRD.md`) keeps matching,
 counterfactual validation, power, media delivery, effect plausibility, impact
 and recommendation as separate questions. Selected-design production power,
 Meta delivery feasibility, effect plausibility, candidate-grid construction and
-typed upstream recommendation contracts are implemented. Future-date power
-horizons and the complete approved-design freeze remain partially integrated;
-broader platform profiles, the
-evidence-quality policy and production persistence remain follow-on work.
+typed upstream recommendation contracts, future-date power horizons and the
+complete approved-design freeze are implemented. The freeze captures executed
+stage evidence, immutable versions, approval metadata and explicit optional
+stage statuses; broader platform profiles, the evidence-quality policy and
+production persistence remain follow-on work.
 
 ## Dependency management
 
@@ -191,7 +192,7 @@ a time:
   - `strategies.py` — Basic (Greedy Nearest Neighbor), Intermediate (Hill Climbing), Advanced (Stochastic Genetic Search).
 - `geotestlab/validation/` — typed counterfactual validation: frequency config, model matrix, regularised models, rolling-origin validation, placebo, Counterfactual Confidence and the `run_validation` service.
 - `geotestlab/bayesian/` — typed Bayesian TBR core: AR(1), priors, features, model construction, prediction, diagnostics and the `run_bayesian` service; the PyMC trace is kept separate from the serialisable `BayesianResult` summary.
-- `geotestlab/experiment/` — experiment identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints, stage-scoped staleness, immutable frozen design versions, and a local experiment-record export with unified validation, power, delivery, effect and recommendation summaries (FR-16/FR-22 foundations; the complete approved freeze and package metadata remain follow-on work).
+- `geotestlab/experiment/` — experiment identity (`EXP-YYYYMMDD-XXXX`), deterministic stage fingerprints, stage-scoped staleness, immutable frozen design versions, and a local experiment-record export with unified validation, power, delivery, effect and recommendation summaries (FR-16/FR-22).
 - `geotestlab/power/` — the production selected-design power contract for
   support status, MDE and reproducible configuration. The separate
   methodology evidence harness covers synthetic power cases, placebo/residual
