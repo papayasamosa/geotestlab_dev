@@ -1172,6 +1172,27 @@ def _compute_content_digests():
     )
 
 
+def _current_reproducibility_content_digests():
+    """Reuse live source identities while the Streamlit inputs are unchanged."""
+
+    cache_key = tuple(
+        id(st.session_state.get(key))
+        for key in (
+            "kpi_source_bytes",
+            "kpi_long_df",
+            "experiment_geo_workbook_cache",
+            "experiment_market_sheet_cache",
+            "kpi_candidate_universe",
+        )
+    )
+    cached = st.session_state.get("_reproducibility_content_digest_cache")
+    if cached and cached[0] == cache_key:
+        return dict(cached[1])
+    digests = _compute_content_digests()
+    st.session_state["_reproducibility_content_digest_cache"] = (cache_key, dict(digests))
+    return digests
+
+
 def _freeze_value(value):
     """Convert an executed stage value into a bounded JSON-safe snapshot."""
     if value is None or isinstance(value, (str, int, bool)):
@@ -1212,7 +1233,7 @@ def _current_reproducibility_metadata(rec=None) -> dict:
 
     rec = rec or _experiment_record()
     previous = dict(getattr(rec, "reproducibility", {}) or {})
-    current_digests = _compute_content_digests()
+    current_digests = _current_reproducibility_content_digests() if rec.content_digests else {}
     source_names = dict((previous.get("source_data") or {}).get("source_names") or {})
     if rec.input_summary.get("kpi_file_name"):
         source_names["source_bytes"] = rec.input_summary["kpi_file_name"]
