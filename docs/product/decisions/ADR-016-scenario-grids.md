@@ -26,5 +26,7 @@ automatic optimisation must wait for an approved objective and constraints.
 
 ## Affected requirements and implementation status
 
-TS-FR1–TS-FR3 and FR-10–FR-15. The scenario engine is a later PR and is gated
-by ADR-000.
+TS-FR1–TS-FR3 and FR-10–FR-15. The backend scenario engine is implemented
+under the approved methodology contract, but candidate control construction
+and the complete UI grid remain follow-on work. Automatic recommendation still
+requires an explicit objective and constraints.

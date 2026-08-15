@@ -29,4 +29,5 @@ avoiding an unsafe implicit conversion.
 ## Affected requirements and implementation status
 
 FR-10, FR-11 and TS-FR1. The canonical regional KPI contract is the required
-input; this ADR does not authorise a production power adapter.
+input. The production result records the explicit injection mode and units;
+it does not infer a relative effect from population or region count.

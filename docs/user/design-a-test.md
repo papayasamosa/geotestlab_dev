@@ -18,11 +18,14 @@ when the design changes.
 ## 2. Validate the counterfactual
 
 Upload or select the canonical KPI dataset in **Validate Test Design**. Select
-the historical and planned test periods and frequency. The current workflow
-assigns Elastic Net to structurally matched or user-selected controls and
-LASSO to data-optimised controls; it does not expose a validation fit-method
-selector. Review rolling-origin error, bias, overfitting, autocorrelation,
-placebo diagnostics and the Counterfactual Confidence rating.
+the historical and planned test periods and frequency. In the current
+implementation, a supplied planned test period must be backed by source data;
+this is an active limitation for genuinely future campaigns and is separate
+from the prospective power-horizon fix. The current workflow assigns Elastic
+Net to structurally matched or user-selected controls and LASSO to
+data-optimised controls; it does not expose a validation fit-method selector.
+Review rolling-origin error, bias, overfitting, autocorrelation, placebo
+diagnostics and the Counterfactual Confidence rating.
 
 A completed validation stage means a result exists. It does not automatically
 mean the design is recommendation-quality. The recommendation table therefore
@@ -40,8 +43,12 @@ In **Power & Test Sizing**, enter or confirm:
 - MDE bounds and minimum-history policy.
 
 The output reports power curves, target-power estimates, MDE, confidence
-intervals, support status, warnings and blockers. A result that is incomplete,
-stale or unsupported is not usable for a full recommendation.
+intervals, support status, warnings and blockers. In the current implementation
+the configured test dates also form the analytical window and therefore must be
+present in the source history; do not label a historical holdout as the actual
+future campaign. A result that is incomplete, stale or unsupported is not
+usable for a full recommendation. Separating future campaign metadata from
+the historical calibration/holdout horizon is the next power-contract stage.
 
 ## 4. Assess media delivery
 
@@ -69,8 +76,8 @@ effect.
 
 ## 6. Compare designs
 
-In **Integrated Design Recommendation**, enter one complete candidate per row.
-Keep these columns separate:
+In **Integrated Design Recommendation**, the current UI accepts one complete
+candidate per row. Keep these columns separate:
 
 - match quality;
 - counterfactual validation;
@@ -86,4 +93,10 @@ conditional recommendation, not a full recommendation. If no candidate passes,
 the output names the limiting factors.
 
 An override requires a reason. The reason and the original gate statuses are
-included in the result and export.
+included in the result and export. When upstream stages have run, the current
+UI prefills a selected-design row from their current, non-stale validation,
+power, delivery and effect results. That row remains editable, uses a
+placeholder size metric, does not yet represent a full scenario grid, and does
+not automatically carry every upstream design constraint. Treat changed or
+additional rows as analyst-supplied assumptions until the complete typed
+candidate integration is delivered.

@@ -48,5 +48,7 @@ default objective.
 
 `geotestlab.recommendation` compares explicit candidates, retains separate
 gate assessments, explains limiting factors, supports conditional results and
-requires/export override rationale. The design-freeze and unified export
-contracts remain follow-on work.
+requires/exports override rationale. Unified result export is implemented;
+complete upstream candidate integration and approved-design freeze remain
+follow-on work. This ADR remains pending because it does not approve a global
+default objective.

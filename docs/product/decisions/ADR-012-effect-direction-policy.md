@@ -19,5 +19,6 @@ Separate calibration evidence is required for each supported tail.
 
 ## Affected requirements and implementation status
 
-FR-10, FR-11 and TS-FR1. The spike supports the configuration; this ADR does
-not approve a production default.
+FR-10, FR-11 and TS-FR1. The production contract requires the direction
+explicitly and stores it in the result and export; no implicit direction
+default is approved.

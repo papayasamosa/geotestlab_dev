@@ -29,5 +29,6 @@ validation evidence.
 
 ## Affected requirements and implementation status
 
-FR-10, FR-11 and the detection output contract. This remains configuration and
-evidence only; no production API is selected.
+FR-10, FR-11 and the detection output contract. The production contract
+records the selected criterion and tail explicitly; this ADR does not create an
+implicit criterion when a method or fit fails.

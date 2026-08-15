@@ -24,5 +24,6 @@ proposed **0.05** threshold, so uncertainty interpretation remains unresolved.
 
 ## Affected requirements and implementation status
 
-FR-10, FR-11, FR-19 and FR-22. The production uncertainty semantics require
-explicit approval.
+FR-10, FR-11, FR-19 and FR-22. The production contract reports conditional
+simulation uncertainty with its count and assumptions; it does not claim that
+the evidence suite supports a broader unconditional uncertainty interpretation.

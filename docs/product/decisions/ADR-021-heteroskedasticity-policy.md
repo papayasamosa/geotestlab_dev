@@ -23,4 +23,6 @@ independent seeds and should not be tuned to the observed suite.
 
 ## Affected requirements and implementation status
 
-FR-7, FR-10 and FR-11. The policy remains proposed and production-gated.
+FR-7, FR-10 and FR-11. Heteroskedasticity remains an explicit production
+limitation: affected cases are blocked or marked unsupported until a separately
+approved treatment is available.

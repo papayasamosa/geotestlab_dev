@@ -2,10 +2,11 @@
 
 **Document type:** Functional and methodological product specification  
 **Parent document:** `PRD.md`  
-**Version:** 1.0  
+**Version:** 1.1
 **Status:** Approved methodology; selected-design production implementation
-delivered, with broader candidate-grid and duration UX in progress
-**Date:** 14 August 2026
+delivered, with prospective-horizon, candidate-pipeline and broader
+candidate-grid/duration UX in progress
+**Date:** 15 August 2026
 
 ## 1. Purpose
 
@@ -26,6 +27,14 @@ and an explicit `ProductionPowerConfig` containing the metric, historical
 period, test/control regions, planned test dates, target effects, direction,
 simulation method, fit method and approved simulation settings.
 
+The current contract still uses the configured test dates as the analytical
+simulation/holdout window and therefore requires those dates to be represented
+in the source dataset. This is not a valid prospective contract when the
+campaign is genuinely in the future. The next implementation stage must split
+future campaign metadata (`planned_test_dates` and planned duration) from the
+historical calibration/holdout horizon, preserve both in the result/export and
+keep the existing history, continuity and safety gates.
+
 It returns a typed `ProductionPowerResult` containing the power curve and
 target-effect estimates, conditional Clopper–Pearson intervals, MDE, effective
 and requested periods, fit and safety diagnostics, source/input fingerprints,
@@ -38,20 +47,22 @@ There is intentionally no implicit best-method default. `model_simulation` or
 placebo results remain a cross-check. The result is not a media feasibility or
 effect-plausibility recommendation.
 
-The scenario boundary in `geotestlab/power/scenarios.py` builds candidate
-test-share and duration designs using explicit historical-KPI, population or
-custom regional weights. It retains requested versus achieved share, applies
-the shared matching constraints, preserves match/counterfactual assessment,
-and selects a qualifying candidate only when an optimisation objective is
-explicitly supplied.
+The scenario boundary in `geotestlab/power/scenarios.py` provides candidate
+test-share and duration construction using explicit historical-KPI, population
+or custom regional weights. It retains requested versus achieved share and
+applies shared constraints, but the current candidate path does not yet
+guarantee a newly matched control group and complete historical validation for
+every candidate. Automatic recommendation must wait for that design-builder /
+control-selector seam.
 
-The **Power & Test Sizing** app tab now exposes the selected-design production
+The **Power & Test Sizing** app tab exposes the selected-design production
 power contract after canonical KPI preparation and executed matching. It
 requires explicit method, counterfactual fit, effect direction, history, test
 dates, target effect, power target and simulation settings. Results show the
 support status, MDE, target power, curve table/chart and a JSON export; source
 and input fingerprints remain attached to the experiment record. The tab does
-not infer test/control regions and does not combine statistical detectability
+not yet expose the full scenario grid, fixed-duration workflow or complete
+upstream candidate pipeline, and it does not combine statistical detectability
 with media delivery or effect plausibility.
 
 The capability must help an analyst answer:
@@ -197,7 +208,13 @@ Required:
 - selected control regions or control-selection method;
 - excluded regions;
 - planned test duration;
-- planned test dates, where known.
+- planned test dates, where known, as future campaign metadata;
+- a separate historical calibration/holdout horizon for power estimation.
+
+The campaign dates and analytical horizon must never be conflated. A future
+campaign may have no KPI observations yet; the power calculation must use a
+defensible historical window selected from the available source history and
+must export that distinction.
 
 ## 5.2 Statistical assumptions
 

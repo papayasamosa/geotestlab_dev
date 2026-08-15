@@ -41,6 +41,8 @@ release profile set.
 
 ## Implementation status
 
-The generic schema, provenance model, Meta profile registration and validation
-tests are implemented in `geotestlab.media`. Delivery calculations and UI are
-deferred to the follow-up media-feasibility change.
+The generic schema, provenance model, Meta profile registration, delivery
+calculations, provenance/threshold handling and dedicated feasibility UI are
+implemented in `geotestlab.media`. Broader platform profiles and production
+delivery integrations remain future work; this ADR remains pending for the
+first-release profile policy.

@@ -1,19 +1,21 @@
 # GeoTestLab Product Requirements Document
 
 **Document type:** Canonical product requirements document  
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Draft for product-owner review
-**Date:** 14 August 2026
+**Date:** 15 August 2026
 **Product owner:** Repository owner
 **Implementation repository:** `papayasamosa/geotestlab_dev`  
-**Repository baseline reviewed:** `main` at commit `f64c2fb317985d24628baba89ac931c612518e13`
+**Repository baseline reviewed:** `main` at commit `f3810f848932d52b4b02267cd1641c6fb53ef051`
 **Primary application:** Streamlit application launched from `geotestmatch.py`  
 
 **Change summary:** Reconciled the reviewed baseline after the production
 power, media-delivery, effect-plausibility, integrated-recommendation and
-unified-export stages. Added user, methodology and architecture guides and
-updated the remaining delivery gaps. The recommendation objective and
-evidence-quality policy remain pending product-owner decisions.
+unified-export stages. Selected-design production power and Meta delivery are
+live, while candidate-grid construction, future-date power horizons,
+upstream recommendation integration and the complete approved-design freeze
+remain incomplete. The recommendation objective and evidence-quality policy
+remain pending product-owner decisions.
 
 ## 1. Document purpose
 
@@ -50,7 +52,14 @@ It helps answer five connected questions:
 4. **Can the planned media budget deliver enough exposure to make that effect plausible?**
 5. **After the test, what impact occurred and how uncertain is the estimate?**
 
-The existing product already supports region matching, historical design validation, completed-test impact measurement and Bayesian Time-Based Regression. The major missing product capability is a prospective **Power Analysis and Test Sizing** stage that connects regional design, minimum detectable effect, duration, budget, media delivery and expected KPI response.
+The existing product supports region matching, historical design validation,
+selected-design production power, Meta delivery feasibility, effect
+plausibility, typed recommendation contracts, completed-test impact
+measurement and Bayesian Time-Based Regression. The next product work is to
+connect those stages into a coherent prospective workflow: candidate-grid
+construction, a future campaign schedule distinct from the historical power
+horizon, upstream recommendation evidence and a complete approved-design
+freeze.
 
 The product must preserve a clear distinction between:
 
@@ -315,10 +324,23 @@ Protect current numerical behaviour and make future methodology changes explicit
 
 ## 13. Target product workflow
 
-The target product is organised into five logical phases, exposed in the
-current application through eight separate tabs so that matching, validation,
-power, delivery, effect plausibility, impact and recommendation remain
-distinct questions.
+The target product is organised into five logical phases. The current
+application exposes eight separate tabs, in this order:
+
+1. Region Matching
+2. Validate Test Design
+3. Measure Test Impact
+4. Bayesian TBR
+5. Power & Test Sizing
+6. Media Delivery Feasibility
+7. Effect Plausibility
+8. Integrated Design Recommendation
+
+The target lifecycle order is Region Matching, Validate Test Design, Power &
+Test Sizing, Media Delivery Feasibility, Effect Plausibility, Design
+Recommendation / Approve Design, Measure Test Impact and Bayesian TBR. The
+navigation order is a known UX gap; analytical methods remain separate while
+the lifecycle is reworked.
 
 ### Stage 1: Define and match regions
 
@@ -341,12 +363,17 @@ distinct questions.
 
 - select target uplift or calculate minimum detectable effect;
 - define or compare duration;
-- compare candidate test-market shares;
+- compare candidate test-market shares and durations;
 - select media platform or channel;
 - enter budget and delivery assumptions;
 - connect expected delivery to effect where evidence exists;
 - determine whether a feasible design exists;
 - freeze the approved design.
+
+The selected-design production contract is delivered. Candidate-grid UI,
+complete matched-and-validated candidate construction, and a future campaign
+schedule separate from the historical calibration/holdout horizon remain
+follow-on work.
 
 ### Stage 4: Measure completed-test impact
 
@@ -373,7 +400,8 @@ The following capabilities are implemented in the reviewed repository and form t
 
 - Streamlit application with eight workflow tabs covering matching, validation,
   impact, Bayesian analysis, power, delivery feasibility, effect plausibility
-  and integrated recommendation.
+  and integrated recommendation. The current order is the legacy analytical
+  order listed above; the target lifecycle order is documented separately.
 - Python 3.11 runtime.
 - Built-in market workbook.
 - `geotestmatch.py` remains the application entry point.
@@ -567,7 +595,8 @@ GeoTestLab shall provide bounded matching strategies with explainable trade-offs
 
 ## FR-6. Historical counterfactual validation
 
-**Status:** Current, with planned modular extraction.
+**Status:** Current — validation logic is extracted into a Streamlit-free typed
+package; further adapter and schema hardening remains future work.
 
 GeoTestLab shall evaluate whether proposed controls predict the test group's historical KPI.
 
@@ -635,7 +664,7 @@ GeoTestLab shall provide a summary assessment of counterfactual credibility that
 
 ## FR-10. Prospective power analysis
 
-**Status:** Partially implemented.
+**Status:** Current / strengthened, with prospective integration gaps.
 
 GeoTestLab shall estimate whether a proposed geo-test can detect a target effect before the test begins.
 
@@ -657,15 +686,21 @@ For every candidate design, the application reports:
 - simulation settings and seed where applicable;
 - warnings and limitations.
 
-The power analysis must use the proposed regional design and historical KPI behaviour rather than a generic market-level calculator that ignores the selected controls.
+The power analysis must use the proposed regional design and historical KPI
+behaviour rather than a generic market-level calculator that ignores the
+selected controls. The current production contract supports selected-design
+power, MDE and explicit support/blocker reporting. It still requires the
+analytical horizon to be represented by dates available in the source data;
+future campaign schedule metadata and a separate historical calibration or
+holdout horizon are an active gap.
 
 Detailed requirements are defined in `power-analysis-and-test-sizing.md`.
 
 ## FR-11. Test-size and duration scenarios
 
-**Status:** Partially implemented — selected-design power, MDE and explicit
-scenario-comparison contracts exist in the production workflow; broader
-candidate-grid and duration UX remains follow-on work.
+**Status:** Partially implemented — selected-design power, MDE and the backend
+scenario contracts exist; complete matched/validated candidate construction
+and candidate-grid/duration UX remain follow-on work.
 
 The analyst shall be able to compare alternative market shares and durations.
 
@@ -680,7 +715,8 @@ The analyst shall be able to compare alternative market shares and durations.
 
 ## FR-12. Platform and channel selection
 
-**Status:** Partially implemented — generic profile schema and Meta profile registration exist; selector and dynamic workflow remain planned.
+**Status:** Current for the registered Meta profile; broader platform profiles
+and profile-specific expansion remain planned.
 
 The test-sizing workflow shall include a platform or channel selector.
 
@@ -695,7 +731,9 @@ The test-sizing workflow shall include a platform or channel selector.
 
 ## FR-13. Media-delivery feasibility
 
-**Status:** Partially implemented — profile-driven delivery calculations, provenance and the dedicated feasibility stage exist; broader platform profiles and production delivery integrations remain planned.
+**Status:** Current for the registered Meta profile — profile-driven delivery
+calculations, provenance, thresholds and the dedicated feasibility stage exist;
+broader platform profiles and production delivery integrations remain planned.
 
 GeoTestLab shall assess whether the available budget can deliver the required media exposure within the proposed test area.
 
@@ -721,7 +759,10 @@ The application distinguishes externally supplied forecasts from values calculat
 
 ## FR-14. Effect plausibility and spend sufficiency
 
-**Status:** Partially implemented — evidence/scenario contracts and MDE comparison exist; approved evidence quality and integrated spend sufficiency remain planned.
+**Status:** Current / strengthened — evidence/scenario contracts, provenance,
+quality display and MDE comparison exist. The evidence-quality policy remains
+pending, and integrated spend sufficiency remains conditional on an explicit
+effect bridge.
 
 GeoTestLab shall only conclude that planned spend is likely to produce a detectable KPI effect when an explicit bridge exists between media delivery and KPI response.
 
@@ -748,7 +789,12 @@ Permitted evidence sources include:
 
 ## FR-15. Integrated design recommendation
 
-**Status:** Partially implemented.
+**Status:** Partially integrated — typed gate contracts, explicit objectives,
+limiting factors and override rationale exist. The current UI prefills a
+selected-design row from current, non-stale upstream validation, power,
+delivery and effect results, but the row remains editable, uses a placeholder
+size metric and is not yet a complete multi-scenario, constraint-preserving
+candidate pipeline.
 
 GeoTestLab shall compare complete design scenarios and recommend a feasible option.
 
@@ -825,7 +871,8 @@ GeoTestLab shall estimate the completed test's impact using the approved or sele
 
 ## FR-18. Bayesian Time-Based Regression
 
-**Status:** Current, with planned modular extraction and profiling.
+**Status:** Current — the Bayesian core is extracted into a Streamlit-free
+package; production sampling assurance and profiling remain future work.
 
 GeoTestLab shall provide a Bayesian counterfactual estimate using the selected validated controls.
 
@@ -1220,6 +1267,10 @@ The repository shall maintain:
 - modular analytical architecture;
 - typed result objects beyond data and matching;
 - workflow-level status and fingerprints;
+- prospective power horizon separation for future campaign dates;
+- matched and historically validated candidate scenario construction;
+- candidate-grid and duration comparison UX;
+- upstream integration of recommendation evidence;
 - guided result hierarchy;
 - complete experiment exports with package metadata and approved-design
   persistence;
@@ -1253,48 +1304,34 @@ The repository shall maintain:
 - complete state fingerprints and workflow status;
 - preserve numerical goldens.
 
-### Phase 2. Power-analysis methodology spike
+### Phase 2. End-to-end prospective planning
 
-- choose the initial detection criterion;
-- choose simulation and effect-injection policy;
-- validate against hand-calculable and synthetic cases;
-- test sensitivity to short history, low volume and autocorrelation;
-- define outputs and limitations.
+- separate future campaign schedule, planned duration and historical power
+  calibration/holdout horizon;
+- construct matched and historically validated candidate designs for each
+  requested market-size share;
+- expose fixed-duration and multi-duration scenario comparison in the Power
+  & Test Sizing UI;
+- feed typed scenario, validation, power, delivery and effect results into the
+  recommendation stage;
+- reorder and guide the planning/evaluation lifecycle.
 
-### Phase 3. Power-analysis MVP
+### Phase 3. Approved design and reproducibility
 
-- selected-design power;
-- minimum detectable effect;
-- candidate market-share scenarios;
-- fixed or variable duration;
-- reproducible simulation seed;
-- export and staleness handling.
+- freeze the executed recommendation as an immutable, complete pre-test
+  design;
+- inherit the frozen design for completed-test evaluation;
+- add package/version metadata, safe local experiment reload and planned-
+  versus-analysed reporting;
+- retain explicit pending decisions for evidence quality, objective governance,
+  licensing and persistence architecture.
 
-### Phase 4. Platform-aware delivery feasibility
+### Phase 4. Assurance and release readiness
 
-- platform selector;
-- Meta and other initial platform profiles;
-- budget, CPM/CPC, reach, frequency and audience inputs;
-- calculated versus supplied forecast distinction;
-- delivery thresholds;
-- scenario comparison.
-
-### Phase 5. Effect plausibility and recommendation
-
-- effectiveness-evidence hierarchy;
-- low, central and high assumptions;
-- expected KPI effect;
-- comparison with minimum detectable effect;
-- spend requirement scenarios;
-- integrated recommendation and limiting-factor explanation.
-
-### Phase 6. Approved design records and reporting
-
-- freeze/version design;
-- stakeholder summary;
-- technical methodology export;
-- compare planned versus analysed design after completion;
-- production naming and release documentation.
+- deterministic end-to-end planning fixture and staleness assertions;
+- accessibility and responsive-workflow review;
+- stakeholder summary export and deployment/persistence decisions;
+- broader platform profiles only after the Meta workflow is coherent.
 
 ## 23. Risks and mitigations
 
@@ -1313,25 +1350,22 @@ The repository shall maintain:
 
 ## 24. Open product and methodology decisions
 
-1. What is the primary power-analysis detection criterion for the first release?
-2. Should the first power engine use historical residual simulation, placebo injection, model-based simulation or more than one method?
-3. How should positive, negative and two-sided target effects be handled?
-4. How should ramp-up, delayed effect and carryover be represented in power simulations?
-5. Which market-size measure is the default for test-share scenarios?
-6. What candidate test-share defaults should be shown?
-7. Which platform profiles are included in the first release?
-8. What delivery thresholds are defaults versus user or agency inputs?
-9. Which effectiveness sources are permitted to support a full spend-sufficiency conclusion?
-10. How should uncertainty in CPA or elasticity be propagated into expected uplift?
-11. Should the recommendation objective default to minimum spend, minimum test-market share or maximum power?
-12. How should overlapping placebo windows be treated in empirical tail calculations?
-13. Should exploratory fallback placebo windows be excluded?
-14. Which residual diagnostics should contribute to Counterfactual Confidence?
-15. Which Bayesian sampling profiles should be exposed?
-16. Should saved experiment configurations be local files first or require persistent storage later?
-17. What approval mechanism constitutes a frozen design in a single-user Streamlit application?
-18. When should the temporary `TEST` prefix be removed?
-19. What licensing model should be adopted?
+The power-methodology pack and selected-design production contract are approved
+under ADR-000. The remaining decisions are:
+
+1. Does separating future campaign dates from the historical calibration/
+   holdout horizon require a methodology-version amendment?
+2. Which platform profiles belong in the first release beyond the implemented
+   Meta profile (ADR-008)?
+3. Which effectiveness evidence qualities may support a full spend-sufficiency
+   conclusion (ADR-009)?
+4. Should the recommendation objective have a product default, or must the
+   analyst always choose it (ADR-023)?
+5. What local storage and versioning contract should complete approved-design
+   freeze and experiment reload (ADRs 006 and 007)?
+6. What licensing model should be adopted (ADR-010)?
+7. When should the temporary `TEST` prefix be removed as part of a deliberate
+   release?
 
 ## 25. Definition of done for the target product
 
@@ -1358,7 +1392,7 @@ GeoTestLab meets this PRD when:
 - `geotestmatch.py`
 - `pyproject.toml`
 - `.github/workflows/ci.yml`
-- merged pull requests through PR 17
+- merged pull requests through PR 54
 - existing GeoTestLab Maintainability and UX Hardening Programme
 - approved product-owner direction for a platform-agnostic power-analysis and test-sizing capability
 

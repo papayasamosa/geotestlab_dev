@@ -12,9 +12,10 @@ remaining calibration limitations are carried into support status. Keep
 `placebo_empirical` as a cross-check, not as the production absolute-power
 engine.
 
-This is a deliberate deferral, not permission to choose the method in code.
-The next evidence iteration must compare methods by scenario, fit policy,
-calibration, safety coverage, uncertainty and runtime.
+This is a deliberate rejection of an implicit default. The production caller
+must choose and record the method explicitly. The next evidence iteration must
+compare methods by scenario, fit policy, calibration, safety coverage,
+uncertainty and runtime.
 
 ## Current evidence
 
@@ -41,5 +42,6 @@ therefore choose and record the method explicitly.
 
 ## Affected requirements and implementation status
 
-This affects FR-10 and FR-11. No production implementation is authorised;
-the current package remains a spike under `geotestlab/power/`.
+This affects FR-10 and FR-11. The approved production contract implements the
+explicit method boundary and carries support/blocker status; the evidence
+harness remains a separate package under `geotestlab/power/`.
