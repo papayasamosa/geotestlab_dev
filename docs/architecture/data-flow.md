@@ -18,5 +18,6 @@ Effect plausibility consumes explicit evidence and MDE, with delivery identity
 recorded separately. Recommendation consumes candidate-level statuses; it does
 not recompute or collapse the upstream methods.
 
-The export contains stage status/fingerprints plus result summaries. This makes
+The export contains stage status/fingerprints plus result summaries, including
+Bayesian observed-impact fields when that stage has produced them. This makes
 it possible to review a result while seeing whether its inputs are current.

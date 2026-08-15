@@ -18,9 +18,11 @@ when the design changes.
 ## 2. Validate the counterfactual
 
 Upload or select the canonical KPI dataset in **Validate Test Design**. Select
-the historical and planned test periods, frequency and fit method. Review
-rolling-origin error, bias, overfitting, autocorrelation, placebo diagnostics
-and the Counterfactual Confidence rating.
+the historical and planned test periods and frequency. The current workflow
+assigns Elastic Net to structurally matched or user-selected controls and
+LASSO to data-optimised controls; it does not expose a validation fit-method
+selector. Review rolling-origin error, bias, overfitting, autocorrelation,
+placebo diagnostics and the Counterfactual Confidence rating.
 
 A completed validation stage means a result exists. It does not automatically
 mean the design is recommendation-quality. The recommendation table therefore
@@ -49,8 +51,11 @@ provenance. Reach and frequency calculations answer delivery questions only;
 they do not infer incremental KPI impact.
 
 Record excluded experiment regions separately from ordinary media activity and
-review control-region activity and spillover assumptions. Missing thresholds or
-forecasts produce incomplete output rather than an optimistic pass.
+review control-region activity and spillover assumptions. Delivery thresholds
+are optional in the current contract: when supplied they are checked, while
+missing thresholds mean that no threshold check has been performed. Missing
+required forecast inputs produce incomplete output rather than an optimistic
+pass.
 
 ## 5. Record effect plausibility
 

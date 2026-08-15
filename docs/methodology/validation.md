@@ -1,9 +1,11 @@
 # Counterfactual validation methodology
 
 Validation estimates how well control regions predict the test regions during
-the pre-period. The workflow supports explicit OLS, Elastic Net and LASSO fit
-choices, frequency-aware inputs, rolling-origin validation, placebo checks and
-diagnostic confidence ratings.
+the pre-period. The current validation workflow runs Elastic Net for
+structurally matched or user-selected controls and LASSO for data-optimised
+controls. The separate production power contract supports explicit OLS,
+Elastic Net and LASSO fit choices. Both workflows use frequency-aware inputs,
+rolling-origin validation, placebo checks and diagnostic confidence ratings.
 
 Review the primary out-of-sample error together with bias, overfitting,
 autocorrelation and data sufficiency. Counterfactual Confidence is a documented

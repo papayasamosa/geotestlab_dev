@@ -25,8 +25,10 @@ does not establish production MCMC assurance.
 
 The experiment-record download contains the identity, stage statuses and
 fingerprints, frozen versions, planned-versus-analysed comparison and unified
-result summaries. These include validation, impact, power, media delivery,
-effect plausibility and design recommendation data where available.
+result summaries. These include validation, Bayesian observed-impact, power,
+media delivery, effect plausibility and design recommendation data where
+available. The current export does not add a separate frequentist uplift
+summary when only **Measure Test Impact** has been run.
 
 Keep the export with the source-data identity and the methodology version. Do
 not treat a JSON export as approval: approval and design freeze remain explicit
