@@ -195,7 +195,7 @@ def test_locked_test_regions_must_retain_forced_test_regions():
 
 def test_default_power_runner_receives_dataset(monkeypatch):
     dataset = _dataset()
-    template = _template()
+    template = replace(_template(), planned_test_dates=(pd.Timestamp("2025-02-02"),))
     received = {}
 
     def fake_runner(received_dataset, config):
@@ -221,6 +221,7 @@ def test_default_power_runner_receives_dataset(monkeypatch):
 
     assert received["dataset"] is dataset
     assert result.candidates[0].power_result is not None
+    assert result.candidates[0].planned_test_dates == ("2025-02-02T00:00:00",)
 
 
 def test_unavailable_duration_is_retained_as_blocked_candidate():

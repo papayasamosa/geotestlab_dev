@@ -6673,10 +6673,9 @@ def render_production_power_tab():
         schedule_step = pd.Timedelta(days=7 if frequency == "weekly" else 1)
         planned_start_default = (holdout_last + schedule_step).date()
         planned_start = st.date_input(
-            "Planned campaign start date",
+            "Planned campaign start date (used when schedule is known)",
             value=planned_start_default,
             min_value=planned_start_default,
-            disabled=not schedule_known,
             help="The schedule is generated at the selected KPI frequency.",
         )
 

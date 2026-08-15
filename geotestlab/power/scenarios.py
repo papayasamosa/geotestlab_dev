@@ -417,6 +417,11 @@ def size_power_scenarios(
                 test_dates = available_dates[: int(duration)]
                 assessment = _assessment(design_assessor, test_regions, controls, test_dates)
             power_result = None
+            planned_dates = ()
+            if config.power_template is not None:
+                template_dates = tuple(config.power_template.planned_test_dates)
+                if len(template_dates) == int(duration):
+                    planned_dates = template_dates
             if config.power_template is not None or runner is not None:
                 if config.power_template is None:
                     raise ValueError("power_template is required when power_runner is supplied")
@@ -427,7 +432,7 @@ def size_power_scenarios(
                     control_regions=controls,
                     historical_holdout_dates=test_dates,
                     planned_duration_periods=int(duration),
-                    planned_test_dates=(),
+                    planned_test_dates=planned_dates,
                 )
                 if runner is None:
                     power_result = run_production_power(dataset, candidate_config)
@@ -445,7 +450,7 @@ def size_power_scenarios(
                     share_difference=actual_share - float(requested_share),
                     market_size_measure=config.market_size_measure.value,
                     duration_periods=int(duration),
-                    planned_test_dates=(),
+                    planned_test_dates=tuple(value.isoformat() for value in planned_dates),
                     test_regions=test_regions,
                     control_regions=controls,
                     design_assessment=assessment,
