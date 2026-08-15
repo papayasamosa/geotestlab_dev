@@ -72,4 +72,10 @@ def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     assert any(item.label == "Frequency" for item in app.selectbox)
     assert any(item.label == "Target effect (%)" for item in app.number_input)
     assert any("Run production power" in item.label for item in app.button)
+    assert any(item.label == "Scenario metric" for item in app.selectbox)
+    assert any(item.label == "Market-size measure" for item in app.selectbox)
+    assert any(item.label == "Target test shares (%)" for item in app.text_input)
+    assert any(item.label == "Lock duration" for item in app.checkbox)
+    assert any("Compare candidate scenarios" in item.label for item in app.button)
+    assert any(item.label == "Force test regions" for item in app.multiselect)
     assert not app.exception
