@@ -145,7 +145,7 @@ def _current_media_plan(
 def render_media_delivery_tab() -> None:
     """Render delivery feasibility independently from statistical power."""
 
-    st.subheader("📣 Media Delivery Feasibility")
+    st.subheader("Media Delivery Feasibility")
     st.caption(
         "Assess planned media delivery against explicit thresholds. Delivery status is separate "
         "from statistical power and does not claim that exposure creates incremental KPI impact."

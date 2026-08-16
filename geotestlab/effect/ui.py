@@ -21,7 +21,7 @@ from geotestlab.effect.plausibility import (
 def render_effect_plausibility_tab() -> None:
     """Render evidence scenarios without producing an integrated recommendation."""
 
-    st.subheader("🎯 Effect Plausibility")
+    st.subheader("Effect Plausibility")
     st.caption(
         "Connect explicit effectiveness evidence to the statistical MDE. This stage does not "
         "infer KPI impact from media delivery and does not combine effect, power and delivery "

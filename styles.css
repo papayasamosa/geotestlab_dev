@@ -16,10 +16,6 @@
   --radius-md: 8px;
 }
 
-.stTabs [data-baseweb="tab-list"] {
-    background-color: transparent;
-}
-
 html {
   scroll-behavior: smooth;
 }
@@ -64,20 +60,12 @@ h3 { font-size: 1.25rem; }
 
 .stExpander:hover {
   border-color: var(--primary-tint);
-  transition: all 0.2s ease;
 }
 
 /* Metrics grid */
 [data-testid="stMetric"] {
   padding: 1rem;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
   gap: 0.5rem;
-}
-
-[data-testid="stMetric"]:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--primary-tint);
 }
 
 [data-testid="stMetricLabel"] {
@@ -102,14 +90,12 @@ h3 { font-size: 1.25rem; }
    which native theming has no slot for, are added here. */
 .stButton > button {
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .stButton > button[kind="primary"]:hover {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
 }
 
 .stButton > button:not([kind="primary"]):hover {
@@ -117,7 +103,12 @@ h3 { font-size: 1.25rem; }
   color: var(--primary);
 }
 
-/* Accessibility — visible keyboard focus on every interactive control */
+/* Accessibility — visible keyboard focus on every interactive control.
+   Streamlit assigns its own auto-generated class to most elements (e.g.
+   ".st-emotion-cache-xxxxx:focus { outline: none; }"), which outranks a
+   plain type/attribute selector on specificity regardless of source order —
+   so this needs !important to stay visible on every control, not just
+   kind="primary" buttons. */
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
@@ -125,14 +116,6 @@ textarea:focus-visible,
 [role="radio"]:focus-visible,
 [role="checkbox"]:focus-visible,
 [tabindex]:focus-visible {
-  outline: 3px solid #5B8C7D;
-  outline-offset: 2px;
-}
-
-/* Streamlit's own primary-button styling wins the cascade over the
-   generic button:focus-visible rule above at equal specificity, so
-   kind="primary" needs its own, more specific rule to stay visible. */
-button[kind="primary"]:focus-visible {
   outline: 3px solid #5B8C7D !important;
   outline-offset: 2px;
 }
@@ -146,45 +129,6 @@ button[kind="primary"]:focus-visible {
 .streamlit-expanderHeader:hover {
   background: var(--primary-soft);
   color: var(--primary);
-}
-
-/* Expander icon animation */
-.streamlit-expanderHeader svg {
-  transition: transform 0.2s ease;
-}
-
-.streamlit-expanderHeader[aria-expanded="true"] svg {
-  transform: rotate(90deg);
-}
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {
-  gap: 2px;
-  border-bottom: 2px solid var(--border);
-  padding-bottom: 0;
-}
-
-.stTabs [data-baseweb="tab"] {
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  padding: 0.5rem 1.1rem;
-  font-weight: 500;
-  color: var(--muted);
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.stTabs [data-baseweb="tab"]:hover {
-  color: var(--primary);
-  background: var(--primary-soft);
-}
-
-.stTabs [aria-selected="true"] {
-  color: var(--primary);
-  border-bottom: 2px solid var(--primary) !important;
-  box-shadow: none !important;
-  margin-bottom: -2px;
 }
 
 /* Select boxes and inputs */
@@ -330,8 +274,7 @@ img {
 /* Force pointer cursor on select containers */
 .stSelectbox [data-baseweb="select"],
 .stMultiSelect [data-baseweb="select"],
-.stSelectbox [data-baseweb="select"] > div,
-.stSelectbox .st-b8 {
+.stSelectbox [data-baseweb="select"] > div {
   cursor: pointer !important;
 }
 

@@ -313,18 +313,18 @@ def render_kpi_quality_report(report, rejected_rows=None, mapping_report=None):
         return
 
     has_blockers = bool(report.blocking_errors)
-    with st.expander("📋 Data Quality Report", expanded=has_blockers):
+    with st.expander("Data Quality Report", expanded=has_blockers):
         if has_blockers:
             for err in report.blocking_errors:
-                st.error(f"🚫 {err}")
+                st.error(err)
         else:
             st.success(
-                f"✅ Parsed **{report.source_rows_read:,}** source row(s) into "
+                f"Parsed **{report.source_rows_read:,}** source row(s) into "
                 f"**{report.observations_retained:,}** usable observation(s)."
             )
 
         for w in report.warnings:
-            st.warning(f"⚠️ {w}")
+            st.warning(w)
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Source rows read", f"{report.source_rows_read:,}")
@@ -387,7 +387,7 @@ def _render_mapping_quality(mapping_report):
         shown = ", ".join(mapping_report.unmapped_regions[:20])
         if len(mapping_report.unmapped_regions) > 20:
             shown += ", …"
-        st.warning(f"⚠️ Unmapped regions: {shown}")
+        st.warning(f"Unmapped regions: {shown}")
         if mapping_report.unmapped_rows is not None and len(mapping_report.unmapped_rows):
             st.download_button(
                 "⬇️ Download unmapped rows (CSV)",
@@ -763,30 +763,30 @@ def validate_data(df, required_cols, geo_col=None, market=None, level=None):
     issues = []
     recommendations = []
     if len(df) == 0:
-        issues.append("❌ No data available for the selected filters")
-        recommendations.append("💡 Try a different market or geography grouping")
+        issues.append("No data available for the selected filters")
+        recommendations.append("Try a different market or geography grouping")
         return issues, recommendations
     if not required_cols:
-        issues.append("⚠️ No numeric matching features detected")
-        recommendations.append("💡 Check that demographic columns are numeric")
+        issues.append("No numeric matching features detected")
+        recommendations.append("Check that demographic columns are numeric")
         return issues, recommendations
     missing_pct = df[required_cols].isnull().mean() * 100
     high_missing = missing_pct[missing_pct > CONFIG["missing_threshold"]]
     if len(high_missing) > 0:
         issues.append(
-            f"📊 High missing values (> {CONFIG['missing_threshold']}%): {dict(high_missing)}"
+            f"High missing values (> {CONFIG['missing_threshold']}%): {dict(high_missing)}"
         )
         recommendations.append(
-            f"💡 Consider removing from matching: {', '.join(high_missing.index[:3])}"
+            f"Consider removing from matching: {', '.join(high_missing.index[:3])}"
         )
     constant_cols = []
     for col in required_cols:
         if df[col].nunique(dropna=False) <= 1:
             constant_cols.append(col)
     if constant_cols:
-        issues.append(f"⚠️ Constant features detected: {constant_cols[:5]}")
+        issues.append(f"Constant features detected: {constant_cols[:5]}")
         recommendations.append(
-            f"💡 Remove these features because they do not help matching: {', '.join(constant_cols[:3])}"
+            f"Remove these features because they do not help matching: {', '.join(constant_cols[:3])}"
         )
     outlier_dict = {}
     for col in required_cols:
@@ -803,15 +803,15 @@ def validate_data(df, required_cols, geo_col=None, market=None, level=None):
                         outlier_regions = ["Unknown"]
                     outlier_dict[col] = outlier_regions[:3]
     if outlier_dict:
-        issues.append(f"🔴 Extreme outliers detected (> {CONFIG['outlier_std_threshold']} std dev)")
+        issues.append(f"Extreme outliers detected (> {CONFIG['outlier_std_threshold']} std dev)")
         for col, regions in list(outlier_dict.items())[:3]:
             issues.append(f"   • {col}: {', '.join(str(r) for r in regions)}")
         recommendations.append(
-            "💡 Investigate outlier regions for data errors or consider excluding them"
+            "Investigate outlier regions for data errors or consider excluding them"
         )
     if len(df) < 3:
-        issues.append(f"⚠️ Very small sample size: {len(df)} geographies")
-        recommendations.append("💡 Try a more granular geography grouping, if available")
+        issues.append(f"Very small sample size: {len(df)} geographies")
+        recommendations.append("Try a more granular geography grouping, if available")
     return issues, recommendations
 
 
@@ -2045,7 +2045,7 @@ def _render_mcmc_diagnostics(bayes: dict, trace) -> None:
         st.dataframe(styled_summary, width="stretch")
         if diag["n_divergences"]:
             st.caption(
-                f"⚠️ {diag['n_divergences']} divergent transition(s) occurred during sampling. "
+                f"{diag['n_divergences']} divergent transition(s) occurred during sampling. "
                 "Divergences aren't tied to a specific parameter row the way R-hat/ESS/MCSE are, "
                 "so they aren't reflected in the highlighting above — see the Divergences card and "
                 "warning above the table instead."
@@ -2059,7 +2059,7 @@ def _render_mcmc_diagnostics(bayes: dict, trace) -> None:
 def render_experiment_record():
     """Stage 4 UI: identity, stage statuses, design freeze, planned-vs-analysed, export."""
     rec = _experiment_record()
-    with st.expander("🧪 Experiment record & design freeze", expanded=False):
+    with st.expander("Experiment record & design freeze", expanded=False):
         st.markdown("**Open local experiment record**")
         st.caption(
             "Load a previously exported JSON record to review its frozen design and audit "
@@ -2071,7 +2071,7 @@ def render_experiment_record():
             key="load_experiment_record_uploader",
         )
         if st.button(
-            "📂 Load experiment record",
+            "Load experiment record",
             key="load_experiment_record_btn",
             disabled=_record_upload is None,
         ):
@@ -2152,7 +2152,7 @@ def render_experiment_record():
             and not _approval_inputs_stale
         )
         if st.button(
-            "🧊 Freeze approved design",
+            "Freeze approved design",
             key="freeze_design_btn",
             disabled=not _can_freeze,
             help=(
@@ -2192,14 +2192,14 @@ def render_experiment_record():
                 + f". Active version: v{_cmp['version']}."
             )
             if _cmp["matches"]:
-                st.success("✅ Analysed periods match the frozen design.")
+                st.success("Analysed periods match the frozen design.")
             else:
-                st.warning("⚠️ Analysed periods differ from the frozen design:")
+                st.warning("Analysed periods differ from the frozen design:")
                 for diff in _cmp["differences"]:
                     st.caption(f"- {diff}")
             if _cmp.get("design_changed_since_freeze"):
                 st.warning(
-                    "🟠 Live workflow inputs differ from the active frozen design. "
+                    "Live workflow inputs differ from the active frozen design. "
                     "Run the affected stages and freeze a new version; existing versions "
                     "remain unchanged."
                 )
@@ -2303,15 +2303,15 @@ if _nav_state.area == JourneyArea.ENTRY:
     st.subheader("What would you like to do?")
     _entry_cols = st.columns(3)
     with _entry_cols[0]:
-        if st.button("📝 Plan a new geo test", width="stretch", type="primary"):
+        if st.button("Plan a new geo test", width="stretch", type="primary"):
             set_navigation_state(_nav_state.with_area(JourneyArea.PLAN))
             st.rerun()
     with _entry_cols[1]:
-        if st.button("📊 Analyse a completed geo test", width="stretch"):
+        if st.button("Analyse a completed geo test", width="stretch"):
             set_navigation_state(_nav_state.with_area(JourneyArea.EVALUATE))
             st.rerun()
     with _entry_cols[2]:
-        if st.button("📂 Open a saved experiment", width="stretch"):
+        if st.button("Open a saved experiment", width="stretch"):
             st.session_state["_show_entry_experiment_loader"] = True
             st.rerun()
 
@@ -2332,7 +2332,7 @@ if _nav_state.area == JourneyArea.ENTRY:
             "Experiment record JSON", type=["json"], key="entry_load_experiment_record_uploader"
         )
         if st.button(
-            "📂 Load experiment record",
+            "Load experiment record",
             key="entry_load_experiment_record_btn",
             disabled=_entry_record_upload is None,
         ):
@@ -2541,7 +2541,7 @@ else:
         or kpi_pattern_date_range is None
     ):
         st.info(
-            "📂 Upload an aggregated KPI file and complete the selections in the sidebar to continue."
+            "Upload an aggregated KPI file and complete the selections in the sidebar to continue."
         )
         st.stop()
 
@@ -2718,11 +2718,7 @@ validation_issues, recommendations = validate_data(
     agg_df, active_features, geo_col=geo_col, market=market, level=geography_level
 )
 issue_severity = (
-    "🔴 High"
-    if len(validation_issues) > 3
-    else "🟡 Medium"
-    if len(validation_issues) > 0
-    else "🟢 None"
+    "High" if len(validation_issues) > 3 else "Medium" if len(validation_issues) > 0 else "None"
 )
 
 # =============================================================================
@@ -2808,7 +2804,7 @@ if _nav_state.area == JourneyArea.PLAN:
             args=(_nav_state.advance_plan().plan_step,),
         )
     with _plan_nav_cols[2]:
-        st.button("🏠 Start over", key="_plan_home_btn", on_click=_go_to_entry)
+        st.button("Start over", key="_plan_home_btn", on_click=_go_to_entry)
 
     _active_slots = {
         PlanStep.REGIONS: frozenset({"tab1"}),
@@ -2821,14 +2817,14 @@ elif _nav_state.area == JourneyArea.EVALUATE:
     st.markdown("### Analyse a completed geo test")
     _evaluate_home_col, _evaluate_toggle_col = st.columns([1, 3])
     with _evaluate_home_col:
-        st.button("🏠 Start over", key="_evaluate_home_btn", on_click=_go_to_entry)
+        st.button("Start over", key="_evaluate_home_btn", on_click=_go_to_entry)
     _active_slots = frozenset({"tab7"})
     _show_advanced_uncertainty = bool(st.session_state.get("_show_advanced_uncertainty", False))
     with _evaluate_toggle_col:
         _advanced_uncertainty_label = (
-            "🔬 Hide advanced uncertainty analysis"
+            "Hide advanced uncertainty analysis"
             if _show_advanced_uncertainty
-            else "🔬 Run advanced uncertainty analysis"
+            else "Run advanced uncertainty analysis"
         )
         st.button(
             _advanced_uncertainty_label,
@@ -2894,7 +2890,7 @@ def render_structural_matching_tab():
     # Matching setup
     # ------------------------------------------------------------
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    st.subheader("🧩 MATCHING SETUP")
+    st.subheader("Matching setup")
     setup_mode = st.radio(
         "Setup Mode",
         [
@@ -3269,7 +3265,7 @@ def render_structural_matching_tab():
     # ------------------------------------------------------------
     # Sidebar strategy parameters (keep in sidebar — do NOT move)
     # ------------------------------------------------------------
-    with st.sidebar, st.expander("⚙️ Advanced matching settings", expanded=False):
+    with st.sidebar, st.expander("Advanced matching settings", expanded=False):
         st.caption("Method, search effort and feature weighting. Defaults are safe to leave as-is.")
         force_1to1 = st.checkbox("Force 1-to-1 Match Ratio", value=False)
 
@@ -3314,12 +3310,12 @@ def render_structural_matching_tab():
 
         st.write("---")
         if not st.session_state.get("kpi_pattern_mode"):
-            st.caption(f"📊 **{len(active_features)} numeric features** available for weighting")
+            st.caption(f"**{len(active_features)} numeric features** available for weighting")
             if "current_weights" not in st.session_state:
                 st.session_state.current_weights = {f: 1 for f in active_features}
             preset_col1, preset_col2 = st.columns(2)
             with preset_col1:
-                if st.button("🗑️ Reset All Weights to 1", width="stretch", key="reset_all_weights"):
+                if st.button("Reset All Weights to 1", width="stretch", key="reset_all_weights"):
                     for f in active_features:
                         st.session_state.current_weights[f] = 1
                     st.session_state.w_reset += 1
@@ -3331,7 +3327,7 @@ def render_structural_matching_tab():
             weights = {}
             with st.expander("Demographic Importance Weights", expanded=False):
                 search_term = st.text_input(
-                    "🔍 Filter features",
+                    "Filter features",
                     placeholder="Type to search...",
                     key=f"weight_search_{st.session_state.w_reset}",
                 )
@@ -3371,7 +3367,7 @@ def render_structural_matching_tab():
             non_default_weights = {k: v for k, v in weights.items() if v != 1}
             if non_default_weights:
                 with st.expander(
-                    f"⚡ Active Overrides ({len(non_default_weights)} features)", expanded=False
+                    f"Active overrides ({len(non_default_weights)} features)", expanded=False
                 ):
                     for feature, weight in list(non_default_weights.items())[:10]:
                         st.caption(f"**{feature}**: weight = {weight}")
@@ -3390,7 +3386,7 @@ def render_structural_matching_tab():
         "<p class='small-muted'>Tip: start with equal weights, then increase business-critical features if needed.</p>",
         unsafe_allow_html=True,
     )
-    run_clicked = st.button("▶ Run Match Analysis", width="stretch", type="primary")
+    run_clicked = st.button("Run Match Analysis", width="stretch", type="primary")
 
     if run_clicked:
         if not active_features:
@@ -3519,7 +3515,7 @@ def render_structural_matching_tab():
                 if constraint_conflicts:
                     for _conflict in constraint_conflicts:
                         st.error(
-                            f"🚫 Invalid constraints: **{_conflict.region}** is assigned to "
+                            f"Invalid constraints: **{_conflict.region}** is assigned to "
                             f"multiple constraint fields: {', '.join(_conflict.fields)}. "
                             "A region can only be assigned to one rule — remove the "
                             "overlapping assignment before running."
@@ -3873,7 +3869,7 @@ def render_structural_matching_tab():
         e_m = run_metrics["test_means"]
         c_m = run_metrics["control_means"]
         weighted_contributions = run_metrics["weighted_contributions"]
-        st.subheader("🔍 MATCHING RESULTS")
+        st.subheader("Matching results")
 
         setup_changed = matching_setup_changed_since_last_run(
             run_snapshot, market, geography_level, match_mode, test_geos, weights
@@ -3903,13 +3899,13 @@ def render_structural_matching_tab():
 
         tab_choice = st.radio(
             "Select View",
-            ["📊 Summary", "📈 Diagnostics", "💾 Export"],
+            ["Summary", "Diagnostics", "Export"],
             horizontal=True,
             key="tab_selector_main",
             label_visibility="collapsed",
         )
 
-        if tab_choice == "📊 Summary":
+        if tab_choice == "Summary":
             experiment_pop_pct = run_metrics.get("test_population_share")
             control_pop_pct = run_metrics.get("control_population_share")
             if experiment_pop_pct is None or control_pop_pct is None:
@@ -4068,7 +4064,7 @@ def render_structural_matching_tab():
                 )
                 st.plotly_chart(fig, width="stretch")
 
-        elif tab_choice == "📈 Diagnostics":
+        elif tab_choice == "Diagnostics":
             st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
             if (
                 not force_1to1
@@ -4200,11 +4196,11 @@ def render_structural_matching_tab():
             else:
                 st.info("No numeric features available for diagnostics.")
 
-        elif tab_choice == "💾 Export":
+        elif tab_choice == "Export":
             st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
             _kpi_export_mode = st.session_state.get("kpi_pattern_mode", False)
             if _kpi_export_mode:
-                with st.expander("📋 What will be exported?", expanded=True):
+                with st.expander("What will be exported?", expanded=True):
                     st.markdown(f"""
                     The export lists every **{geo_col}** with its test/control assignment:
 
@@ -4213,7 +4209,7 @@ def render_structural_matching_tab():
                     - **Control Geography** — Yes if assigned to the control group
                     """)
             else:
-                with st.expander("📋 What will be exported?", expanded=True):
+                with st.expander("What will be exported?", expanded=True):
                     st.markdown(f"""
                     The export lists every Adobe geography with its **{geo_col}** grouping and test/control assignment:
 
@@ -4225,7 +4221,7 @@ def render_structural_matching_tab():
                     """)
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("📥 Export to Excel", width="stretch", type="primary"):
+                if st.button("Export to Excel", width="stretch", type="primary"):
                     try:
                         _test_geos = set(
                             st.session_state.test_df[geo_col].astype(str).str.strip().tolist()
@@ -4291,7 +4287,7 @@ def render_structural_matching_tab():
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
                         st.success(
-                            f"✅ Export ready — {len(_lookup)} geographies, {_n_test} test, {_n_ctrl} control."
+                            f"Export ready — {len(_lookup)} geographies, {_n_test} test, {_n_ctrl} control."
                         )
                     except Exception as e:
                         st.error(
@@ -4300,7 +4296,7 @@ def render_structural_matching_tab():
                         with st.expander("Technical details"):
                             st.code(f"{type(e).__name__}: {e}")
             with col2:
-                if st.button("📋 Copy Summary to Clipboard", width="stretch"):
+                if st.button("Copy Summary to Clipboard", width="stretch"):
                     _summary_test_share_pct = experiment_pop / eligible_market_pop * 100
                     _summary_control_share_pct = control_pop / eligible_market_pop * 100
                     # Plain-language label, not the internal strategy/algorithm name — the
@@ -4788,7 +4784,7 @@ def render_time_series_validation(mode: str):
                 "Live changes remain visible and will be recorded by the evaluation run."
             )
         if st.button(
-            f"📌 Use active frozen design (v{_active_frozen['version']})",
+            f"Use active frozen design (v{_active_frozen['version']})",
             key="evaluate_inherit_frozen_design",
         ):
             _frozen_design = dict(_active_frozen.get("design") or {})
@@ -4912,7 +4908,7 @@ def render_time_series_validation(mode: str):
         )
 
     if uploaded_file is None and shared_kpi_dataset is None:
-        st.info("📂 Please upload a historical KPI Excel file to begin.")
+        st.info("Please upload a historical KPI Excel file to begin.")
         return
 
     # ---- Peek at columns to detect file layout: simple 2-column (region, metric) vs
@@ -5051,7 +5047,7 @@ def render_time_series_validation(mode: str):
     st.markdown(
         """
 <div style="background:#E6F7F5; border-left:4px solid #0F766E; border-radius:6px; padding:0.75rem 1rem 0.25rem 1rem; margin-bottom:0.75rem;">
-<span style="font-weight:600; color:#0F766E; font-size:1rem;">📊 Select KPI</span><br>
+<span style="font-weight:600; color:#0F766E; font-size:1rem;">Select KPI</span><br>
 <span style="color:#4B5563; font-size:0.875rem;">Choose the metric you want to model. This drives all validation, placebo, and uplift results.</span>
 </div>
 """,
@@ -5098,7 +5094,7 @@ def render_time_series_validation(mode: str):
                     )
                 )
             except Exception as e:
-                st.warning(f"⚠️ Could not load the region mapping table: {e}")
+                st.warning(f"Could not load the region mapping table: {e}")
                 return None
         _valid_regions = _current_candidate_universe(agg_df, geo_col)
         st.session_state.kpi_candidate_universe = sorted(str(r) for r in _valid_regions)
@@ -5390,7 +5386,7 @@ def render_time_series_validation(mode: str):
         )
         if insufficient_pre_period:
             st.warning(
-                "⚠️ Not enough pre-period observations for the selected minimum training period and "
+                "Not enough pre-period observations for the selected minimum training period and "
                 "validation window. Choose a longer pre-period, shorter validation window, or switch to "
                 "weekly aggregation."
             )
@@ -5546,7 +5542,7 @@ def render_time_series_validation(mode: str):
         insufficient_pre_period = pre_periods_eval < (min_training_periods + placebo_length_periods)
         if insufficient_pre_period:
             st.warning(
-                "⚠️ Not enough pre-period observations for the selected minimum training period and "
+                "Not enough pre-period observations for the selected minimum training period and "
                 "validation window. Choose a longer pre-period, shorter validation window, or switch to "
                 "weekly aggregation."
             )
@@ -5657,13 +5653,13 @@ def render_time_series_validation(mode: str):
         _est_folds = hist_periods - min_training_periods - _horizon_for_check + 1
         if hist_periods < 84:
             st.warning(
-                "⚠️ Daily data with fewer than around 12 weeks of pre-period history may produce unstable "
+                "Daily data with fewer than around 12 weeks of pre-period history may produce unstable "
                 "validation and placebo results. Treat model reliability risk, rolling-origin metrics and placebo "
                 "ranges with caution."
             )
         elif _est_folds < 5:
             st.warning(
-                "⚠️ With the current minimum training period and window length, rolling-origin validation is "
+                "With the current minimum training period and window length, rolling-origin validation is "
                 "likely to produce very few folds. Treat model reliability risk, rolling-origin metrics and placebo "
                 "ranges with caution, or consider a longer pre-period / shorter window."
             )
@@ -5736,7 +5732,7 @@ def render_time_series_validation(mode: str):
     _ts_test_guard_override_key = f"{mode_prefix}_test_exclusion_override"
     if _ts_test_guard_triggered:
         st.warning(
-            f"⚠️ {len(_ts_excluded_test_dates)} of {len(_ts_planned_test_dates)} planned test "
+            f"{len(_ts_excluded_test_dates)} of {len(_ts_planned_test_dates)} planned test "
             f"period(s) ({_ts_test_exclusion_share:.0%}) are excluded as tracking-outage/"
             "data-quality periods. Uplift would be estimated only over the remaining "
             "analysed periods."
@@ -5788,7 +5784,7 @@ def render_time_series_validation(mode: str):
         _quality_blockers = _quality_blocking_errors()
         if _quality_blockers:
             for _qb in _quality_blockers:
-                st.error(f"🚫 {_qb}")
+                st.error(_qb)
             st.session_state.validation_triggered = False
             st.stop()
         if (
@@ -6322,7 +6318,7 @@ def render_time_series_validation(mode: str):
             ):
                 if _lag_drop_meta.get("lag_drop_pct", 0) > 20:
                     st.warning(
-                        f"⚠️ Daily 7-day lagged controls require matching dates exactly 7 calendar days earlier. "
+                        f"Daily 7-day lagged controls require matching dates exactly 7 calendar days earlier. "
                         f"{_lag_drop_meta['rows_dropped_due_to_lag']} of {_lag_drop_meta['rows_before_lag_drop']} rows "
                         f"({_lag_drop_meta['lag_drop_pct']:.1f}%) were dropped because those lag dates were missing. "
                         f"Check whether your daily data has gaps."
@@ -6764,14 +6760,14 @@ if "tab2" in _active_slots:
     render_status_summary(_check_design_rows)
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
 
-    st.subheader("🔍 Validate Test Design")
+    st.subheader("Validate Test Design")
     st.caption(
         "Validate whether your selected control regions can reliably predict the test regions before running a live geo-test."
     )
     render_time_series_validation("Design")
 
 if "tab7" in _active_slots:
-    st.subheader("📊 Measure Test Impact")
+    st.subheader("Measure Test Impact")
     st.caption(
         "Estimate the uplift from your completed geo test and compare results against expected historical variation."
     )
@@ -6781,7 +6777,7 @@ if "tab7" in _active_slots:
 # TAB 4: BAYESIAN TIME-BASED REGRESSION
 # =============================================================================
 if "tab7" in _active_slots and _show_advanced_uncertainty:
-    st.subheader("🧠 Bayesian Time-Based Regression (TBR)")
+    st.subheader("Bayesian Time-Based Regression (TBR)")
     st.caption(
         "Run a Bayesian time-based regression on the results from the Measure Test Impact tab."
     )
@@ -7319,7 +7315,7 @@ if "tab7" in _active_slots and _show_advanced_uncertainty:
             ):
                 if _bayes_lag_drop_meta.get("lag_drop_pct", 0) > 20:
                     st.warning(
-                        f"⚠️ Daily 7-day lagged controls require matching dates exactly 7 calendar days earlier. "
+                        f"Daily 7-day lagged controls require matching dates exactly 7 calendar days earlier. "
                         f"{_bayes_lag_drop_meta['rows_dropped_due_to_lag']} of {_bayes_lag_drop_meta['rows_before_lag_drop']} rows "
                         f"({_bayes_lag_drop_meta['lag_drop_pct']:.1f}%) were dropped because those lag dates were missing. "
                         f"Check whether your daily data has gaps."
@@ -7455,7 +7451,7 @@ with st.sidebar:
         for issue in validation_issues[:5]:
             st.caption(issue)
         if recommendations:
-            with st.expander("💡 Recommendations", expanded=False):
+            with st.expander("Recommendations", expanded=False):
                 for rec in recommendations[:5]:
                     st.caption(rec)
     else:
