@@ -198,9 +198,9 @@ def main():
     print(f"  App baseline commit (last change to geotestmatch.py): {_app_baseline_commit()}")
     print(f"  Current commit:      {_current_commit()}")
     print("  Files to write:")
-    for name in ["app_tab_labels", "bundled_workbook_structure", "available_markets"]:
+    for name in ["app_navigation_labels", "bundled_workbook_structure", "available_markets"]:
         print(f"    {GOLDEN_DIR / name}.json")
-    update_app_tab_labels()
+    update_app_navigation_labels()
     update_bundled_workbook_structure()
     update_available_markets()
     print("Done.")
