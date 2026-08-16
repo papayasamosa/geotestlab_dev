@@ -131,7 +131,14 @@ def update_available_markets():
     """Capture the available market options from the live app."""
     from streamlit.testing.v1 import AppTest
 
+    from geotestlab.ui import JourneyArea, NavigationState, PlanStep
+
     app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+    # The sidebar only renders past the task-led entry screen (see
+    # geotestlab/ui/navigation.py); seed straight into the first Plan step.
+    app.session_state["ui_navigation_state"] = NavigationState(
+        area=JourneyArea.PLAN, plan_step=PlanStep.REGIONS
+    )
     app.run(timeout=180)
 
     market_select = [s for s in app.sidebar.selectbox if s.label == "Market"]
