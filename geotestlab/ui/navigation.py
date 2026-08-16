@@ -1,10 +1,11 @@
 """Task-led navigation state for the target information architecture.
 
 This module defines the target navigation model (see the UX overhaul
-programme, section 6): an entry screen with three choices, a five-step
+programme, section 6): an entry screen with three choices, a four-step
 ``Plan a new geo test`` journey and a two-step ``Analyse a completed geo
 test`` journey. PR2 wired this into ``geotestmatch.py`` in place of the
-former eight-tab navigation; PR4 merged the validation/power steps.
+former eight-tab navigation; PR4 merged the validation/power steps and PR5
+merged the media/effect-plausibility steps.
 """
 
 from __future__ import annotations
@@ -28,15 +29,13 @@ class PlanStep(Enum):
     PR4 merged the former ``VALIDATE_DESIGN``/``POWER_SIZING`` steps into one
     ``CHECK_DESIGN`` step (historical validation and statistical power are
     rendered together, though their underlying computations and statuses
-    remain separate). A later PR may similarly merge ``MEDIA_DELIVERY``/
-    ``EFFECT_PLAUSIBILITY`` into one "Media and expected impact" step once
-    that content is unified (see the UX overhaul programme, section 6.2/PR5).
+    remain separate). PR5 similarly merged ``MEDIA_DELIVERY``/
+    ``EFFECT_PLAUSIBILITY`` into one ``MEDIA_AND_IMPACT`` step.
     """
 
     REGIONS = "regions"
     CHECK_DESIGN = "check_design"
-    MEDIA_DELIVERY = "media_delivery"
-    EFFECT_PLAUSIBILITY = "effect_plausibility"
+    MEDIA_AND_IMPACT = "media_and_impact"
     REVIEW = "review"
 
 
@@ -50,8 +49,7 @@ class EvaluateStep(Enum):
 PLAN_STEP_ORDER: Final[tuple[PlanStep, ...]] = (
     PlanStep.REGIONS,
     PlanStep.CHECK_DESIGN,
-    PlanStep.MEDIA_DELIVERY,
-    PlanStep.EFFECT_PLAUSIBILITY,
+    PlanStep.MEDIA_AND_IMPACT,
     PlanStep.REVIEW,
 )
 
@@ -63,8 +61,7 @@ EVALUATE_STEP_ORDER: Final[tuple[EvaluateStep, ...]] = (
 PLAN_STEP_TITLES: Final[dict[PlanStep, str]] = {
     PlanStep.REGIONS: "Choose regions",
     PlanStep.CHECK_DESIGN: "Check design",
-    PlanStep.MEDIA_DELIVERY: "Media plan",
-    PlanStep.EFFECT_PLAUSIBILITY: "Expected impact",
+    PlanStep.MEDIA_AND_IMPACT: "Media and expected impact",
     PlanStep.REVIEW: "Review and approve",
 }
 

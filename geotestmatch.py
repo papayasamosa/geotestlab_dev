@@ -2811,8 +2811,7 @@ if _nav_state.area == JourneyArea.PLAN:
     _active_slots = {
         PlanStep.REGIONS: frozenset({"tab1"}),
         PlanStep.CHECK_DESIGN: frozenset({"tab2", "tab3"}),
-        PlanStep.MEDIA_DELIVERY: frozenset({"tab4"}),
-        PlanStep.EFFECT_PLAUSIBILITY: frozenset({"tab5"}),
+        PlanStep.MEDIA_AND_IMPACT: frozenset({"tab4", "tab5"}),
         PlanStep.REVIEW: frozenset({"tab6"}),
     }[_nav_state.plan_step]
 
@@ -7393,6 +7392,30 @@ if "tab3" in _active_slots:
     )
 
 if "tab4" in _active_slots:
+    st.markdown("## Media and expected impact")
+    st.caption(
+        "Two separate questions, assessed together: can the planned budget deliver the "
+        "required exposure, and is there evidence the expected KPI effect meets the "
+        "minimum detectable effect? Neither result overrides the other."
+    )
+    _media_impact_delivery_done = st.session_state.get("media_delivery_result") is not None
+    _media_impact_effect_done = st.session_state.get("effect_plausibility_result") is not None
+    render_status_summary(
+        [
+            (
+                "Media plan",
+                "Assessed" if _media_impact_delivery_done else "Not assessed yet",
+                StatusTone.GOOD if _media_impact_delivery_done else StatusTone.NEUTRAL,
+            ),
+            (
+                "Expected impact",
+                "Assessed" if _media_impact_effect_done else "Not assessed yet",
+                StatusTone.GOOD if _media_impact_effect_done else StatusTone.NEUTRAL,
+            ),
+        ]
+    )
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+
     render_media_delivery_tab()
 
 if "tab5" in _active_slots:

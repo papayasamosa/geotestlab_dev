@@ -150,8 +150,7 @@ class TestLiveAppStartup:
         assert list(plan_step_radio.options) == [
             "Choose regions",
             "Check design",
-            "Media plan",
-            "Expected impact",
+            "Media and expected impact",
             "Review and approve",
         ]
 
