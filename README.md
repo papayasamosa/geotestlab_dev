@@ -119,19 +119,20 @@ sensitive business data.
 The app opens on a task-led entry screen with three choices: **Plan a new
 geo test**, **Analyse a completed geo test**, or **Open a saved experiment**.
 
-**Plan a new geo test** is a six-step guided journey:
+**Plan a new geo test** is a five-step guided journey:
 
 1. **Choose regions** — select test geographies and match control regions
    using structural (demographic) similarity or KPI-pattern similarity.
-2. **Check design quality** — validate the proposed design against historical
-   KPI data using regularised regression and rolling-origin cross-validation.
-3. **Can we detect the effect?** — run the explicit production power contract
-   and compare typed candidate shares, durations, MDE and support status.
-4. **Media plan** — assess Meta platform-profile delivery inputs, thresholds
+2. **Check design** — historical validation (regularised regression,
+   rolling-origin cross-validation) and statistical power (the production
+   power contract, candidate shares/durations, MDE and support status)
+   shown together as one step; their computations and statuses stay
+   separate internally.
+3. **Media plan** — assess Meta platform-profile delivery inputs, thresholds
    and provenance.
-5. **Expected impact** — record evidence quality and low/central/high
+4. **Expected impact** — record evidence quality and low/central/high
    scenarios against MDE; the evidence-quality policy remains pending.
-6. **Review and approve** — compare upstream candidate designs under an
+5. **Review and approve** — compare upstream candidate designs under an
    explicit objective, retain limiting factors, and freeze the approved design.
 
 **Analyse a completed geo test** covers Results (estimate observed uplift for
@@ -141,9 +142,9 @@ action that runs Bayesian Time-Based Regression with MCMC diagnostics.
 Back/Next buttons and a step selector move through the Plan journey without
 losing state; a compact workflow-status summary (not a raw table) shows
 current/stale stage status and the next recommended action once past the
-entry screen. A later PR is expected to consolidate steps 2–3 and 4–5 into
-combined "Check design" and "Media and expected impact" steps once their
-underlying content is unified (see `docs/product/PRD.md` section 6.2).
+entry screen. A later PR is expected to consolidate the Media plan and
+Expected impact steps once their underlying content is unified (see
+`docs/product/PRD.md` section 6.2).
 
 The target product model (see `docs/product/PRD.md`) keeps matching,
 counterfactual validation, power, media delivery, effect plausibility, impact

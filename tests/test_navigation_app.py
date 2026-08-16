@@ -22,8 +22,7 @@ APP_PATH = str(Path(__file__).resolve().parent.parent / "geotestmatch.py")
 
 EXPECTED_PLAN_STEP_LABELS = [
     "Choose regions",
-    "Check design quality",
-    "Can we detect the effect?",
+    "Check design",
     "Media plan",
     "Expected impact",
     "Review and approve",
@@ -161,11 +160,11 @@ def test_open_saved_experiment_shows_uploader_on_the_entry_screen():
 
 def test_navigation_state_round_trips_through_session_state():
     app = _entry_app()
-    seed_plan_step(app, PlanStep.POWER_SIZING)
+    seed_plan_step(app, PlanStep.CHECK_DESIGN)
     app.run(timeout=RUN_TIMEOUT)
 
     state = app.session_state["ui_navigation_state"]
-    assert state == NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.POWER_SIZING)
+    assert state == NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.CHECK_DESIGN)
 
     seed_evaluate(app)
     app.run(timeout=RUN_TIMEOUT)

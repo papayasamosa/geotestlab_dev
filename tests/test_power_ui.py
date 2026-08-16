@@ -160,7 +160,7 @@ def test_power_region_group_fallback_and_scenario_results(monkeypatch):
             recommendation_blockers=("power unsupported",),
         ),
     )
-    result = SimpleNamespace(candidates=candidates)
+    result = SimpleNamespace(candidates=candidates, objective=None, selected=None)
     monkeypatch.setattr(power_ui.st, "dataframe", lambda *args, **kwargs: None)
     monkeypatch.setattr(power_ui.st, "expander", lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(power_ui.st, "write", lambda *args, **kwargs: None)
@@ -168,6 +168,8 @@ def test_power_region_group_fallback_and_scenario_results(monkeypatch):
     monkeypatch.setattr(power_ui.st, "caption", lambda *args, **kwargs: None)
     monkeypatch.setattr(power_ui.st, "error", lambda *args, **kwargs: None)
     monkeypatch.setattr(power_ui.st, "warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(power_ui.st, "success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(power_ui.st, "info", lambda *args, **kwargs: None)
 
     power_ui._render_scenario_results(result)
 

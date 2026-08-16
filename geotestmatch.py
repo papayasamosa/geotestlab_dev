@@ -2726,12 +2726,15 @@ issue_severity = (
 # =============================================================================
 # Main app – task-led navigation shell (Plan / Evaluate journeys)
 # =============================================================================
-# ``_active_slot`` identifies which of the eight original tab bodies below
+# ``_active_slots`` identifies which of the eight original tab bodies below
 # should render this rerun; the bodies themselves are unchanged (each former
-# ``with tabN:`` block became ``if _active_slot == "tabN":``). ``tab8``
-# (Bayesian TBR) is additionally gated by ``_show_advanced_uncertainty``: it
-# is reachable as an optional action from Results rather than its own step.
-_active_slot: str | None = None
+# ``with tabN:`` block became ``if "tabN" in _active_slots:``). PR4 merged
+# the Validate Test Design and Power & Test Sizing steps into one "Check
+# design" step, so that step activates both tab2 and tab3 together — hence a
+# set rather than a single slot. ``tab8`` (Bayesian TBR) is additionally
+# gated by ``_show_advanced_uncertainty``: it is reachable as an optional
+# action from Results rather than its own step.
+_active_slots: frozenset[str] = frozenset()
 _show_advanced_uncertainty = False
 _PLAN_STEP_RADIO_KEY = "_plan_step_radio"
 
@@ -2805,13 +2808,12 @@ if _nav_state.area == JourneyArea.PLAN:
     with _plan_nav_cols[2]:
         st.button("🏠 Start over", key="_plan_home_btn", on_click=_go_to_entry)
 
-    _active_slot = {
-        PlanStep.REGIONS: "tab1",
-        PlanStep.VALIDATE_DESIGN: "tab2",
-        PlanStep.POWER_SIZING: "tab3",
-        PlanStep.MEDIA_DELIVERY: "tab4",
-        PlanStep.EFFECT_PLAUSIBILITY: "tab5",
-        PlanStep.REVIEW: "tab6",
+    _active_slots = {
+        PlanStep.REGIONS: frozenset({"tab1"}),
+        PlanStep.CHECK_DESIGN: frozenset({"tab2", "tab3"}),
+        PlanStep.MEDIA_DELIVERY: frozenset({"tab4"}),
+        PlanStep.EFFECT_PLAUSIBILITY: frozenset({"tab5"}),
+        PlanStep.REVIEW: frozenset({"tab6"}),
     }[_nav_state.plan_step]
 
 elif _nav_state.area == JourneyArea.EVALUATE:
@@ -2819,7 +2821,7 @@ elif _nav_state.area == JourneyArea.EVALUATE:
     _evaluate_home_col, _evaluate_toggle_col = st.columns([1, 3])
     with _evaluate_home_col:
         st.button("🏠 Start over", key="_evaluate_home_btn", on_click=_go_to_entry)
-    _active_slot = "tab7"
+    _active_slots = frozenset({"tab7"})
     _show_advanced_uncertainty = bool(st.session_state.get("_show_advanced_uncertainty", False))
     with _evaluate_toggle_col:
         _advanced_uncertainty_label = (
@@ -4314,7 +4316,7 @@ def render_structural_matching_tab():
 # =============================================================================
 # TAB 1: MATCHING SETUP
 # =============================================================================
-if _active_slot == "tab1":
+if "tab1" in _active_slots:
     render_structural_matching_tab()
 
 # =============================================================================
@@ -6732,14 +6734,42 @@ def render_time_series_validation(mode: str):
                     )
 
 
-if _active_slot == "tab2":
+if "tab2" in _active_slots:
+    st.markdown("## Check design")
+    st.caption(
+        "Two separate questions, assessed together: does the historical data support a "
+        "credible counterfactual, and can this design detect your target effect? Neither "
+        "result overrides the other."
+    )
+    _check_design_validation_done = st.session_state.get("validation_results") is not None
+    _check_design_power_result = st.session_state.get("production_power_result")
+    _check_design_rows = [
+        (
+            "Historical validation",
+            "Complete" if _check_design_validation_done else "Not run yet",
+            StatusTone.GOOD if _check_design_validation_done else StatusTone.NEUTRAL,
+        ),
+    ]
+    if _check_design_power_result is not None and _check_design_power_result.mde is not None:
+        _check_design_rows.append(
+            (
+                "Minimum detectable effect",
+                format_percentage(_check_design_power_result.mde),
+                StatusTone.NEUTRAL,
+            )
+        )
+    else:
+        _check_design_rows.append(("Statistical power", "Not run yet", StatusTone.NEUTRAL))
+    render_status_summary(_check_design_rows)
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+
     st.subheader("🔍 Validate Test Design")
     st.caption(
         "Validate whether your selected control regions can reliably predict the test regions before running a live geo-test."
     )
     render_time_series_validation("Design")
 
-if _active_slot == "tab7":
+if "tab7" in _active_slots:
     st.subheader("📊 Measure Test Impact")
     st.caption(
         "Estimate the uplift from your completed geo test and compare results against expected historical variation."
@@ -6749,7 +6779,7 @@ if _active_slot == "tab7":
 # =============================================================================
 # TAB 4: BAYESIAN TIME-BASED REGRESSION
 # =============================================================================
-if _active_slot == "tab7" and _show_advanced_uncertainty:
+if "tab7" in _active_slots and _show_advanced_uncertainty:
     st.subheader("🧠 Bayesian Time-Based Regression (TBR)")
     st.caption(
         "Run a Bayesian time-based regression on the results from the Measure Test Impact tab."
@@ -7356,19 +7386,19 @@ if _active_slot == "tab7" and _show_advanced_uncertainty:
                 """)
 
 
-if _active_slot == "tab3":
+if "tab3" in _active_slots:
     render_power_test_sizing_tab(
         experiment_record_factory=_experiment_record,
         save_experiment_record=_save_experiment_record,
     )
 
-if _active_slot == "tab4":
+if "tab4" in _active_slots:
     render_media_delivery_tab()
 
-if _active_slot == "tab5":
+if "tab5" in _active_slots:
     render_effect_plausibility_tab()
 
-if _active_slot == "tab6":
+if "tab6" in _active_slots:
     render_design_recommendation_tab()
 
 

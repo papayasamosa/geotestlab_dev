@@ -87,7 +87,7 @@ def _record(app: AppTest) -> dict:
 def _manual_match_then_design(app: AppTest) -> None:
     """Match on Region Matching, then switch to Validate Test Design's uploader."""
     _manual_match(app)
-    seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+    seed_plan_step(app, PlanStep.CHECK_DESIGN)
     app.run(timeout=RUN_TIMEOUT)
 
 

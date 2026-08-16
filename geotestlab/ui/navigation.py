@@ -1,10 +1,10 @@
 """Task-led navigation state for the target information architecture.
 
 This module defines the target navigation model (see the UX overhaul
-programme, section 6): an entry screen with three choices, a six-step
+programme, section 6): an entry screen with three choices, a five-step
 ``Plan a new geo test`` journey and a two-step ``Analyse a completed geo
-test`` journey. PR2 wires this into ``geotestmatch.py`` in place of the
-former eight-tab navigation.
+test`` journey. PR2 wired this into ``geotestmatch.py`` in place of the
+former eight-tab navigation; PR4 merged the validation/power steps.
 """
 
 from __future__ import annotations
@@ -25,18 +25,16 @@ class JourneyArea(Enum):
 class PlanStep(Enum):
     """The sequential stages of ``Plan a new geo test``.
 
-    PR2 wires these steps 1:1 onto the app's existing six planning-phase
-    tabs (Region Matching, Validate Test Design, Power & Test Sizing, Media
-    Delivery Feasibility, Effect Plausibility, Design Recommendation/Approve
-    Design). A later PR may consolidate ``VALIDATE_DESIGN``/``POWER_SIZING``
-    into one "Check design" step, and ``MEDIA_DELIVERY``/``EFFECT_PLAUSIBILITY``
-    into one "Media and expected impact" step, once that content is actually
-    merged (see the UX overhaul programme, section 6.2 and PR4/PR5).
+    PR4 merged the former ``VALIDATE_DESIGN``/``POWER_SIZING`` steps into one
+    ``CHECK_DESIGN`` step (historical validation and statistical power are
+    rendered together, though their underlying computations and statuses
+    remain separate). A later PR may similarly merge ``MEDIA_DELIVERY``/
+    ``EFFECT_PLAUSIBILITY`` into one "Media and expected impact" step once
+    that content is unified (see the UX overhaul programme, section 6.2/PR5).
     """
 
     REGIONS = "regions"
-    VALIDATE_DESIGN = "validate_design"
-    POWER_SIZING = "power_sizing"
+    CHECK_DESIGN = "check_design"
     MEDIA_DELIVERY = "media_delivery"
     EFFECT_PLAUSIBILITY = "effect_plausibility"
     REVIEW = "review"
@@ -51,8 +49,7 @@ class EvaluateStep(Enum):
 
 PLAN_STEP_ORDER: Final[tuple[PlanStep, ...]] = (
     PlanStep.REGIONS,
-    PlanStep.VALIDATE_DESIGN,
-    PlanStep.POWER_SIZING,
+    PlanStep.CHECK_DESIGN,
     PlanStep.MEDIA_DELIVERY,
     PlanStep.EFFECT_PLAUSIBILITY,
     PlanStep.REVIEW,
@@ -65,8 +62,7 @@ EVALUATE_STEP_ORDER: Final[tuple[EvaluateStep, ...]] = (
 
 PLAN_STEP_TITLES: Final[dict[PlanStep, str]] = {
     PlanStep.REGIONS: "Choose regions",
-    PlanStep.VALIDATE_DESIGN: "Check design quality",
-    PlanStep.POWER_SIZING: "Can we detect the effect?",
+    PlanStep.CHECK_DESIGN: "Check design",
     PlanStep.MEDIA_DELIVERY: "Media plan",
     PlanStep.EFFECT_PLAUSIBILITY: "Expected impact",
     PlanStep.REVIEW: "Review and approve",

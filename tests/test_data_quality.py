@@ -310,7 +310,7 @@ class TestQualityReportUI:
         # Matching happens on the Region Matching step; the design KPI
         # uploader lives on Validate Test Design — switch steps to reach it
         # (see tests.conftest.seed_plan_step).
-        seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+        seed_plan_step(app, PlanStep.CHECK_DESIGN)
         app.run(timeout=RUN_TIMEOUT)
         uploaders = [f for f in app.file_uploader if f.key.startswith("kpi_uploader_design_")]
         assert len(uploaders) == 1, (
