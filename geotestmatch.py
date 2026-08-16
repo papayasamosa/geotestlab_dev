@@ -7059,6 +7059,18 @@ if "tab7" in _active_slots and _show_advanced_uncertainty:
                 help="The interval within which the true uplift is expected to lie with 94% probability, including observation-level noise in the counterfactual. This is the primary readout for total impact.",
             )
 
+            # ---- MCMC Diagnostics (guarded: requires the posterior trace) ----
+            # Rendered immediately after the headline so a failed diagnostic
+            # warning is never buried below the chart and technical expanders.
+            _trace = st.session_state.get("bayesian_trace")
+            if _trace is None:
+                st.caption(
+                    "MCMC diagnostics are not available because the posterior trace is no "
+                    "longer in memory. Re-run the Bayesian model to regenerate them."
+                )
+            else:
+                _render_mcmc_diagnostics(bayes, _trace)
+
             # ---- Line chart ----
             # Pre-period: 94% HDI / credible interval around the fitted counterfactual mean (no observation noise).
             # Test/post period: 94% posterior predictive interval (includes observation-level noise) — the
@@ -7345,16 +7357,6 @@ if "tab7" in _active_slots and _show_advanced_uncertainty:
                     f"are shrunk more strongly toward zero. If {_bayes_lag_label} lagged controls are enabled, each region's lagged "
                     "term uses the same structural prior sigma as its same-period term."
                 )
-
-            # ---- MCMC Diagnostics (guarded: requires the posterior trace) ----
-            _trace = st.session_state.get("bayesian_trace")
-            if _trace is None:
-                st.caption(
-                    "MCMC diagnostics are not available because the posterior trace is no "
-                    "longer in memory. Re-run the Bayesian model to regenerate them."
-                )
-            else:
-                _render_mcmc_diagnostics(bayes, _trace)
 
         # ---- Bayesian interpretation ----
         if st.session_state.get("bayesian_interpretation_visible", False):
