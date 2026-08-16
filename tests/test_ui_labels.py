@@ -29,6 +29,7 @@ from geotestlab.ui.labels import (
     EVIDENCE_QUALITY_LABELS,
     EVIDENCE_TYPE_LABELS,
     FIT_METHOD_LABELS,
+    GENERIC_GATE_STATUS_LABELS,
     INPUT_PROVENANCE_LABELS,
     MARKET_SIZE_MEASURE_LABELS,
     RECOMMENDATION_OBJECTIVE_LABELS,
@@ -109,6 +110,25 @@ def test_every_market_size_measure_has_a_label():
 def test_every_fit_method_has_a_label():
     for name in (*FIT_METHOD_NAMES, FALLBACK_FIT_METHOD):
         assert name in FIT_METHOD_LABELS, f"missing fit-method label for {name!r}"
+
+
+def test_every_generic_gate_status_used_by_recommendation_ui_has_a_label():
+    # Not backed by a formal enum (see geotestlab/recommendation/ui.py), so
+    # this pins the known vocabulary directly rather than walking an enum.
+    for status in (
+        "not_evaluated",
+        "pass",
+        "supported",
+        "credible",
+        "valid",
+        "incomplete",
+        "blocked",
+        "not_feasible",
+        "stale",
+    ):
+        assert status in GENERIC_GATE_STATUS_LABELS, (
+            f"missing generic-gate-status label for {status!r}"
+        )
 
 
 def test_display_label_translates_an_enum_member():

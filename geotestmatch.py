@@ -2059,14 +2059,6 @@ def _render_mcmc_diagnostics(bayes: dict, trace) -> None:
 def render_experiment_record():
     """Stage 4 UI: identity, stage statuses, design freeze, planned-vs-analysed, export."""
     rec = _experiment_record()
-    _status_icon = {
-        "not_started": "⚪",
-        "planned": "🔵",
-        "in_progress": "🔄",
-        "completed": "🟢",
-        "stale": "🟠",
-        "not_applicable": "⚪",
-    }
     with st.expander("🧪 Experiment record & design freeze", expanded=False):
         st.markdown("**Open local experiment record**")
         st.caption(
@@ -2087,10 +2079,6 @@ def render_experiment_record():
 
         st.caption(f"**Experiment ID:** `{rec.experiment_id}`")
         st.caption(f"**Created:** {rec.created_at} · **Updated:** {rec.updated_at}")
-        if rec.input_fingerprint:
-            st.caption(f"**Input fingerprint:** `{rec.input_fingerprint}`")
-        else:
-            st.caption("**Input fingerprint:** not yet computed — run matching to start.")
 
         _repro = rec.reproducibility or {}
         _source_repro = _repro.get("source_data") or {}
@@ -2108,21 +2096,22 @@ def render_experiment_record():
                 "Source data: not embedded; reload status **"
                 f"{_source_repro.get('status', 'not_recorded')}**."
             )
-        _tool = _repro.get("tool") or {}
-        _dependency_set = (_repro.get("dependencies") or {}).get("dependency_set") or {}
-        if _tool.get("commit") or _dependency_set.get("fingerprint"):
-            st.caption(
-                "Code identity: "
-                f"{_tool.get('commit') or 'unavailable'} · dependency set: "
-                f"{_dependency_set.get('fingerprint') or 'unavailable'}"
-            )
 
         st.markdown("**Workflow stage statuses**")
-        for key, label in STAGE_LABELS.items():
-            status = rec.stage_status.get(key, "not_started")
-            stale = rec.stage_stale.get(key, False)
-            suffix = " — inputs changed, re-run" if stale else ""
-            st.caption(f"{_status_icon.get(status, '⚪')} **{label}:** {status}{suffix}")
+        render_status_summary(
+            [
+                (
+                    label,
+                    display_label("stage_status", rec.stage_status.get(key, "not_started")),
+                    StatusTone.WARNING
+                    if rec.stage_stale.get(key, False)
+                    else _LIFECYCLE_STATUS_TONES.get(
+                        rec.stage_status.get(key, "not_started"), StatusTone.NEUTRAL
+                    ),
+                )
+                for key, label in STAGE_LABELS.items()
+            ]
+        )
 
         st.markdown("**Design freeze**")
         _planned = _current_planned_periods()
@@ -2235,6 +2224,19 @@ def render_experiment_record():
             "planned-vs-analysed, and unified validation, power, delivery, effect and "
             "recommendation result summaries."
         )
+
+        st.markdown("**Technical details**")
+        if rec.input_fingerprint:
+            st.caption(f"Input fingerprint: `{rec.input_fingerprint}`")
+        else:
+            st.caption("Input fingerprint: not yet computed — run matching to start.")
+        _tool = _repro.get("tool") or {}
+        _dependency_set = (_repro.get("dependencies") or {}).get("dependency_set") or {}
+        if _tool.get("commit") or _dependency_set.get("fingerprint"):
+            st.caption(
+                f"Code identity: {_tool.get('commit') or 'unavailable'} · "
+                f"dependency set: {_dependency_set.get('fingerprint') or 'unavailable'}"
+            )
 
 
 # ------------------------------------------------------------

@@ -19,21 +19,7 @@ from geotestlab.recommendation import (
     assess_design_recommendation,
     recommendation_result_is_stale,
 )
-
-_STATUS_OPTIONS = (
-    "not_evaluated",
-    "pass",
-    "supported",
-    "credible",
-    "valid",
-    "incomplete",
-    "blocked",
-    "not_feasible",
-    "unknown",
-    "conditional",
-    "evidence_backed",
-    "stale",
-)
+from geotestlab.ui.labels import display_label
 
 
 def _number(value: Any, default: float | None = None) -> float | None:
@@ -303,15 +289,19 @@ def _upstream_frame(scenarios: tuple[DesignScenario, ...]) -> pd.DataFrame:
                 "Actual test share": scenario.size_metric,
                 "Duration": scenario.duration_periods,
                 "Cost": scenario.cost,
-                "Match": scenario.match_status,
-                "Counterfactual": scenario.counterfactual_status,
-                "Power": scenario.power_status,
+                "Match": display_label("generic_gate_status", scenario.match_status),
+                "Counterfactual": display_label(
+                    "generic_gate_status", scenario.counterfactual_status
+                ),
+                "Power": display_label("generic_gate_status", scenario.power_status),
                 "Power usable": scenario.power_usable,
                 "Power meets target": scenario.power_meets_target,
-                "Delivery": scenario.delivery_status,
-                "Effect": scenario.effect_status,
+                "Delivery": display_label("delivery_status", scenario.delivery_status),
+                "Effect": display_label("effect_plausibility_status", scenario.effect_status),
                 "Effect meets MDE": scenario.effect_meets_mde,
-                "Region constraints": scenario.region_constraints_status,
+                "Region constraints": display_label(
+                    "generic_gate_status", scenario.region_constraints_status
+                ),
             }
             for scenario in scenarios
         ]
@@ -414,6 +404,29 @@ def _scenario_from_row(row: dict[str, Any]) -> DesignScenario:
     )
 
 
+_GATE_STATUS_COLUMN_LABELS: dict[str, str] = {
+    "match_quality": "Match quality",
+    "counterfactual_validation": "Counterfactual validation",
+    "power": "Statistical power",
+    "media_delivery": "Media delivery",
+    "effect_plausibility": "Effect plausibility",
+    "region_constraints": "Region constraints",
+}
+
+
+def _humanize_limiting_factor(factor: str) -> str:
+    """Translate a trailing raw gate-status token in a limiting-factor message.
+
+    The domain layer's messages read like "power status is not_evaluated" —
+    plain English except for the raw status value at the end. This keeps the
+    domain layer's wording as the source of truth and only swaps that tail.
+    """
+    prefix, _, tail = factor.rpartition(" ")
+    if prefix and "_" in tail:
+        return f"{prefix} {display_label('generic_gate_status', tail).lower()}"
+    return factor
+
+
 def _assessment_frame(result) -> pd.DataFrame:
     rows = []
     for assessment in result.assessments:
@@ -425,7 +438,14 @@ def _assessment_frame(result) -> pd.DataFrame:
             "Duration": assessment.duration_periods,
             "Cost": assessment.cost,
         }
-        row.update({f"Gate: {key}": value for key, value in assessment.gate_statuses.items()})
+        row.update(
+            {
+                _GATE_STATUS_COLUMN_LABELS.get(key, key.replace("_", " ").title()): display_label(
+                    "generic_gate_status", value
+                )
+                for key, value in assessment.gate_statuses.items()
+            }
+        )
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -567,23 +587,24 @@ def render_design_recommendation_tab() -> None:
     if result.limiting_factors:
         st.markdown("#### Limiting factors")
         for factor in result.limiting_factors:
-            st.error(factor)
+            st.error(_humanize_limiting_factor(factor))
     st.markdown("#### Separate gate assessments")
     st.dataframe(_assessment_frame(result), width="stretch", hide_index=True)
-    st.download_button(
-        "⬇️ Download design recommendation (.json)",
-        data=json.dumps(
-            {
-                "recommendation": result.to_dict(),
-                "scenarios": [scenario.to_dict() for scenario in scenarios],
-            },
-            indent=2,
-            default=str,
-        ),
-        file_name="design_recommendation.json",
-        mime="application/json",
-        key="download_design_recommendation",
-    )
-    st.caption(
-        f"Objective: {result.objective.value} · input fingerprint: {result.input_fingerprint}"
-    )
+    st.caption(f"Objective: {display_label('recommendation_objective', result.objective)}")
+
+    with st.expander("Technical record", expanded=False):
+        st.text(f"input_fingerprint: {result.input_fingerprint}")
+        st.download_button(
+            "⬇️ Download design recommendation (.json)",
+            data=json.dumps(
+                {
+                    "recommendation": result.to_dict(),
+                    "scenarios": [scenario.to_dict() for scenario in scenarios],
+                },
+                indent=2,
+                default=str,
+            ),
+            file_name="design_recommendation.json",
+            mime="application/json",
+            key="download_design_recommendation",
+        )
