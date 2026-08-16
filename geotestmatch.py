@@ -16,14 +16,13 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from scipy import stats
 
 # Bayesian core (geotestlab.bayesian) — pure functions, no Streamlit imports.
 from geotestlab.bayesian import (
     BayesianConfig,
     run_bayesian,
-    summarize_mcmc_diagnostics,
 )
+from geotestlab.bayesian.ui import render_mcmc_diagnostics
 from geotestlab.data import RegionalKPIConfig, prepare_regional_kpi
 
 # pymc and arviz imported lazily inside the Bayesian tab to avoid
@@ -42,7 +41,6 @@ from geotestlab.data.mapping import (
     build_region_mapping,
     compute_region_mapping_report,
     region_mapping_fingerprint,
-    uncovered_required_regions,
 )
 from geotestlab.data.models import compute_mapping_report
 from geotestlab.data.period_quality import compute_period_quality
@@ -135,6 +133,11 @@ from geotestlab.ui import (
     set_navigation_state,
 )
 from geotestlab.ui.components import StatusTone, render_status_line, render_status_summary
+from geotestlab.ui.data_quality import (
+    quality_blocking_errors,
+    render_kpi_quality_report,
+    validate_data,
+)
 
 # Validation core (geotestlab.validation) — pure functions, no Streamlit imports.
 from geotestlab.validation import (
@@ -269,133 +272,6 @@ def load_and_reshape_kpi(uploaded_file, agg_col=None, metric_col=None):
         )
         st.stop()
     return parsed
-
-
-def _quality_blocking_errors():
-    """Collect blocking errors from the stored parse and region-mapping reports.
-
-    The app refuses to run validation/evaluation/KPI-pattern/Bayesian modelling
-    while any blocker is present — warnings never block; only explicit
-    blocking errors do.
-
-    Region-mapping blockers cover a required selected test region that the
-    mapped KPI data does not cover (absent from the file, or its raw label
-    could not be resolved). Unused unmapped raw regions are warnings, never
-    blockers.
-    """
-    errors: list[str] = []
-    report = st.session_state.get("kpi_quality_report")
-    if report is not None:
-        errors.extend(report.blocking_errors)
-    mapping = st.session_state.get("kpi_mapping_report")
-    if mapping is not None:
-        required = st.session_state.get("selected_experiment_regions", []) or []
-        uncovered = uncovered_required_regions(mapping, required)
-        if uncovered:
-            errors.append(
-                "The following selected test region(s) have no mapped data in the KPI file: "
-                + ", ".join(uncovered)
-            )
-    return errors
-
-
-def render_kpi_quality_report(report, rejected_rows=None, mapping_report=None):
-    """Render the parse-time data-quality report.
-
-    Distinguishes:
-    - blocking errors (red — modelling must not proceed);
-    - warnings (amber — do not block valid data);
-    - retained usable data (green summary);
-    - excluded/rejected data (with a CSV download when available).
-    Optionally includes the region-mapping report when it has been computed.
-    """
-    if report is None:
-        return
-
-    has_blockers = bool(report.blocking_errors)
-    with st.expander("Data Quality Report", expanded=has_blockers):
-        if has_blockers:
-            for err in report.blocking_errors:
-                st.error(err)
-        else:
-            st.success(
-                f"Parsed **{report.source_rows_read:,}** source row(s) into "
-                f"**{report.observations_retained:,}** usable observation(s)."
-            )
-
-        for w in report.warnings:
-            st.warning(w)
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Source rows read", f"{report.source_rows_read:,}")
-        m1.metric("Source rows removed", f"{report.source_rows_removed:,}")
-        m2.metric("Observations retained", f"{report.observations_retained:,}")
-        m2.metric("Observations removed", f"{report.observations_removed:,}")
-        m3.metric("Regions detected", f"{len(report.raw_regions):,}")
-        m3.metric("Duplicate key rows", f"{report.duplicate_key_rows:,}")
-        m4.metric("Frequency", report.inferred_frequency)
-        if report.date_range is not None:
-            m4.metric(
-                "Date range",
-                f"{report.date_range[0].date()} → {report.date_range[1].date()}",
-            )
-
-        with st.expander("Excluded / rejected data", expanded=has_blockers):
-            st.markdown(
-                f"- **{report.observations_dropped_missing_kpi:,}** observation(s) dropped for a "
-                "missing KPI value.\n"
-                f"- **{report.observations_dropped_non_numeric_kpi:,}** observation(s) dropped "
-                "for a non-numeric KPI value.\n"
-                f"- **{report.observations_dropped_invalid_date:,}** observation(s) dropped for "
-                "an invalid date.\n"
-                f"- **{report.source_rows_dropped_blank_region:,}** source row(s) dropped for a "
-                "blank region."
-            )
-            if report.missing_dates:
-                shown = ", ".join(d.strftime("%d %b %y") for d in report.missing_dates[:10])
-                more = (
-                    f" (+{len(report.missing_dates) - 10} more)"
-                    if len(report.missing_dates) > 10
-                    else ""
-                )
-                st.markdown(
-                    f"- **{len(report.missing_dates):,}** expected date(s) missing "
-                    f"({report.expected_date_count:,} expected at "
-                    f"{report.inferred_frequency} frequency): {shown}{more}"
-                )
-            if rejected_rows is not None and len(rejected_rows):
-                st.download_button(
-                    "⬇️ Download rejected rows (CSV)",
-                    data=rejected_rows.to_csv(index=False).encode("utf-8"),
-                    file_name="kpi_rejected_rows.csv",
-                    mime="text/csv",
-                    key="kpi_rejected_rows_download",
-                )
-
-        if mapping_report is not None:
-            _render_mapping_quality(mapping_report)
-
-
-def _render_mapping_quality(mapping_report):
-    """Render the region-mapping quality block (mapped/unmapped + download)."""
-    st.markdown("**Region mapping**")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Raw regions", f"{len(mapping_report.raw_regions):,}")
-    m2.metric("Mapped regions", f"{len(mapping_report.mapped_regions):,}")
-    m3.metric("Unmapped regions", f"{len(mapping_report.unmapped_regions):,}")
-    if mapping_report.unmapped_regions:
-        shown = ", ".join(mapping_report.unmapped_regions[:20])
-        if len(mapping_report.unmapped_regions) > 20:
-            shown += ", …"
-        st.warning(f"Unmapped regions: {shown}")
-        if mapping_report.unmapped_rows is not None and len(mapping_report.unmapped_rows):
-            st.download_button(
-                "⬇️ Download unmapped rows (CSV)",
-                data=mapping_report.unmapped_rows.to_csv(index=False).encode("utf-8"),
-                file_name="kpi_unmapped_rows.csv",
-                mime="text/csv",
-                key="kpi_unmapped_rows_download",
-            )
 
 
 def apply_geo_aggregation(df_long, geo_col):
@@ -653,26 +529,6 @@ def clean_dataframe_text(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def inspect_excel_sheet(path: str, sheet_name: str) -> dict:
-    try:
-        df_raw = pd.read_excel(
-            path,
-            sheet_name=sheet_name,
-            engine="calamine",
-            header=None,
-            dtype=str,
-            keep_default_na=False,
-        )
-        issues = []
-        for row_idx, row in df_raw.iterrows():
-            for col_idx, val in enumerate(row):
-                if val and str(val).startswith("#"):
-                    issues.append({"row": row_idx, "col": col_idx, "value": val})
-        return {"has_issues": len(issues) > 0, "issues": issues[:10], "total_issues": len(issues)}
-    except Exception as e:
-        return {"has_issues": True, "error": str(e)}
-
-
 # ------------------------------------------------------------
 # Excel workbook loading
 # ------------------------------------------------------------
@@ -754,65 +610,6 @@ def preprocess_data(
     return _preprocess_data(
         pool_df, test_df_run, active_features, weights, eligible_means_tuple, eligible_stds_tuple
     )
-
-
-# ------------------------------------------------------------
-# Validation and display helpers
-# ------------------------------------------------------------
-def validate_data(df, required_cols, geo_col=None, market=None, level=None):
-    issues = []
-    recommendations = []
-    if len(df) == 0:
-        issues.append("No data available for the selected filters")
-        recommendations.append("Try a different market or geography grouping")
-        return issues, recommendations
-    if not required_cols:
-        issues.append("No numeric matching features detected")
-        recommendations.append("Check that demographic columns are numeric")
-        return issues, recommendations
-    missing_pct = df[required_cols].isnull().mean() * 100
-    high_missing = missing_pct[missing_pct > CONFIG["missing_threshold"]]
-    if len(high_missing) > 0:
-        issues.append(
-            f"High missing values (> {CONFIG['missing_threshold']}%): {dict(high_missing)}"
-        )
-        recommendations.append(
-            f"Consider removing from matching: {', '.join(high_missing.index[:3])}"
-        )
-    constant_cols = []
-    for col in required_cols:
-        if df[col].nunique(dropna=False) <= 1:
-            constant_cols.append(col)
-    if constant_cols:
-        issues.append(f"Constant features detected: {constant_cols[:5]}")
-        recommendations.append(
-            f"Remove these features because they do not help matching: {', '.join(constant_cols[:3])}"
-        )
-    outlier_dict = {}
-    for col in required_cols:
-        if df[col].count() > 10:
-            clean_data = df[col].dropna()
-            if len(clean_data) > 0 and clean_data.std() > 0:
-                z_scores = np.abs(stats.zscore(clean_data))
-                outlier_mask = z_scores > CONFIG["outlier_std_threshold"]
-                if outlier_mask.any():
-                    outlier_indices = clean_data.index[outlier_mask]
-                    if geo_col and len(outlier_indices) > 0:
-                        outlier_regions = df.loc[outlier_indices, geo_col].tolist()
-                    else:
-                        outlier_regions = ["Unknown"]
-                    outlier_dict[col] = outlier_regions[:3]
-    if outlier_dict:
-        issues.append(f"Extreme outliers detected (> {CONFIG['outlier_std_threshold']} std dev)")
-        for col, regions in list(outlier_dict.items())[:3]:
-            issues.append(f"   • {col}: {', '.join(str(r) for r in regions)}")
-        recommendations.append(
-            "Investigate outlier regions for data errors or consider excluding them"
-        )
-    if len(df) < 3:
-        issues.append(f"Very small sample size: {len(df)} geographies")
-        recommendations.append("Try a more granular geography grouping, if available")
-    return issues, recommendations
 
 
 def _clear_bayesian_state():
@@ -1300,7 +1097,7 @@ def _current_design_snapshot(*, analyst_label="", analyst_notes=(), approval_tim
     quality_summary = build_frozen_data_quality_summary(
         mapping_report=_map,
         required_regions=required_regions,
-        blocking_errors=_quality_blocking_errors(),
+        blocking_errors=quality_blocking_errors(),
         warnings=(tuple(getattr(_q, "warnings", ()) or ()) if _q is not None else ()),
         observations={
             "observations_retained": getattr(_q, "observations_retained", None),
@@ -1891,169 +1688,6 @@ def _load_local_experiment_record(uploaded_file) -> None:
         "restore the listed source files before recomputing."
     )
     st.rerun()
-
-
-def _render_mcmc_diagnostics(bayes: dict, trace) -> None:
-    """Render MCMC diagnostics from a posterior trace.
-
-    Called only when ``trace`` is present — the caller guards rendering when the
-    trace is missing (e.g. after a reset or a file change), so the large
-    ``InferenceData`` object can be dropped without crashing the results view.
-    """
-    import arviz as az
-
-    _summary_vars = ["intercept", "coeffs", "sigma"] + (
-        ["rho"] if bayes.get("use_ar1_errors") else []
-    )
-    summary = az.summary(trace, var_names=_summary_vars, hdi_prob=0.94)
-    _mcmc_n_chains = bayes.get("n_chains")
-    _mcmc_n_draws = bayes.get("n_draws")
-    _mcmc_n_tune = bayes.get("n_tune")
-    _mcmc_target_accept = bayes.get("target_accept")
-    _mcmc_n_total_draws = (
-        _mcmc_n_chains * _mcmc_n_draws if _mcmc_n_chains and _mcmc_n_draws else None
-    )
-    diag = summarize_mcmc_diagnostics(
-        summary,
-        n_divergences=bayes.get("n_divergences"),
-        n_total_draws=_mcmc_n_total_draws,
-        ess_min_threshold=CONFIG["ess_min_threshold"],
-    )
-
-    with st.expander("MCMC Diagnostics", expanded=True):
-        st.markdown("**Diagnostic summary**")
-        if _mcmc_n_chains is not None:
-            st.caption(
-                f"Sampled {_mcmc_n_chains} chains × {_mcmc_n_draws} draws "
-                f"({_mcmc_n_tune} tuning steps), target_accept={_mcmc_target_accept}."
-            )
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric(
-            "Chain convergence",
-            f"{'✅ Pass' if diag['rhat_ok'] else '⚠️ Warning'}",
-            help=(
-                f"R-hat measures whether the sampling chains converged on the same distribution. "
-                f"Values close to 1.0 mean convergence. Above 1.01 suggests the chains disagreed — "
-                f"results may be unreliable.\n\nYour max R-hat: {diag['max_rhat']:.3f} (pass = ≤1.01)."
-            ),
-        )
-        col2.metric(
-            "Effective sample size",
-            f"{'✅ Pass' if diag['ess_ok'] else '⚠️ Warning'}",
-            help=(
-                f"ESS estimates how many independent samples your chains are equivalent to, "
-                f"after accounting for autocorrelation. Higher is better. Low ESS means the "
-                f"sampler got 'stuck' and posterior estimates may be noisy.\n\n"
-                f"Your min ESS: {diag['min_ess']:.0f} (guidance = ≥{CONFIG['ess_min_threshold']})."
-            ),
-        )
-        col3.metric(
-            "Sampling error",
-            f"{'✅ Pass' if diag['mcse_ok'] else '⚠️ Warning'}",
-            help=(
-                f"MCSE (Monte Carlo Standard Error) measures numerical noise in the posterior mean "
-                f"estimates relative to the posterior SD. Below 10% means the sampling error is "
-                f"small compared to genuine uncertainty in the model.\n\n"
-                f"Your max MCSE/SD: {diag['max_mcse_sd_ratio']:.1%} (pass = <10%)."
-            ),
-        )
-        _divergence_help = (
-            "Divergent transitions mean the sampler failed to explore a specific region of the "
-            "posterior. Unlike the other three checks, this can bias point estimates rather than "
-            "just add noise, so even one divergence is treated as a fail here.\n\n"
-            f"Your divergences: {diag['n_divergences'] if diag['n_divergences'] is not None else 'N/A'}"
-        )
-        if diag["divergence_rate"] is not None:
-            _divergence_help += f" ({diag['divergence_rate']:.1%} of draws)."
-        col4.metric(
-            "Divergences",
-            f"{'✅ Pass' if diag['divergence_ok'] else '⚠️ Warning'}",
-            help=_divergence_help,
-        )
-        col5.metric(
-            "Overall status",
-            diag["status"],
-            help=(
-                "All four diagnostics must pass for an overall Good status. "
-                "A warning on any one of them means you should interpret results cautiously — "
-                "try increasing draws, tuning steps, or target_accept if issues persist."
-            ),
-        )
-        if diag["messages"]:
-            for msg in diag["messages"]:
-                st.warning(msg)
-
-    # Kept as a sibling expander, not nested inside "MCMC Diagnostics" above —
-    # Streamlit does not allow expanders to be nested inside other expanders.
-    with st.expander("View full MCMC diagnostics table", expanded=False):
-        rename_map = {
-            "mean": "Mean",
-            "sd": "SD",
-            "hdi_3%": "94% lower",
-            "hdi_97%": "94% upper",
-            "mcse_mean": "MCSE mean",
-            "mcse_sd": "MCSE SD",
-            "ess_bulk": "ESS bulk",
-            "ess_tail": "ESS tail",
-            "r_hat": "R-hat",
-        }
-        existing_cols = [col for col in rename_map if col in summary.columns]
-        display_summary = summary[existing_cols].rename(columns=rename_map).astype(float)
-        for col in display_summary.columns:
-            if col in ["ESS bulk", "ESS tail"]:
-                display_summary[col] = display_summary[col].round(0)
-            else:
-                display_summary[col] = display_summary[col].round(3)
-        # Replace coeffs[n] index labels with control region / lagged feature names
-        coeff_feature_list = bayes.get("model_feature_cols") or bayes.get("control_list", [])
-        new_index = []
-        for idx in display_summary.index:
-            if idx.startswith("coeffs[") and idx.endswith("]"):
-                try:
-                    n = int(idx[7:-1])
-                    new_index.append(coeff_feature_list[n] if n < len(coeff_feature_list) else idx)
-                except (ValueError, IndexError):
-                    new_index.append(idx)
-            else:
-                new_index.append(idx)
-        display_summary.index = new_index
-
-        # ---- Row-level highlighting: flag which specific parameter(s) are driving
-        # a "Review needed" status, rather than making the user scan manually. ----
-        def _flag_bad_diagnostic_row(row):
-            rhat = row.get("R-hat", np.nan)
-            ess_bulk = row.get("ESS bulk", np.nan)
-            ess_tail = row.get("ESS tail", np.nan)
-            sd = row.get("SD", np.nan)
-            mcse_mean = row.get("MCSE mean", np.nan)
-            mcse_sd_ratio = (
-                (mcse_mean / sd) if (pd.notna(sd) and sd != 0 and pd.notna(mcse_mean)) else np.nan
-            )
-            is_bad = (
-                (pd.notna(rhat) and rhat > 1.01)
-                or (pd.notna(ess_bulk) and ess_bulk < CONFIG["ess_min_threshold"])
-                or (pd.notna(ess_tail) and ess_tail < CONFIG["ess_min_threshold"])
-                or (pd.notna(mcse_sd_ratio) and mcse_sd_ratio >= 0.10)
-            )
-            return (
-                ["background-color: #FEE2E2; color: #7F1D1D"] * len(row)
-                if is_bad
-                else [""] * len(row)
-            )
-
-        styled_summary = display_summary.style.apply(_flag_bad_diagnostic_row, axis=1)
-        st.dataframe(styled_summary, width="stretch")
-        if diag["n_divergences"]:
-            st.caption(
-                f"{diag['n_divergences']} divergent transition(s) occurred during sampling. "
-                "Divergences aren't tied to a specific parameter row the way R-hat/ESS/MCSE are, "
-                "so they aren't reflected in the highlighting above — see the Divergences card and "
-                "warning above the table instead."
-            )
-        st.caption(
-            "Rows highlighted in red fail at least one of: R-hat > 1.01, ESS bulk or tail "
-            f"< {CONFIG['ess_min_threshold']}, or MCSE/SD ≥ 10%."
-        )
 
 
 def render_experiment_record():
@@ -2715,7 +2349,11 @@ def kpi_pattern_display_rename_map(columns, geo_col):
 
 # Data quality check – also warn about high missingness in features
 validation_issues, recommendations = validate_data(
-    agg_df, active_features, geo_col=geo_col, market=market, level=geography_level
+    agg_df,
+    active_features,
+    geo_col=geo_col,
+    missing_threshold=CONFIG["missing_threshold"],
+    outlier_std_threshold=CONFIG["outlier_std_threshold"],
 )
 issue_severity = (
     "High" if len(validation_issues) > 3 else "Medium" if len(validation_issues) > 0 else "None"
@@ -2729,9 +2367,10 @@ issue_severity = (
 # ``with tabN:`` block became ``if "tabN" in _active_slots:``). PR4 merged
 # the Validate Test Design and Power & Test Sizing steps into one "Check
 # design" step, so that step activates both tab2 and tab3 together — hence a
-# set rather than a single slot. ``tab8`` (Bayesian TBR) is additionally
-# gated by ``_show_advanced_uncertainty``: it is reachable as an optional
-# action from Results rather than its own step.
+# set rather than a single slot. Bayesian TBR (formerly its own tab) is
+# additionally gated by ``_show_advanced_uncertainty`` within the ``tab7``
+# slot: it is reachable as an optional action from Results rather than its
+# own step.
 _active_slots: frozenset[str] = frozenset()
 _show_advanced_uncertainty = False
 _PLAN_STEP_RADIO_KEY = "_plan_step_radio"
@@ -2745,10 +2384,7 @@ def _go_to_plan_step(step: PlanStep) -> None:
     # keyed widget's own session-state entry can be reassigned programmatically
     # (writing to it inline, after the widget has already rendered this run,
     # raises StreamlitAPIException).
-    _current = get_navigation_state()
-    set_navigation_state(
-        NavigationState(area=JourneyArea.PLAN, plan_step=step, evaluate_step=_current.evaluate_step)
-    )
+    set_navigation_state(NavigationState(area=JourneyArea.PLAN, plan_step=step))
     st.session_state[_PLAN_STEP_RADIO_KEY] = PLAN_STEP_TITLES[step]
 
 
@@ -2779,11 +2415,7 @@ if _nav_state.area == JourneyArea.PLAN:
     )
     _chosen_plan_step = PLAN_STEP_ORDER[_plan_step_labels.index(_chosen_plan_label)]
     if _chosen_plan_step != _nav_state.plan_step:
-        _nav_state = NavigationState(
-            area=JourneyArea.PLAN,
-            plan_step=_chosen_plan_step,
-            evaluate_step=_nav_state.evaluate_step,
-        )
+        _nav_state = NavigationState(area=JourneyArea.PLAN, plan_step=_chosen_plan_step)
         set_navigation_state(_nav_state)
 
     _plan_nav_cols = st.columns([1, 1, 1, 5])
@@ -5781,7 +5413,7 @@ def render_time_series_validation(mode: str):
     if st.session_state.validation_triggered:
         # ---- Data-quality gate: blocking errors prevent modelling; warnings
         # (which never populate blocking_errors) do not. ----
-        _quality_blockers = _quality_blocking_errors()
+        _quality_blockers = quality_blocking_errors()
         if _quality_blockers:
             for _qb in _quality_blockers:
                 st.error(_qb)
@@ -6938,7 +6570,7 @@ if "tab7" in _active_slots and _show_advanced_uncertainty:
                         "Run Bayesian Time-Based Regression (TBR)",
                         width="stretch",
                         type="primary",
-                        key="run_bayes_tab4",
+                        key="run_bayesian_tbr",
                         disabled=_bayes_freq_blocked,
                     ):
                         with st.spinner(f"Running Bayesian TBR using {selected_bayes_method}..."):
@@ -7065,7 +6697,9 @@ if "tab7" in _active_slots and _show_advanced_uncertainty:
                     "longer in memory. Re-run the Bayesian model to regenerate them."
                 )
             else:
-                _render_mcmc_diagnostics(bayes, _trace)
+                render_mcmc_diagnostics(
+                    bayes, _trace, ess_min_threshold=CONFIG["ess_min_threshold"]
+                )
 
             # ---- Line chart ----
             # Pre-period: 94% HDI / credible interval around the fitted counterfactual mean (no observation noise).

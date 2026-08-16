@@ -63,13 +63,33 @@ The app does not claim to *prove* causality — it is a toolkit to make an evide
 
 ## 2. High-Level Workflow
 
-The current app exposes eight tabs. The current order is Region Matching,
-Validate Test Design, Measure Test Impact, Bayesian TBR, Power & Test Sizing,
-Media Delivery Feasibility, Effect Plausibility and Integrated Design
-Recommendation. The intended planning lifecycle is Region Matching, Validate
-Test Design, Power & Test Sizing, Media Delivery Feasibility, Effect
-Plausibility, Design Recommendation / Approve Design, then Measure Test Impact
-and Bayesian TBR after completion. Navigation has not yet been reordered.
+The app opens on a task-led entry screen with three choices: **Plan a new
+geo test**, **Analyse a completed geo test**, or **Open a saved
+experiment**. This replaced an earlier flat eight-tab layout as of the
+UI/UX overhaul programme (PR1–PR9); see `geotestlab/ui/navigation.py` for
+the navigation model.
+
+**Plan a new geo test** is a four-step guided journey — **Choose regions**
+(structural or KPI-pattern matching), **Check design** (historical
+counterfactual validation and statistical power, assessed together though
+their computations and statuses stay separate), **Media and expected
+impact** (media delivery feasibility and effect plausibility, likewise
+assessed together but kept separate), and **Review and approve** (the
+integrated design recommendation and design freeze). Back/Next buttons and a
+step selector move through the journey without losing state.
+
+**Analyse a completed geo test** covers **Measure Test Impact** — evaluate a
+completed test and estimate observed impact — with an optional **Run
+advanced uncertainty analysis** action that runs the Bayesian Time-Based
+Regression (TBR) workflow.
+
+Internally, each step still renders the same underlying analytical bodies
+that existed under the former eight tabs (`geotestmatch.py`'s
+`_active_slots` mechanism maps each step to the tab body/bodies it
+activates) — the navigation overhaul changed information architecture and
+presentation, not the underlying analytical computations, which are covered
+by the numerical-characterisation golden-test suite
+(`tests/test_numerical_characterisation.py`).
 
 The intended end-to-end flow, in plain English:
 
@@ -610,7 +630,7 @@ and session-state wiring. It is organised roughly as:
    traffic-light bands — the single source of truth for §G2's classifiers),
    `DATA_PATH`, method-name constants (`METHOD_STRUCTURAL`, etc.).
 2. **Time-series validation helpers** — `detect_date_columns`, `detect_metric_column`, KPI loading/reshaping (`load_and_reshape_kpi`, supporting both the simple and aggregated file layouts — see §3.6), model matrix building, lag features (frequency-aware, §F2), Durbin-Watson, the Counterfactual Confidence classifiers (`classify_autocorrelation_risk`, `calculate_overfit_gap`, `classify_overfitting_risk`, `classify_rolling_validation_error`, `classify_rolling_bias_risk`, `combine_reliability_ratings`, `get_reliability_drivers` — §G2), frequency helpers (`get_frequency_config`, `infer_time_series_frequency` — §F2), display/export helpers (`format_range`, `build_chart_data_xlsx`), error metrics, MCMC diagnostic summary (incl. divergences), structural prior sigma calculation, model construction (`safe_tscv`, `build_regularized_model`, `classify_validation_method`, `_warn_on_row_loss`, `_warn_on_cv_fallback`), rolling-origin validation (+ `_summarize_rolling_origin_folds`), the placebo helpers (`_run_placebo_windows`, `_summarize_placebo_results`), and the main `run_validation_method()`.
-3. **Text/data cleaning helpers** — `repair_text_value`, `clean_dataframe_text`, `normalise_column_names`, `inspect_excel_sheet`.
+3. **Text/data cleaning helpers** — `repair_text_value`, `clean_dataframe_text`, `normalise_column_names`.
 4. **Excel workbook loading** — `get_workbook_sheet_names`, `load_market_sheet`, population/geography/grouping-column helpers, `prepare_market_dataframe`, `read_kpi_pattern_excel` (cached loader for the KPI Pattern sidebar upload — see §3.7).
 5. **Aggregation helpers** — `weighted_average_vectorized`, `aggregate_market_data`, `impute_missing_features`.
 6. **Matching metric helpers** — `weighted_profile`, `fit_structural_stats`, `calculate_metrics` (+ cached variant), `make_fast_metrics_fn` (vectorised per-run scorer used by all three matching strategies — see §5.6), `preprocess_data`, `stochastic_genetic_search`.

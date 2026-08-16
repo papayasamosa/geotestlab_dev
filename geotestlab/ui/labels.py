@@ -16,7 +16,6 @@ label fails loudly instead of silently leaking into the UI.
 
 from __future__ import annotations
 
-from datetime import date, datetime
 from enum import Enum
 from typing import Final
 
@@ -171,17 +170,3 @@ def display_label(kind: str, value: object, *, default: str | None = None) -> st
     if default is not None:
         return default
     return key.replace("_", " ").strip().capitalize()
-
-
-def format_percent(value: float | None, *, decimals: int = 1) -> str:
-    """Format a fraction (e.g. ``0.052``) as a percentage string (``"5.2%"``)."""
-    if value is None:
-        return "—"
-    return f"{value * 100:.{decimals}f}%"
-
-
-def format_date_range(start: date | datetime | None, end: date | datetime | None) -> str:
-    """Format a date range consistently, e.g. ``"05 Jan 2025 – 12 Mar 2025"``."""
-    if start is None or end is None:
-        return "—"
-    return f"{start:%d %b %Y} – {end:%d %b %Y}"

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
-from geotestlab.ui import EvaluateStep, JourneyArea, NavigationState, PlanStep
+from geotestlab.ui import JourneyArea, NavigationState, PlanStep
 from tests.conftest import seed_evaluate, seed_plan_step
 from tests.fixtures.live_scenarios import RUN_TIMEOUT
 
@@ -170,4 +170,3 @@ def test_navigation_state_round_trips_through_session_state():
     app.run(timeout=RUN_TIMEOUT)
     state = app.session_state["ui_navigation_state"]
     assert state.area is JourneyArea.EVALUATE
-    assert state.evaluate_step is EvaluateStep.SETUP

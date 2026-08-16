@@ -76,9 +76,10 @@ class TestBayesianTraceCreation:
         )
         app = _new_app()
         _manual_match(app)
-        # Measure Test Impact (tab7) and the Bayesian TBR button (tab8) both
-        # live under the Evaluate journey; the Bayesian button is additionally
-        # gated behind the "advanced uncertainty" toggle within Results.
+        # Measure Test Impact and the Bayesian TBR button both live under the
+        # Evaluate journey (the "tab7" slot); the Bayesian button is
+        # additionally gated behind the "advanced uncertainty" toggle within
+        # Results.
         seed_evaluate(app, show_advanced_uncertainty=True)
         app.run(timeout=RUN_TIMEOUT)
         _upload_kpi(app, "evaluate", "weekly_eval.xlsx", kpi_path.read_bytes())
@@ -92,7 +93,7 @@ class TestBayesianTraceCreation:
         app.session_state["bayes_mcmc_draws"] = 20
         app.session_state["bayes_mcmc_tune"] = 10
         app.session_state["bayes_mcmc_chains"] = 1
-        bayes_btn = [b for b in app.button if b.key == "run_bayes_tab4"][0]
+        bayes_btn = [b for b in app.button if b.key == "run_bayesian_tbr"][0]
         assert bayes_btn.disabled is False
         bayes_btn.click()
         app.run(timeout=RUN_TIMEOUT)
