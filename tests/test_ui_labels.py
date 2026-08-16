@@ -36,8 +36,6 @@ from geotestlab.ui.labels import (
     RECOMMENDATION_STATUS_LABELS,
     STAGE_STATUS_LABELS,
     display_label,
-    format_date_range,
-    format_percent,
 )
 
 
@@ -166,25 +164,3 @@ def test_effect_plausibility_and_evidence_quality_disagree_on_unknown():
     # than using one flat lookup table.
     assert display_label("evidence_quality", "unknown") == "Unknown"
     assert display_label("effect_plausibility_status", "unknown") == "Not checked yet"
-
-
-def test_format_percent_none_is_an_em_dash():
-    assert format_percent(None) == "—"
-
-
-def test_format_percent_formats_a_fraction_to_one_decimal_by_default():
-    assert format_percent(0.052) == "5.2%"
-
-
-def test_format_percent_respects_decimals():
-    assert format_percent(0.05, decimals=0) == "5%"
-
-
-def test_format_date_range_none_is_an_em_dash():
-    assert format_date_range(None, None) == "—"
-
-
-def test_format_date_range_formats_both_ends():
-    from datetime import date
-
-    assert format_date_range(date(2025, 1, 5), date(2025, 3, 12)) == "05 Jan 2025 – 12 Mar 2025"

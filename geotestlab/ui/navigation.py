@@ -2,10 +2,12 @@
 
 This module defines the target navigation model (see the UX overhaul
 programme, section 6): an entry screen with three choices, a four-step
-``Plan a new geo test`` journey and a two-step ``Analyse a completed geo
-test`` journey. PR2 wired this into ``geotestmatch.py`` in place of the
-former eight-tab navigation; PR4 merged the validation/power steps and PR5
-merged the media/effect-plausibility steps.
+``Plan a new geo test`` journey, and an ``Analyse a completed geo test``
+journey with no internal step navigation of its own (it always shows
+Results, with an optional advanced-uncertainty toggle). PR2 wired this into
+``geotestmatch.py`` in place of the former eight-tab navigation; PR4 merged
+the validation/power steps and PR5 merged the media/effect-plausibility
+steps.
 """
 
 from __future__ import annotations
@@ -39,13 +41,6 @@ class PlanStep(Enum):
     REVIEW = "review"
 
 
-class EvaluateStep(Enum):
-    """The two sequential stages of ``Analyse a completed geo test``."""
-
-    SETUP = "setup"
-    RESULTS = "results"
-
-
 PLAN_STEP_ORDER: Final[tuple[PlanStep, ...]] = (
     PlanStep.REGIONS,
     PlanStep.CHECK_DESIGN,
@@ -53,21 +48,11 @@ PLAN_STEP_ORDER: Final[tuple[PlanStep, ...]] = (
     PlanStep.REVIEW,
 )
 
-EVALUATE_STEP_ORDER: Final[tuple[EvaluateStep, ...]] = (
-    EvaluateStep.SETUP,
-    EvaluateStep.RESULTS,
-)
-
 PLAN_STEP_TITLES: Final[dict[PlanStep, str]] = {
     PlanStep.REGIONS: "Choose regions",
     PlanStep.CHECK_DESIGN: "Check design",
     PlanStep.MEDIA_AND_IMPACT: "Media and expected impact",
     PlanStep.REVIEW: "Review and approve",
-}
-
-EVALUATE_STEP_TITLES: Final[dict[EvaluateStep, str]] = {
-    EvaluateStep.SETUP: "Select design and data",
-    EvaluateStep.RESULTS: "Results",
 }
 
 
@@ -82,46 +67,21 @@ class NavigationState:
 
     area: JourneyArea = JourneyArea.ENTRY
     plan_step: PlanStep = PlanStep.REGIONS
-    evaluate_step: EvaluateStep = EvaluateStep.SETUP
 
     def with_area(self, area: JourneyArea) -> NavigationState:
-        """Switch the active journey area, preserving both journeys' step positions."""
-        return NavigationState(
-            area=area, plan_step=self.plan_step, evaluate_step=self.evaluate_step
-        )
+        """Switch the active journey area, preserving the Plan journey's step position."""
+        return NavigationState(area=area, plan_step=self.plan_step)
 
     def advance_plan(self) -> NavigationState:
         """Move to the next planning step, or stay put if already at the last step."""
         index = PLAN_STEP_ORDER.index(self.plan_step)
         if index + 1 >= len(PLAN_STEP_ORDER):
             return self
-        return NavigationState(
-            area=self.area, plan_step=PLAN_STEP_ORDER[index + 1], evaluate_step=self.evaluate_step
-        )
+        return NavigationState(area=self.area, plan_step=PLAN_STEP_ORDER[index + 1])
 
     def retreat_plan(self) -> NavigationState:
         """Move to the previous planning step, or stay put if already at the first step."""
         index = PLAN_STEP_ORDER.index(self.plan_step)
         if index == 0:
             return self
-        return NavigationState(
-            area=self.area, plan_step=PLAN_STEP_ORDER[index - 1], evaluate_step=self.evaluate_step
-        )
-
-    def advance_evaluate(self) -> NavigationState:
-        """Move to the next evaluation step, or stay put if already at the last step."""
-        index = EVALUATE_STEP_ORDER.index(self.evaluate_step)
-        if index + 1 >= len(EVALUATE_STEP_ORDER):
-            return self
-        return NavigationState(
-            area=self.area, plan_step=self.plan_step, evaluate_step=EVALUATE_STEP_ORDER[index + 1]
-        )
-
-    def retreat_evaluate(self) -> NavigationState:
-        """Move to the previous evaluation step, or stay put if already at the first step."""
-        index = EVALUATE_STEP_ORDER.index(self.evaluate_step)
-        if index == 0:
-            return self
-        return NavigationState(
-            area=self.area, plan_step=self.plan_step, evaluate_step=EVALUATE_STEP_ORDER[index - 1]
-        )
+        return NavigationState(area=self.area, plan_step=PLAN_STEP_ORDER[index - 1])
