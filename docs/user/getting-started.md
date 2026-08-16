@@ -25,7 +25,7 @@ The app opens on an entry screen with three choices: **Plan a new geo test**,
 **Analyse a completed geo test**, or **Open a saved experiment** (loads a
 previously exported JSON record directly from the entry screen).
 
-**Plan a new geo test** is a guided, five-step journey:
+**Plan a new geo test** is a guided, four-step journey:
 
 1. **Choose regions** — select test regions and construct controls using
    structural or KPI-pattern matching.
@@ -34,12 +34,15 @@ previously exported JSON record directly from the entry screen).
    production power contract, candidate shares/durations, MDE and support
    status) are assessed together on one step; each result stays separate —
    neither overrides the other.
-3. **Media plan** — assess budget, CPM, impressions, reach, frequency and
-   thresholds using the registered Meta platform profile.
-4. **Expected impact** — record a dated evidence bridge and low/central/high
-   KPI-uplift scenarios, then compare them with MDE. The evidence-quality
-   policy remains pending.
-5. **Review and approve** — compare typed upstream candidates under an
+3. **Media and expected impact** — media delivery (budget, CPM, impressions,
+   reach, frequency and thresholds using the registered Meta platform
+   profile, with a weekly-spend preset/custom editor) and effect
+   plausibility (a dated evidence bridge and low/central/high KPI-uplift
+   scenarios compared with the MDE inherited from Check design, or an
+   explicit "I do not have effectiveness evidence" choice) are assessed
+   together; each result stays separate. The evidence-quality policy
+   remains pending.
+4. **Review and approve** — compare typed upstream candidates under an
    explicit smallest-design or least-cost objective, then freeze the design.
 
 Back/Next buttons or the step selector move between steps without losing

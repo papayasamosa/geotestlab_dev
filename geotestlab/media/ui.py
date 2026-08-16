@@ -23,6 +23,8 @@ from geotestlab.media.profiles import (
     MediaValue,
     list_platform_profiles,
 )
+from geotestlab.ui.components import render_technical_details
+from geotestlab.ui.labels import display_label
 
 
 def _optional_number(value: float) -> float | None:
@@ -51,6 +53,22 @@ def _parse_weekly_pattern(value: str) -> tuple[dict[str, float] | None, str | No
     if any(amount < 0 for amount in amounts):
         return None, "Weekly budget pattern must not contain negative values."
     return {f"week_{index}": amount for index, amount in enumerate(amounts, start=1)}, None
+
+
+def _preset_weekly_amounts(pattern: str, budget: float, weeks: int) -> list[float]:
+    """Even/Front-loaded/Back-loaded weekly amounts summing to ``budget`` over ``weeks``."""
+    if weeks <= 0 or budget <= 0:
+        return []
+    if pattern == "Even":
+        weights = [1.0] * weeks
+    elif pattern == "Front-loaded":
+        weights = [float(weeks - index) for index in range(weeks)]
+    elif pattern == "Back-loaded":
+        weights = [float(index + 1) for index in range(weeks)]
+    else:
+        return []
+    total_weight = sum(weights)
+    return [round(budget * weight / total_weight, 2) for weight in weights]
 
 
 def _media_value(
@@ -150,14 +168,6 @@ def render_media_delivery_tab() -> None:
             tuple(profile_labels),
             format_func=profile_labels.__getitem__,
         )
-        provenance = InputProvenance(
-            st.selectbox(
-                "Default input provenance",
-                INPUT_PROVENANCES,
-                format_func=lambda value: value.replace("_", " ").title(),
-                help="Applied to values entered in this form; calculated outputs are labelled separately.",
-            )
-        )
         budget_col, cpm_col, impression_col = st.columns(3)
         with budget_col:
             budget = st.number_input("Total budget", min_value=0.0, value=0.0, step=100.0)
@@ -167,11 +177,33 @@ def render_media_delivery_tab() -> None:
             impressions = st.number_input(
                 "Impressions (optional)", min_value=0.0, value=0.0, step=1000.0
             )
-        weekly_pattern = st.text_input(
-            "Weekly budget pattern (optional)",
-            placeholder="e.g. 1000, 1500, 1500",
-            help="Comma-separated planned weekly amounts; used to calculate total budget when supplied.",
-        )
+        pattern_col, weeks_col = st.columns(2)
+        with pattern_col:
+            spend_pattern = st.selectbox(
+                "Weekly budget pattern (optional)",
+                ("None", "Even", "Front-loaded", "Back-loaded", "Custom"),
+                help="Used to calculate total budget when supplied.",
+            )
+        with weeks_col:
+            pattern_weeks = (
+                st.number_input("Number of weeks", min_value=1, value=4, step=1)
+                if spend_pattern != "None"
+                else 0
+            )
+        custom_weekly_amounts: list[float] = []
+        if spend_pattern == "Custom" and pattern_weeks:
+            custom_weekly_editor = st.data_editor(
+                pd.DataFrame(
+                    {
+                        "Week": list(range(1, int(pattern_weeks) + 1)),
+                        "Spend": [0.0] * int(pattern_weeks),
+                    }
+                ),
+                hide_index=True,
+                disabled=["Week"],
+                key="media_weekly_custom_editor",
+            )
+            custom_weekly_amounts = [float(value) for value in custom_weekly_editor["Spend"]]
         reach_col, frequency_col, audience_col = st.columns(3)
         with reach_col:
             reach = st.number_input("Reach (optional)", min_value=0.0, value=0.0, step=100.0)
@@ -198,7 +230,19 @@ def render_media_delivery_tab() -> None:
         with source_col:
             forecast_source = st.text_input("Forecast source")
         with date_col:
-            forecast_date = st.text_input("Forecast date (ISO, optional)")
+            forecast_date_value = st.date_input("Forecast date (optional)", value=None)
+
+        with st.expander("Advanced media settings", expanded=False):
+            provenance = InputProvenance(
+                st.selectbox(
+                    "Default input provenance",
+                    INPUT_PROVENANCES,
+                    index=INPUT_PROVENANCES.index(InputProvenance.ANALYST_ASSUMPTION),
+                    format_func=lambda value: value.replace("_", " ").title(),
+                    help="Applied to values entered in this form; calculated outputs are labelled "
+                    "separately. Defaults to analyst assumption for manually entered planning figures.",
+                )
+            )
 
         st.markdown("#### Delivery thresholds and analytical scope")
         threshold_col1, threshold_col2, threshold_col3 = st.columns(3)
@@ -212,13 +256,23 @@ def render_media_delivery_tab() -> None:
             min_reach_percentage = st.number_input(
                 "Minimum reach (%)", min_value=0.0, max_value=100.0, value=0.0, step=1.0
             )
-        excluded_regions_text = st.text_input(
-            "Exclude geographies from the experiment (comma-separated)"
+        design_regions = sorted(
+            {*snapshot.get("test_geos", ()), *snapshot.get("selected_controls", ())}
         )
+        excluded_regions = st.multiselect("Exclude geographies from the experiment", design_regions)
         ordinary_media_allowed = st.checkbox(
             "Allow ordinary media to continue in excluded geographies", value=True
         )
         run_delivery = st.form_submit_button("▶ Assess media delivery", type="primary")
+
+    if spend_pattern == "Custom":
+        weekly_amounts = custom_weekly_amounts
+    elif spend_pattern != "None":
+        weekly_amounts = _preset_weekly_amounts(spend_pattern, budget, int(pattern_weeks))
+    else:
+        weekly_amounts = []
+    weekly_pattern = ", ".join(str(amount) for amount in weekly_amounts)
+    forecast_date = forecast_date_value.isoformat() if forecast_date_value else ""
 
     plan, plan_error = _current_media_plan(
         profile_id,
@@ -245,7 +299,7 @@ def render_media_delivery_tab() -> None:
         min_reach_percentage=_optional_number(min_reach_percentage),
     )
     scope = ExperimentMediaScope(
-        excluded_from_experiment=tuple(_parse_list(excluded_regions_text)),
+        excluded_from_experiment=tuple(excluded_regions),
         ordinary_media_allowed_in_excluded_regions=ordinary_media_allowed,
     )
     if plan_error:
@@ -298,7 +352,7 @@ def render_media_delivery_tab() -> None:
             {
                 "Field": key,
                 "Value": media_value.value,
-                "Provenance": media_value.provenance.value,
+                "Provenance": display_label("input_provenance", media_value.provenance),
                 "Source": media_value.source,
             }
         )
@@ -310,7 +364,11 @@ def render_media_delivery_tab() -> None:
         mime="application/json",
         key="download_media_delivery_result",
     )
-    st.caption(
-        f"Profile: {result.profile_id} · input fingerprint: {result.input_fingerprint} · "
-        f"calculated fields: {', '.join(result.calculated_fields) or 'none'}"
+    render_technical_details(
+        "Technical record",
+        {
+            "profile": result.profile_id,
+            "input_fingerprint": result.input_fingerprint,
+            "calculated_fields": ", ".join(result.calculated_fields) or "none",
+        },
     )

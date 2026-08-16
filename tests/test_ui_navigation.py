@@ -56,7 +56,7 @@ def test_retreat_plan_stops_at_first_step():
 
 def test_retreat_plan_moves_backward():
     state = NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.REVIEW)
-    assert state.retreat_plan().plan_step == PlanStep.EFFECT_PLAUSIBILITY
+    assert state.retreat_plan().plan_step == PlanStep.MEDIA_AND_IMPACT
 
 
 def test_advance_evaluate_moves_through_every_step_in_order():

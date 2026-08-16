@@ -23,8 +23,7 @@ APP_PATH = str(Path(__file__).resolve().parent.parent / "geotestmatch.py")
 EXPECTED_PLAN_STEP_LABELS = [
     "Choose regions",
     "Check design",
-    "Media plan",
-    "Expected impact",
+    "Media and expected impact",
     "Review and approve",
 ]
 
@@ -84,7 +83,7 @@ def test_next_and_back_buttons_move_through_every_plan_step_in_order():
     back_btn = next(b for b in app.button if b.label and "Back" in b.label)
     back_btn.click().run(timeout=RUN_TIMEOUT)
     assert not app.exception
-    assert next(r for r in app.radio if r.label == "Step").value == "Expected impact"
+    assert next(r for r in app.radio if r.label == "Step").value == "Media and expected impact"
 
 
 def test_jumping_directly_to_a_step_via_the_radio_updates_content():
@@ -93,11 +92,12 @@ def test_jumping_directly_to_a_step_via_the_radio_updates_content():
     app.run(timeout=RUN_TIMEOUT)
 
     step_radio = next(r for r in app.radio if r.label == "Step")
-    step_radio.set_value("Media plan")
+    step_radio.set_value("Media and expected impact")
     app.run(timeout=RUN_TIMEOUT)
 
     assert not app.exception
     assert any(s.value == "📣 Media Delivery Feasibility" for s in app.subheader)
+    assert any(s.value == "🎯 Effect Plausibility" for s in app.subheader)
     assert not any(s.value == "🧩 MATCHING SETUP" for s in app.subheader)
 
 

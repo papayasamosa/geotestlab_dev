@@ -119,7 +119,7 @@ sensitive business data.
 The app opens on a task-led entry screen with three choices: **Plan a new
 geo test**, **Analyse a completed geo test**, or **Open a saved experiment**.
 
-**Plan a new geo test** is a five-step guided journey:
+**Plan a new geo test** is a four-step guided journey:
 
 1. **Choose regions** — select test geographies and match control regions
    using structural (demographic) similarity or KPI-pattern similarity.
@@ -128,11 +128,13 @@ geo test**, **Analyse a completed geo test**, or **Open a saved experiment**.
    power contract, candidate shares/durations, MDE and support status)
    shown together as one step; their computations and statuses stay
    separate internally.
-3. **Media plan** — assess Meta platform-profile delivery inputs, thresholds
-   and provenance.
-4. **Expected impact** — record evidence quality and low/central/high
-   scenarios against MDE; the evidence-quality policy remains pending.
-5. **Review and approve** — compare upstream candidate designs under an
+3. **Media and expected impact** — media delivery feasibility (Meta
+   platform-profile inputs and thresholds, with a preset/custom weekly-spend
+   editor rather than free text) and effect plausibility (effectiveness
+   evidence compared with the MDE inherited from Check design, or an
+   explicit "I do not have effectiveness evidence" path) shown together;
+   their statuses stay separate.
+4. **Review and approve** — compare upstream candidate designs under an
    explicit objective, retain limiting factors, and freeze the approved design.
 
 **Analyse a completed geo test** covers Results (estimate observed uplift for
@@ -142,9 +144,7 @@ action that runs Bayesian Time-Based Regression with MCMC diagnostics.
 Back/Next buttons and a step selector move through the Plan journey without
 losing state; a compact workflow-status summary (not a raw table) shows
 current/stale stage status and the next recommended action once past the
-entry screen. A later PR is expected to consolidate the Media plan and
-Expected impact steps once their underlying content is unified (see
-`docs/product/PRD.md` section 6.2).
+entry screen.
 
 The target product model (see `docs/product/PRD.md`) keeps matching,
 counterfactual validation, power, media delivery, effect plausibility, impact

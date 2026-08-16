@@ -27,7 +27,7 @@ def test_power_tab_explains_canonical_dataset_prerequisite():
 
 def test_media_delivery_tab_renders_without_power_dataset():
     app = AppTest.from_file(APP_PATH)
-    seed_plan_step(app, PlanStep.MEDIA_DELIVERY)
+    seed_plan_step(app, PlanStep.MEDIA_AND_IMPACT)
     app.run(timeout=RUN_TIMEOUT)
 
     assert any("Media Delivery Feasibility" in item.value for item in app.subheader)
@@ -38,13 +38,51 @@ def test_media_delivery_tab_renders_without_power_dataset():
 
 def test_effect_plausibility_tab_renders_without_evidence():
     app = AppTest.from_file(APP_PATH)
-    seed_plan_step(app, PlanStep.EFFECT_PLAUSIBILITY)
+    seed_plan_step(app, PlanStep.MEDIA_AND_IMPACT)
     app.run(timeout=RUN_TIMEOUT)
 
     assert any("Effect Plausibility" in item.value for item in app.subheader)
     assert any(item.label == "Effectiveness evidence type" for item in app.selectbox)
     assert any(item.label == "Evidence quality" for item in app.selectbox)
     assert not app.exception
+
+
+def test_media_delivery_even_preset_produces_expected_weekly_pattern():
+    app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.MEDIA_AND_IMPACT)
+    app.run(timeout=RUN_TIMEOUT)
+
+    next(n for n in app.number_input if n.label == "Total budget").set_value(900.0)
+    next(s for s in app.selectbox if s.label == "Weekly budget pattern (optional)").set_value(
+        "Even"
+    )
+    app.run(timeout=RUN_TIMEOUT)
+
+    next(n for n in app.number_input if n.label == "Number of weeks").set_value(3)
+    submit = next(b for b in app.button if b.label and "Assess media delivery" in b.label)
+    submit.click().run(timeout=RUN_TIMEOUT)
+
+    assert not app.exception
+    result = app.session_state["media_delivery_result"]
+    assert result is not None
+    pattern_value = result.values["weekly_budget_pattern"].value
+    assert pattern_value == {"week_1": 300.0, "week_2": 300.0, "week_3": 300.0}
+
+
+def test_effect_plausibility_no_evidence_checkbox_shows_conditional_conclusion():
+    app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.MEDIA_AND_IMPACT)
+    app.run(timeout=RUN_TIMEOUT)
+
+    no_evidence = next(c for c in app.checkbox if "I do not have effectiveness evidence" in c.label)
+    no_evidence.set_value(True)
+    app.run(timeout=RUN_TIMEOUT)
+
+    assert not app.exception
+    assert any("unknown without an effectiveness bridge" in (i.value or "") for i in app.info)
+    assert app.session_state["effect_plausibility_result"] is None
+    # The evidence-collection form is not shown while this path is active.
+    assert not any(s.label == "Effectiveness evidence type" for s in app.selectbox)
 
 
 def test_design_recommendation_tab_renders_without_stage_results():
