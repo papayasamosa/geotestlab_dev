@@ -17,7 +17,7 @@ APP_PATH = str(Path(__file__).resolve().parent.parent / "geotestmatch.py")
 
 def test_power_tab_explains_canonical_dataset_prerequisite():
     app = AppTest.from_file(APP_PATH)
-    seed_plan_step(app, PlanStep.POWER_SIZING)
+    seed_plan_step(app, PlanStep.CHECK_DESIGN)
     app.run(timeout=RUN_TIMEOUT)
 
     assert any("Power Analysis & Test Sizing" in item.value for item in app.subheader)
@@ -60,7 +60,7 @@ def test_design_recommendation_tab_renders_without_stage_results():
 
 def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     app = AppTest.from_file(APP_PATH)
-    seed_plan_step(app, PlanStep.POWER_SIZING)
+    seed_plan_step(app, PlanStep.CHECK_DESIGN)
     app.run(timeout=RUN_TIMEOUT)
     dates = pd.date_range("2025-01-05", periods=6, freq="7D")
     frame = {"Region": ["A", "B"], "Metric": ["Sales", "Sales"]}
@@ -74,6 +74,9 @@ def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     }
     app.run(timeout=RUN_TIMEOUT)
 
+    # Method/fit/simulation-count controls now live behind "Method details
+    # (advanced)" rather than the normal path.
+    assert any(e.label == "Method details (advanced)" for e in app.expander)
     assert any(item.label == "Simulation method" for item in app.selectbox)
     assert any(item.label == "Counterfactual fit" for item in app.selectbox)
     assert any(item.label == "Frequency" for item in app.selectbox)
@@ -81,7 +84,14 @@ def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     assert any("Run production power" in item.label for item in app.button)
     assert any(item.label == "Scenario metric" for item in app.selectbox)
     assert any(item.label == "Market-size measure" for item in app.selectbox)
-    assert any(item.label == "Target test shares (%)" for item in app.text_input)
+    assert any(item.label == "Objective" for item in app.selectbox)
+    # Comma-separated text inputs replaced with normal controls (multiselect
+    # presets + an optional custom-additions text field).
+    assert any(item.label == "Target test shares (%)" for item in app.multiselect)
+    assert any(
+        item.label == "Add custom test shares (%, comma-separated, optional)"
+        for item in app.text_input
+    )
     assert any(item.label == "Lock duration" for item in app.checkbox)
     assert any("Compare candidate scenarios" in item.label for item in app.button)
     assert any(item.label == "Force test regions" for item in app.multiselect)

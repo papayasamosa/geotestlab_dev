@@ -81,6 +81,12 @@ def _parse_int_list(value: str, label: str) -> tuple[int, ...]:
     return parsed
 
 
+def _split_custom_list(value: str) -> list[str]:
+    """Split an optional free-text "add custom values" field into raw tokens,
+    to be joined with preset values and parsed by _parse_float_list/_parse_int_list."""
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def _parse_custom_weights(value: str) -> Mapping[str, float]:
     weights: dict[str, float] = {}
     for item in value.split(","):
@@ -223,17 +229,12 @@ def _render_selected_design_power(
             value=(holdout_last + schedule_step).date(),
             min_value=(holdout_last + schedule_step).date(),
         )
-        method_col, fit_col = st.columns(2)
-        with method_col:
-            method = st.selectbox("Simulation method", ("model_simulation", "residual_simulation"))
-        with fit_col:
-            fit_method = st.selectbox("Counterfactual fit", ("ols", "elastic_net", "lasso"))
         direction = st.selectbox(
             "Effect direction",
             ("one_sided_positive", "one_sided_negative", "two_sided"),
             format_func=lambda value: value.replace("_", " ").title(),
         )
-        effect_col, power_col, simulations_col = st.columns(3)
+        effect_col, power_col = st.columns(2)
         with effect_col:
             target_effect = st.number_input(
                 "Target effect (%)", min_value=0.0, value=10.0, step=1.0
@@ -242,15 +243,26 @@ def _render_selected_design_power(
             target_power = st.number_input(
                 "Target power", min_value=0.50, max_value=0.99, value=0.80, step=0.05
             )
-        with simulations_col:
-            n_simulations = st.number_input("Simulations", min_value=100, value=1000, step=100)
-        bound_col, history_col = st.columns(2)
-        with bound_col:
-            mde_upper = st.number_input("MDE upper bound (%)", min_value=1.0, value=50.0, step=1.0)
-        with history_col:
-            min_history = st.number_input(
-                "Minimum historical periods", min_value=1, value=104, step=1
-            )
+        with st.expander("Method details (advanced)", expanded=False):
+            st.caption("Current defaults are the approved method; change only for expert review.")
+            method_col, fit_col = st.columns(2)
+            with method_col:
+                method = st.selectbox(
+                    "Simulation method", ("model_simulation", "residual_simulation")
+                )
+            with fit_col:
+                fit_method = st.selectbox("Counterfactual fit", ("ols", "elastic_net", "lasso"))
+            simulations_col, bound_col, history_col = st.columns(3)
+            with simulations_col:
+                n_simulations = st.number_input("Simulations", min_value=100, value=1000, step=100)
+            with bound_col:
+                mde_upper = st.number_input(
+                    "MDE upper bound (%)", min_value=1.0, value=50.0, step=1.0
+                )
+            with history_col:
+                min_history = st.number_input(
+                    "Minimum historical periods", min_value=1, value=104, step=1
+                )
         st.caption(
             f"Executed design: {len(test_regions)} test region(s), {len(control_regions)} control region(s)."
         )
@@ -377,6 +389,31 @@ def _scenario_weights(measure: MarketSizeMeasure, dataset) -> Mapping[str, float
 
 
 def _render_scenario_results(result) -> None:
+    selected = result.selected if result.objective is not None else None
+    if selected is not None:
+        st.success(
+            f"**Recommended: {selected.actual_share:.1%} test share, "
+            f"{selected.duration_periods} period(s).** This is the qualifying candidate "
+            "under the selected objective."
+        )
+    elif any(candidate.recommendation_eligible for candidate in result.candidates):
+        st.info("A qualifying candidate exists but no objective was set to select one.")
+    else:
+        _blocking_factors = sorted(
+            {
+                blocker
+                for candidate in result.candidates
+                for blocker in candidate.recommendation_blockers
+            }
+        )
+        if _blocking_factors:
+            st.warning(
+                "**No candidate currently qualifies.** Limiting factor(s): "
+                + "; ".join(_blocking_factors[:3])
+            )
+        else:
+            st.info("No qualifying candidate identified yet.")
+
     rows = []
     for index, candidate in enumerate(result.candidates, start=1):
         power = candidate.power_result
@@ -461,13 +498,29 @@ def _render_scenario_comparison(dataset) -> None:
     metric_options = tuple(str(value) for value in dataset.metrics)
     regions = tuple(sorted(set(dataset.data["region"].astype(str))))
     market_options = _market_size_options(dataset)
+    _common_shares = (10, 20, 30, 40, 50)
+    _common_durations = (2, 4, 6, 8, 12)
+    _objective_choices = {
+        "Find the smallest viable design": "smallest_test_share_then_duration",
+        "Find the shortest viable duration": "shortest_duration_then_test_share",
+    }
     with st.form("power_scenario_form"):
         metric = st.selectbox("Scenario metric", metric_options)
         date_options = _power_date_strings(dataset, metric)
         market_measure = st.selectbox(
             "Market-size measure", market_options, format_func=_market_size_label
         )
-        target_shares_text = st.text_input("Target test shares (%)", value="10, 20, 30, 40, 50")
+        objective_choice = st.selectbox(
+            "Objective",
+            list(_objective_choices),
+            help="Which qualifying candidate to highlight as the recommended scenario.",
+        )
+        share_presets = st.multiselect(
+            "Target test shares (%)", _common_shares, default=list(_common_shares)
+        )
+        custom_shares_text = st.text_input(
+            "Add custom test shares (%, comma-separated, optional)", value=""
+        )
         lock_duration = st.checkbox(
             "Lock duration",
             value=True,
@@ -477,10 +530,14 @@ def _render_scenario_comparison(dataset) -> None:
             fixed_duration = st.number_input(
                 "Fixed duration (periods)", min_value=1, value=4, step=1
             )
-            durations_text = ""
+            duration_presets: tuple[int, ...] = ()
+            custom_durations_text = ""
         else:
             fixed_duration = 0
-            durations_text = st.text_input("Durations (periods)", value="2, 4, 6, 8, 12")
+            duration_presets = st.multiselect("Durations (periods)", _common_durations, default=[4])
+            custom_durations_text = st.text_input(
+                "Add custom durations (periods, comma-separated, optional)", value=""
+            )
         target_effects_text = st.text_input("Target effects (%)", value="5, 10")
         target_power = st.number_input(
             "Scenario target power", min_value=0.50, max_value=0.99, value=0.80, step=0.05
@@ -491,31 +548,33 @@ def _render_scenario_comparison(dataset) -> None:
             index=0,
             format_func=lambda value: value.title(),
         )
-        method_col, fit_col = st.columns(2)
-        with method_col:
-            method = st.selectbox(
-                "Scenario simulation method", ("model_simulation", "residual_simulation")
+        with st.expander("Method details (advanced)", expanded=False):
+            st.caption("Current defaults are the approved method; change only for expert review.")
+            method_col, fit_col = st.columns(2)
+            with method_col:
+                method = st.selectbox(
+                    "Scenario simulation method", ("model_simulation", "residual_simulation")
+                )
+            with fit_col:
+                fit_method = st.selectbox(
+                    "Scenario counterfactual fit", ("ols", "elastic_net", "lasso")
+                )
+            mde_upper = st.number_input(
+                "Scenario MDE upper bound (%)", min_value=1.0, value=50.0, step=1.0
             )
-        with fit_col:
-            fit_method = st.selectbox(
-                "Scenario counterfactual fit", ("ols", "elastic_net", "lasso")
+            n_simulations = st.number_input(
+                "Scenario simulations per candidate", min_value=100, value=1000, step=100
             )
-        mde_upper = st.number_input(
-            "Scenario MDE upper bound (%)", min_value=1.0, value=50.0, step=1.0
-        )
-        n_simulations = st.number_input(
-            "Scenario simulations per candidate", min_value=100, value=1000, step=100
-        )
-        matching_strategy = st.selectbox(
-            "Candidate matching strategy", ("basic", "intermediate", "stochastic"), index=1
-        )
-        random_seed = st.number_input("Scenario random seed", min_value=0, value=42, step=1)
-        st.markdown("#### Region constraints")
-        force_test = st.multiselect("Force test regions", regions)
-        force_control = st.multiselect("Force control regions", regions)
-        exclude_both = st.multiselect("Exclude from both groups", regions)
-        test_only_exclude = st.multiselect("Exclude from test", regions)
-        control_only_exclude = st.multiselect("Exclude from control", regions)
+            matching_strategy = st.selectbox(
+                "Candidate matching strategy", ("basic", "intermediate", "stochastic"), index=1
+            )
+            random_seed = st.number_input("Scenario random seed", min_value=0, value=42, step=1)
+        with st.expander("Region constraints (advanced)", expanded=False):
+            force_test = st.multiselect("Force test regions", regions)
+            force_control = st.multiselect("Force control regions", regions)
+            exclude_both = st.multiselect("Exclude from both groups", regions)
+            test_only_exclude = st.multiselect("Exclude from test", regions)
+            control_only_exclude = st.multiselect("Exclude from control", regions)
         custom_weights_input = ""
         if market_measure is MarketSizeMeasure.CUSTOM_WEIGHT:
             custom_weights_input = st.text_input(
@@ -537,12 +596,21 @@ def _render_scenario_comparison(dataset) -> None:
             _render_scenario_results(previous)
         return
     try:
-        target_shares = _parse_float_list(target_shares_text, "Target test shares", percent=True)
+        target_shares_text = ", ".join(
+            [str(value) for value in share_presets] + _split_custom_list(custom_shares_text)
+        )
         durations = (
             (int(fixed_duration),)
             if lock_duration
-            else _parse_int_list(durations_text, "Durations")
+            else _parse_int_list(
+                ", ".join(
+                    [str(value) for value in duration_presets]
+                    + _split_custom_list(custom_durations_text)
+                ),
+                "Durations",
+            )
         )
+        target_shares = _parse_float_list(target_shares_text, "Target test shares", percent=True)
         target_effects = _parse_float_list(target_effects_text, "Target effects")
         if any(effect < 0 for effect in target_effects):
             raise ValueError("Target effects must be non-negative")
@@ -598,6 +666,7 @@ def _render_scenario_comparison(dataset) -> None:
             frequency=frequency,
             matching_strategy=matching_strategy,
             validation_method="enet",
+            objective=_objective_choices[objective_choice],
         )
         with st.spinner("Building, validating and sizing candidate scenarios..."):
             result = size_power_scenarios(dataset, config)

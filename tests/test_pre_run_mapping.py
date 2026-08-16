@@ -335,7 +335,7 @@ class TestPreRunMappingUI:
     def _uploaded(app: AppTest, path: Path) -> AppTest:
         # Matching happens on Region Matching; the design KPI uploader lives
         # on Validate Test Design — switch steps to reach it.
-        seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+        seed_plan_step(app, PlanStep.CHECK_DESIGN)
         app.run(timeout=RUN_TIMEOUT)
         _upload_kpi(app, "design", path.name, path.read_bytes())
         return app

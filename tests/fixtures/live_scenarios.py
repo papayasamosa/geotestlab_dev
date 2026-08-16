@@ -415,9 +415,9 @@ def _upload_kpi(app: AppTest, mode_prefix: str, filename: str, file_bytes: bytes
     # (idempotent if the caller already switched).
     if mode_prefix == "design":
         app.session_state["ui_navigation_state"] = NavigationState(
-            area=JourneyArea.PLAN, plan_step=PlanStep.VALIDATE_DESIGN
+            area=JourneyArea.PLAN, plan_step=PlanStep.CHECK_DESIGN
         )
-        app.session_state["_plan_step_radio"] = PLAN_STEP_TITLES[PlanStep.VALIDATE_DESIGN]
+        app.session_state["_plan_step_radio"] = PLAN_STEP_TITLES[PlanStep.CHECK_DESIGN]
         app.run(timeout=RUN_TIMEOUT)
     elif mode_prefix == "evaluate":
         app.session_state["ui_navigation_state"] = NavigationState(area=JourneyArea.EVALUATE)

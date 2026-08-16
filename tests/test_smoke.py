@@ -149,8 +149,7 @@ class TestLiveAppStartup:
         plan_step_radio = next(r for r in live_app.radio if r.label == "Step")
         assert list(plan_step_radio.options) == [
             "Choose regions",
-            "Check design quality",
-            "Can we detect the effect?",
+            "Check design",
             "Media plan",
             "Expected impact",
             "Review and approve",
