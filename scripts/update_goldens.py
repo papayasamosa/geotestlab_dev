@@ -60,26 +60,37 @@ def _write_safe(path: Path, payload: dict) -> None:
     tmp.replace(path)
 
 
-def update_app_tab_labels():
-    """Capture the live app's tab labels."""
+def update_app_navigation_labels():
+    """Capture the live app's task-led Plan-journey step labels.
+
+    Since PR2 the app no longer exposes a flat ``st.tabs()`` bar (see
+    ``geotestlab/ui/navigation.py``); the equivalent live-app structural
+    surface is the "Step" radio shown within the Plan a new geo test journey.
+    """
     from streamlit.testing.v1 import AppTest
 
+    from geotestlab.ui import JourneyArea, NavigationState, PlanStep
+
     app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+    app.session_state["ui_navigation_state"] = NavigationState(
+        area=JourneyArea.PLAN, plan_step=PlanStep.REGIONS
+    )
     app.run(timeout=180)
 
-    tab_labels = [t.label for t in app.tabs]
+    plan_step_radio = next(r for r in app.radio if r.label == "Step")
+    plan_step_labels = list(plan_step_radio.options)
     payload = {
         "schema_version": 1,
-        "scenario": "app_tab_labels",
+        "scenario": "app_navigation_labels",
         "fixture_version": 1,
         "app_baseline_commit": _app_baseline_commit(),
         "golden_created_by_commit": _current_commit(),
         "settings": {},
-        "expected": {"tab_labels": tab_labels, "n_tabs": len(tab_labels)},
+        "expected": {"plan_step_labels": plan_step_labels, "n_plan_steps": len(plan_step_labels)},
         "tolerances": {},
         "known_limitations": [],
     }
-    path = GOLDEN_DIR / "app_tab_labels.json"
+    path = GOLDEN_DIR / "app_navigation_labels.json"
     print(f"  Writing {path.name}")
     _write_safe(path, payload)
 

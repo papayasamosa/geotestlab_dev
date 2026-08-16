@@ -21,7 +21,7 @@ def test_get_navigation_state_initialises_default_on_first_use(monkeypatch):
 
 
 def test_get_navigation_state_returns_existing_state(monkeypatch):
-    existing = NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.DESIGN)
+    existing = NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.VALIDATE_DESIGN)
     session_state = {state_mod._NAVIGATION_KEY: existing}
     monkeypatch.setattr(state_mod.st, "session_state", session_state)
 

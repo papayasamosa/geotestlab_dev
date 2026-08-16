@@ -1,13 +1,10 @@
 """Task-led navigation state for the target information architecture.
 
 This module defines the target navigation model (see the UX overhaul
-programme, section 6): an entry screen with three choices, a five-step
+programme, section 6): an entry screen with three choices, a six-step
 ``Plan a new geo test`` journey and a two-step ``Analyse a completed geo
-test`` journey.
-
-PR1 introduces this model only. The existing eight-tab navigation in
-``geotestmatch.py`` keeps rendering unchanged until a later PR wires the new
-shell in, so nothing here is imported by the running application yet.
+test`` journey. PR2 wires this into ``geotestmatch.py`` in place of the
+former eight-tab navigation.
 """
 
 from __future__ import annotations
@@ -26,12 +23,22 @@ class JourneyArea(Enum):
 
 
 class PlanStep(Enum):
-    """The five sequential stages of ``Plan a new geo test``."""
+    """The sequential stages of ``Plan a new geo test``.
 
-    SETUP = "setup"
+    PR2 wires these steps 1:1 onto the app's existing six planning-phase
+    tabs (Region Matching, Validate Test Design, Power & Test Sizing, Media
+    Delivery Feasibility, Effect Plausibility, Design Recommendation/Approve
+    Design). A later PR may consolidate ``VALIDATE_DESIGN``/``POWER_SIZING``
+    into one "Check design" step, and ``MEDIA_DELIVERY``/``EFFECT_PLAUSIBILITY``
+    into one "Media and expected impact" step, once that content is actually
+    merged (see the UX overhaul programme, section 6.2 and PR4/PR5).
+    """
+
     REGIONS = "regions"
-    DESIGN = "design"
-    MEDIA_AND_IMPACT = "media_and_impact"
+    VALIDATE_DESIGN = "validate_design"
+    POWER_SIZING = "power_sizing"
+    MEDIA_DELIVERY = "media_delivery"
+    EFFECT_PLAUSIBILITY = "effect_plausibility"
     REVIEW = "review"
 
 
@@ -43,10 +50,11 @@ class EvaluateStep(Enum):
 
 
 PLAN_STEP_ORDER: Final[tuple[PlanStep, ...]] = (
-    PlanStep.SETUP,
     PlanStep.REGIONS,
-    PlanStep.DESIGN,
-    PlanStep.MEDIA_AND_IMPACT,
+    PlanStep.VALIDATE_DESIGN,
+    PlanStep.POWER_SIZING,
+    PlanStep.MEDIA_DELIVERY,
+    PlanStep.EFFECT_PLAUSIBILITY,
     PlanStep.REVIEW,
 )
 
@@ -56,10 +64,11 @@ EVALUATE_STEP_ORDER: Final[tuple[EvaluateStep, ...]] = (
 )
 
 PLAN_STEP_TITLES: Final[dict[PlanStep, str]] = {
-    PlanStep.SETUP: "Test setup",
     PlanStep.REGIONS: "Choose regions",
-    PlanStep.DESIGN: "Check design",
-    PlanStep.MEDIA_AND_IMPACT: "Media and expected impact",
+    PlanStep.VALIDATE_DESIGN: "Check design quality",
+    PlanStep.POWER_SIZING: "Can we detect the effect?",
+    PlanStep.MEDIA_DELIVERY: "Media plan",
+    PlanStep.EFFECT_PLAUSIBILITY: "Expected impact",
     PlanStep.REVIEW: "Review and approve",
 }
 
@@ -79,7 +88,7 @@ class NavigationState:
     """
 
     area: JourneyArea = JourneyArea.ENTRY
-    plan_step: PlanStep = PlanStep.SETUP
+    plan_step: PlanStep = PlanStep.REGIONS
     evaluate_step: EvaluateStep = EvaluateStep.SETUP
 
     def with_area(self, area: JourneyArea) -> NavigationState:
