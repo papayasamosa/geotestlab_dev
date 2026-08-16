@@ -7,6 +7,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+from geotestlab.ui import PlanStep
+from tests.conftest import seed_plan_step
 from tests.fixtures.end_to_end_planning import (
     END_TO_END_METRIC,
     run_end_to_end_planning,
@@ -41,6 +43,7 @@ def test_end_to_end_planning_pipeline_freezes_exports_and_reconciles_staleness(t
 def test_live_app_drives_aggregated_selection_canonical_dataset_and_matching(tmp_path):
     workbook = write_end_to_end_kpi_xlsx(tmp_path / "end_to_end_live.xlsx")
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.REGIONS)
     app.run(timeout=RUN_TIMEOUT)
 
     matching_method = [item for item in app.sidebar.radio if item.label == "Matching method"][0]

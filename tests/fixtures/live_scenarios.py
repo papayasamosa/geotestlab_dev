@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 from streamlit.testing.v1 import AppTest
 
+from geotestlab.ui import PLAN_STEP_TITLES, JourneyArea, NavigationState, PlanStep
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APP_PATH = str(REPO_ROOT / "geotestmatch.py")
 RUN_TIMEOUT = 180
@@ -66,6 +68,13 @@ def _sget(ss, key, default=None):
 
 def _new_app() -> AppTest:
     app = AppTest.from_file(APP_PATH)
+    # Since PR2 the app opens on a task-led entry screen (see
+    # geotestlab/ui/navigation.py); every drive_* scenario below starts on
+    # Region Matching, matching what this helper produced before that
+    # entry screen existed.
+    app.session_state["ui_navigation_state"] = NavigationState(
+        area=JourneyArea.PLAN, plan_step=PlanStep.REGIONS
+    )
     app.run(timeout=RUN_TIMEOUT)
     return app
 
@@ -400,6 +409,20 @@ def _manual_match(app: AppTest) -> None:
 
 
 def _upload_kpi(app: AppTest, mode_prefix: str, filename: str, file_bytes: bytes) -> None:
+    # The design uploader lives on Validate Test Design (Plan journey); the
+    # evaluate uploader lives on Results (Evaluate journey). Matching happens
+    # on Region Matching, so switch steps before looking for either uploader
+    # (idempotent if the caller already switched).
+    if mode_prefix == "design":
+        app.session_state["ui_navigation_state"] = NavigationState(
+            area=JourneyArea.PLAN, plan_step=PlanStep.VALIDATE_DESIGN
+        )
+        app.session_state["_plan_step_radio"] = PLAN_STEP_TITLES[PlanStep.VALIDATE_DESIGN]
+        app.run(timeout=RUN_TIMEOUT)
+    elif mode_prefix == "evaluate":
+        app.session_state["ui_navigation_state"] = NavigationState(area=JourneyArea.EVALUATE)
+        app.run(timeout=RUN_TIMEOUT)
+
     uploaders = [f for f in app.file_uploader if f.key.startswith(f"kpi_uploader_{mode_prefix}_")]
     uploaders[0].set_value(
         (filename, file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

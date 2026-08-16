@@ -43,11 +43,14 @@ class TestAppStructure:
         assert not live_app.exception, f"App raised: {live_app.exception}"
 
     @pytest.mark.smoke
-    def test_tab_labels_match_golden(self, live_app):
-        golden = _load_golden("app_tab_labels")
-        tab_labels = [t.label for t in live_app.tabs]
-        expected = golden["expected"]["tab_labels"]
-        assert tab_labels == expected, f"Tab labels differ: {tab_labels} != {expected}"
+    def test_plan_step_labels_match_golden(self, live_app):
+        golden = _load_golden("app_navigation_labels")
+        plan_step_radio = next(r for r in live_app.radio if r.label == "Step")
+        plan_step_labels = list(plan_step_radio.options)
+        expected = golden["expected"]["plan_step_labels"]
+        assert plan_step_labels == expected, (
+            f"Plan step labels differ: {plan_step_labels} != {expected}"
+        )
 
     @pytest.mark.smoke
     def test_bundled_workbook_matches_golden(self):

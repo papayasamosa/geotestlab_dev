@@ -19,31 +19,38 @@ streamlit run geotestmatch.py
 The default workbook is loaded from `data/`. Before relying on a result, check
 the market, geography level, metric, date frequency and data-quality report.
 
-## The workflow tabs
+## The workflow
 
-1. **Region Matching** — choose test regions and construct controls using
+The app opens on an entry screen with three choices: **Plan a new geo test**,
+**Analyse a completed geo test**, or **Open a saved experiment** (loads a
+previously exported JSON record directly from the entry screen).
+
+**Plan a new geo test** is a guided, six-step journey:
+
+1. **Choose regions** — select test regions and construct controls using
    structural or KPI-pattern matching.
-2. **Validate Test Design** — assess historical counterfactual quality with the
-   selected validation method and rolling-origin diagnostics.
-3. **Power & Test Sizing** — run the explicit production power contract and
-   compare typed candidate shares, durations, MDE and support status.
-4. **Media Delivery Feasibility** — assess budget, CPM, impressions, reach,
-   frequency and thresholds using the registered Meta platform profile.
-5. **Effect Plausibility** — record a dated evidence bridge and low/central/high
-   KPI-uplift scenarios, then compare them with MDE. The evidence-quality policy
-   remains pending.
-6. **Design Recommendation / Approve Design** — compare typed upstream
-   candidates under an explicit smallest-design or least-cost objective.
-7. **Measure Test Impact** — evaluate a completed test and estimate observed
-   impact.
-8. **Bayesian TBR** — run the Bayesian time-based regression workflow when its
-   sampling inputs and diagnostics are appropriate.
+2. **Check design quality** — assess historical counterfactual quality with
+   the selected validation method and rolling-origin diagnostics.
+3. **Can we detect the effect?** — run the explicit production power contract
+   and compare typed candidate shares, durations, MDE and support status.
+4. **Media plan** — assess budget, CPM, impressions, reach, frequency and
+   thresholds using the registered Meta platform profile.
+5. **Expected impact** — record a dated evidence bridge and low/central/high
+   KPI-uplift scenarios, then compare them with MDE. The evidence-quality
+   policy remains pending.
+6. **Review and approve** — compare typed upstream candidates under an
+   explicit smallest-design or least-cost objective, then freeze the design.
 
-The app follows this lifecycle directly. Region Matching through Design
-Recommendation / Approve Design form the **Plan a Test** phase. Measure Test
-Impact and Bayesian TBR form **Evaluate a Completed Test**. A visible workflow
-status summary shows current, stale and needs-attention states plus the next
-recommended action.
+Back/Next buttons or the step selector move between steps without losing
+state.
+
+**Analyse a completed geo test** covers **Results** — evaluate a completed
+test and estimate observed impact — with an optional **Run advanced
+uncertainty analysis** action that runs the Bayesian time-based regression
+workflow when its sampling inputs and diagnostics are appropriate.
+
+A compact workflow-status summary (shown once past the entry screen) tracks
+current, stale and needs-attention states plus the next recommended action.
 
 The experiment-record expander is the audit trail. It shows stage statuses,
 fingerprints, stale results, frozen design versions, reproducibility metadata,

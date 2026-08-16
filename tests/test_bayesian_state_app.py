@@ -21,6 +21,8 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from geotestlab.ui import PlanStep
+from tests.conftest import seed_evaluate, seed_plan_step
 from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 from tests.fixtures.live_scenarios import (
     CONTROL_REGIONS,
@@ -36,6 +38,7 @@ APP_PATH = str(REPO_ROOT / "geotestmatch.py")
 
 def _new_app() -> AppTest:
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.REGIONS)
     app.run(timeout=RUN_TIMEOUT)
     return app
 
@@ -73,6 +76,11 @@ class TestBayesianTraceCreation:
         )
         app = _new_app()
         _manual_match(app)
+        # Measure Test Impact (tab7) and the Bayesian TBR button (tab8) both
+        # live under the Evaluate journey; the Bayesian button is additionally
+        # gated behind the "advanced uncertainty" toggle within Results.
+        seed_evaluate(app, show_advanced_uncertainty=True)
+        app.run(timeout=RUN_TIMEOUT)
         _upload_kpi(app, "evaluate", "weekly_eval.xlsx", kpi_path.read_bytes())
 
         run_btn = [b for b in app.button if b.key == "evaluate_run_button"][0]
@@ -142,6 +150,8 @@ class TestResetFamiliesClearTrace:
         )
         app = _new_app()
         _manual_match(app)
+        seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+        app.run(timeout=RUN_TIMEOUT)
         _upload_kpi(app, "design", "weekly.xlsx", kpi_path.read_bytes())
         _inject_bayesian_state(app)
         # Changing the historical-period start fires clear_validation_state.
@@ -162,6 +172,8 @@ class TestResetFamiliesClearTrace:
         )
         app = _new_app()
         _manual_match(app)
+        seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+        app.run(timeout=RUN_TIMEOUT)
         _upload_kpi(app, "design", "weekly.xlsx", kpi_path.read_bytes())
         _inject_bayesian_state(app)
         # Uploading a new file fires clear_uploaded_kpi_state.

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from geotestlab.ui import JourneyArea, NavigationState, PlanStep
+from geotestlab.ui import PLAN_STEP_TITLES, JourneyArea, NavigationState, PlanStep
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,16 +31,26 @@ def live_app():
 
 
 def seed_plan_step(app: AppTest, step: PlanStep) -> None:
-    """Pre-seed navigation state so ``app.run()`` boots directly into a Plan step.
+    """Set navigation state so the next ``app.run()`` shows a specific Plan step.
 
     Since PR2, the app opens on the task-led entry screen by default (no
-    analytical content renders there). Call this before the first ``app.run()``
-    so a test can reach a specific planning step (Region Matching, Validate
-    Test Design, Power & Test Sizing, Media Delivery Feasibility, Effect
-    Plausibility or Design Recommendation/Approve Design) without simulating
-    the entry-screen and step-navigation button clicks.
+    analytical content renders there), and only one Plan step's content
+    renders at a time (unlike the former ``st.tabs()``, where every tab's
+    content rendered on every run). Call this before the first ``app.run()``
+    to land directly on a step, or again between ``app.run()`` calls
+    mid-test to switch steps (e.g. complete matching on Region Matching, then
+    switch to Validate Test Design to reach its uploader) — both are safe.
+
+    Also writes the "Step" radio's own session-state entry, not just
+    ``ui_navigation_state``: a keyed ``st.radio`` is the source of truth for
+    its own value once instantiated, so leaving it stale would make the next
+    run's mismatch-reconciliation silently snap navigation back to whatever
+    step the radio last showed (see ``geotestmatch.py``'s ``_go_to_plan_step``).
     """
-    app.session_state["ui_navigation_state"] = NavigationState(area=JourneyArea.PLAN, plan_step=step)
+    app.session_state["ui_navigation_state"] = NavigationState(
+        area=JourneyArea.PLAN, plan_step=step
+    )
+    app.session_state["_plan_step_radio"] = PLAN_STEP_TITLES[step]
 
 
 def seed_evaluate(app: AppTest, *, show_advanced_uncertainty: bool = False) -> None:

@@ -24,6 +24,8 @@ from geotestlab.data.exceptions import (
     UnresolvedMetricColumnError,
 )
 from geotestlab.data.ingestion import load_and_reshape_kpi
+from geotestlab.ui import PlanStep
+from tests.conftest import seed_plan_step
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -330,6 +332,7 @@ class TestKPIPatternIngestion:
 
         # 1. Fresh app.
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        seed_plan_step(app, PlanStep.REGIONS)
         app.run(timeout=180)
         assert not app.exception
 

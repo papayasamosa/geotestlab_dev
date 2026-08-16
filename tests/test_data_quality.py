@@ -25,6 +25,8 @@ from geotestlab.data.ingestion import (
     load_and_reshape_kpi,
 )
 from geotestlab.data.models import compute_mapping_report
+from geotestlab.ui import PlanStep
+from tests.conftest import seed_plan_step
 from tests.fixtures.live_scenarios import RUN_TIMEOUT, _pick_test_auto_match, _run_match
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -305,6 +307,11 @@ class TestQualityReportUI:
     def _upload_design_kpi(app, path):
         app.run(timeout=RUN_TIMEOUT)
         TestQualityReportUI._prepare_matching_state(app)
+        # Matching happens on the Region Matching step; the design KPI
+        # uploader lives on Validate Test Design — switch steps to reach it
+        # (see tests.conftest.seed_plan_step).
+        seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+        app.run(timeout=RUN_TIMEOUT)
         uploaders = [f for f in app.file_uploader if f.key.startswith("kpi_uploader_design_")]
         assert len(uploaders) == 1, (
             f"Design KPI uploader not found: {[f.key for f in app.file_uploader]}"
@@ -323,6 +330,7 @@ class TestQualityReportUI:
         from tests.fixture_factories.write_simple_kpi_xlsx import write_simple_kpi_xlsx
 
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        seed_plan_step(app, PlanStep.REGIONS)
         app.run(timeout=180)
         assert not app.exception
 
@@ -343,6 +351,7 @@ class TestQualityReportUI:
         from tests.fixture_factories.write_simple_kpi_xlsx import write_simple_kpi_xlsx
 
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        seed_plan_step(app, PlanStep.REGIONS)
         app.run(timeout=180)
         assert not app.exception
 
@@ -368,6 +377,7 @@ class TestQualityReportUI:
         from tests.fixture_factories.write_simple_kpi_xlsx import write_simple_kpi_xlsx
 
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        seed_plan_step(app, PlanStep.REGIONS)
         app.run(timeout=180)
         assert not app.exception
 
@@ -394,6 +404,7 @@ class TestQualityReportUI:
         from tests.fixture_factories.write_simple_kpi_xlsx import write_simple_kpi_xlsx
 
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        seed_plan_step(app, PlanStep.REGIONS)
         app.run(timeout=180)
         assert not app.exception
 
