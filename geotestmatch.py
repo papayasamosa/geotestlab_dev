@@ -134,7 +134,7 @@ from geotestlab.ui import (
     get_navigation_state,
     set_navigation_state,
 )
-from geotestlab.ui.components import StatusTone, render_status_summary
+from geotestlab.ui.components import StatusTone, render_status_line, render_status_summary
 
 # Validation core (geotestlab.validation) — pure functions, no Streamlit imports.
 from geotestlab.validation import (
@@ -2484,10 +2484,11 @@ if not kpi_pattern_mode:
             list(strategy_labels.keys()),
             index=0,
             on_change=reset_results,
-            help="Controls how thoroughly GeoMatch searches for the best control group.\n\n"
-            "**Basic** uses nearest-neighbour matching — fast but may miss better combinations.\n\n"
-            "**Intermediate** refines the nearest-neighbour result by trying local swaps.\n\n"
-            "**Advanced** uses stochastic swap search across many candidate combinations. It is slower than Intermediate, but explores more possible control groups without exhaustively testing every combination.",
+            help="Controls how thoroughly the search looks for the best control group.\n\n"
+            "**Basic** is the fastest option — good for a first look.\n\n"
+            "**Intermediate** spends a little longer refining the result.\n\n"
+            "**Advanced** searches the widest range of combinations. It takes the longest to "
+            "run but is the most thorough.",
         )
         match_mode = strategy_labels[strategy_choice]
 
@@ -2523,10 +2524,11 @@ else:
             list(strategy_labels.keys()),
             index=0,
             on_change=reset_results,
-            help="Controls how thoroughly GeoMatch searches for the best control group.\n\n"
-            "**Basic** uses nearest-neighbour matching — fast but may miss better combinations.\n\n"
-            "**Intermediate** refines the nearest-neighbour result by trying local swaps.\n\n"
-            "**Advanced** uses stochastic swap search across many candidate combinations. It is slower than Intermediate, but explores more possible control groups without exhaustively testing every combination.",
+            help="Controls how thoroughly the search looks for the best control group.\n\n"
+            "**Basic** is the fastest option — good for a first look.\n\n"
+            "**Intermediate** spends a little longer refining the result.\n\n"
+            "**Advanced** searches the widest range of combinations. It takes the longest to "
+            "run but is the most thorough.",
         )
         match_mode = strategy_labels[strategy_choice]
 
@@ -2845,6 +2847,33 @@ with _lifecycle_status_slot.container():
 # =============================================================================
 def render_structural_matching_tab():
     # ------------------------------------------------------------
+    # Current design at a glance (only once a match has been run)
+    # ------------------------------------------------------------
+    _current_snapshot = st.session_state.get("match_run_snapshot")
+    if _current_snapshot:
+        render_status_summary(
+            [
+                (
+                    "Test regions",
+                    str(len(_current_snapshot.get("test_geos") or [])),
+                    StatusTone.NEUTRAL,
+                ),
+                (
+                    "Control regions",
+                    str(len(_current_snapshot.get("selected_controls") or [])),
+                    StatusTone.NEUTRAL,
+                ),
+                (
+                    "Test population share",
+                    format_percentage(_current_snapshot.get("test_share")),
+                    StatusTone.NEUTRAL,
+                ),
+            ]
+        )
+        st.caption("Current design from the last completed run. Full diagnostics are below.")
+        st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+
+    # ------------------------------------------------------------
     # Preview data
     # ------------------------------------------------------------
     with st.expander(f"Preview data: {market} ({geography_level})", expanded=False):
@@ -2967,76 +2996,6 @@ def render_structural_matching_tab():
             guided_iterations = 2000
 
         else:  # "Set Rules & Auto‑Build Groups"
-            st.markdown(
-                "Geographies to <span style='color:#dc2626;font-weight:600'>exclude from both</span> test and control:",
-                unsafe_allow_html=True,
-            )
-            selected_global_exclude_labels = st.multiselect(
-                "global_exclude",
-                geo_options_with_pop,
-                label_visibility="collapsed",
-                help=(
-                    "Removes a region from both the test and control candidate pools "
-                    "entirely — the preferred way to drop a region from the experiment. "
-                    "It stays part of the total market population used as the share "
-                    "denominator, so shares are not recalculated on a smaller market."
-                ),
-                key="global_exclude_select",
-            )
-            global_exclude = [label_to_geo[label] for label in selected_global_exclude_labels]
-
-            st.markdown(
-                "Test geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
-                unsafe_allow_html=True,
-            )
-            # A persisted selection is never silently dropped when it would
-            # conflict with another rule — it stays selectable so the run's
-            # structured conflict blocker (validate_constraints) surfaces it.
-            _exp_include_persisted = {
-                label_to_geo[lbl] for lbl in st.session_state.get("exp_include_select", [])
-            }
-            selected_include_labels = st.multiselect(
-                "exp_include",
-                [
-                    label
-                    for label in geo_options_with_pop
-                    if label_to_geo[label] in _exp_include_persisted
-                    or label_to_geo[label] not in global_exclude
-                ],
-                label_visibility="collapsed",
-                key="exp_include_select",
-            )
-            force_exp_include = [label_to_geo[label] for label in selected_include_labels]
-            _exp_exclude_persisted = {
-                label_to_geo[lbl] for lbl in st.session_state.get("exp_exclude_select", [])
-            }
-            exclude_options = [
-                label
-                for label in geo_options_with_pop
-                if label_to_geo[label] in _exp_exclude_persisted
-                or (
-                    label_to_geo[label] not in force_exp_include
-                    and label_to_geo[label] not in global_exclude
-                )
-            ]
-            st.markdown(
-                "Test geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
-                unsafe_allow_html=True,
-            )
-            selected_exclude_labels = st.multiselect(
-                "exp_exclude",
-                exclude_options,
-                label_visibility="collapsed",
-                help=(
-                    "Excluded from the TEST group only — these regions remain available "
-                    "for the control pool. To remove a region from the analysis entirely, "
-                    "use the 'exclude from both' field above instead."
-                ),
-                key="exp_exclude_select",
-            )
-            force_exp_exclude = [label_to_geo[label] for label in selected_exclude_labels]
-            force_ctrl_include = []
-            force_ctrl_exclude = []
             target_test_share = st.slider(
                 kpi_share_label("Target test population share"),
                 5,
@@ -3059,15 +3018,87 @@ def render_structural_matching_tab():
                 ),
                 key="tolerance_slider",
             )
-            guided_iterations = st.slider(
-                "Search intensity",
-                500,
-                10000,
-                2000,
-                500,
-                help="Number of candidate test groups evaluated. Higher values increase the chance of finding a better group but take longer to run.",
-                key="guided_iterations_slider",
-            )
+
+            with st.expander("Region constraints (advanced)", expanded=False):
+                st.markdown(
+                    "Geographies to <span style='color:#dc2626;font-weight:600'>exclude from both</span> test and control:",
+                    unsafe_allow_html=True,
+                )
+                selected_global_exclude_labels = st.multiselect(
+                    "global_exclude",
+                    geo_options_with_pop,
+                    label_visibility="collapsed",
+                    help=(
+                        "Removes a region from both the test and control candidate pools "
+                        "entirely — the preferred way to drop a region from the experiment. "
+                        "It stays part of the total market population used as the share "
+                        "denominator, so shares are not recalculated on a smaller market."
+                    ),
+                    key="global_exclude_select",
+                )
+                global_exclude = [label_to_geo[label] for label in selected_global_exclude_labels]
+
+                st.markdown(
+                    "Test geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
+                    unsafe_allow_html=True,
+                )
+                # A persisted selection is never silently dropped when it would
+                # conflict with another rule — it stays selectable so the run's
+                # structured conflict blocker (validate_constraints) surfaces it.
+                _exp_include_persisted = {
+                    label_to_geo[lbl] for lbl in st.session_state.get("exp_include_select", [])
+                }
+                selected_include_labels = st.multiselect(
+                    "exp_include",
+                    [
+                        label
+                        for label in geo_options_with_pop
+                        if label_to_geo[label] in _exp_include_persisted
+                        or label_to_geo[label] not in global_exclude
+                    ],
+                    label_visibility="collapsed",
+                    key="exp_include_select",
+                )
+                force_exp_include = [label_to_geo[label] for label in selected_include_labels]
+                _exp_exclude_persisted = {
+                    label_to_geo[lbl] for lbl in st.session_state.get("exp_exclude_select", [])
+                }
+                exclude_options = [
+                    label
+                    for label in geo_options_with_pop
+                    if label_to_geo[label] in _exp_exclude_persisted
+                    or (
+                        label_to_geo[label] not in force_exp_include
+                        and label_to_geo[label] not in global_exclude
+                    )
+                ]
+                st.markdown(
+                    "Test geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
+                    unsafe_allow_html=True,
+                )
+                selected_exclude_labels = st.multiselect(
+                    "exp_exclude",
+                    exclude_options,
+                    label_visibility="collapsed",
+                    help=(
+                        "Excluded from the TEST group only — these regions remain available "
+                        "for the control pool. To remove a region from the analysis entirely, "
+                        "use the 'exclude from both' field above instead."
+                    ),
+                    key="exp_exclude_select",
+                )
+                force_exp_exclude = [label_to_geo[label] for label in selected_exclude_labels]
+                guided_iterations = st.slider(
+                    "Search intensity",
+                    500,
+                    10000,
+                    2000,
+                    500,
+                    help="Number of candidate test groups evaluated. Higher values increase the chance of finding a better group but take longer to run.",
+                    key="guided_iterations_slider",
+                )
+            force_ctrl_include = []
+            force_ctrl_exclude = []
             test_geos = []  # filled later
 
     # ----------------------------------------------------------------------
@@ -3166,59 +3197,60 @@ def render_structural_matching_tab():
                 )
             ]
             ctrl_options_with_pop, label_to_ctrl_include = _geo_labels(eligible_for_ctrl_include)
-            st.markdown(
-                "Control geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
-                unsafe_allow_html=True,
-            )
-            selected_ctrl_include_labels = st.multiselect(
-                "ctrl_include",
-                ctrl_options_with_pop,
-                label_visibility="collapsed",
-                help=(
-                    "Force-includes the region in the CONTROL candidate pool (it "
-                    "cannot be a test region). It is ELIGIBLE for — but not "
-                    "guaranteed in — the final control group: the matching "
-                    "strategy decides final selection. A region can only be "
-                    "force-included in one group."
-                ),
-                key="ctrl_include_select",
-            )
-            force_ctrl_include = [
-                label_to_ctrl_include[label] for label in selected_ctrl_include_labels
-            ]
-
-            _ctrl_exclude_persisted = {
-                label_to_geo[lbl] for lbl in st.session_state.get("ctrl_exclude_select", [])
-            }
-            eligible_for_ctrl_exclude = [
-                g
-                for g in all_geo_values
-                if g in _ctrl_exclude_persisted
-                or (
-                    g not in force_exp_include
-                    and g not in global_exclude
-                    and g not in force_ctrl_include
+            with st.expander("Region constraints (advanced)", expanded=False):
+                st.markdown(
+                    "Control geographies to force <span style='color:#15803d;font-weight:600'>include:</span>",
+                    unsafe_allow_html=True,
                 )
-            ]
-            exclude_ctrl_options, label_to_ctrl_exclude = _geo_labels(eligible_for_ctrl_exclude)
-            st.markdown(
-                "Control geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
-                unsafe_allow_html=True,
-            )
-            selected_ctrl_exclude_labels = st.multiselect(
-                "ctrl_exclude",
-                exclude_ctrl_options,
-                label_visibility="collapsed",
-                help=(
-                    "Excluded from the CONTROL group only — these regions remain "
-                    "available for test selection. To remove a region from the analysis "
-                    "entirely, use the 'exclude from both' field above instead."
-                ),
-                key="ctrl_exclude_select",
-            )
-            force_ctrl_exclude = [
-                label_to_ctrl_exclude[label] for label in selected_ctrl_exclude_labels
-            ]
+                selected_ctrl_include_labels = st.multiselect(
+                    "ctrl_include",
+                    ctrl_options_with_pop,
+                    label_visibility="collapsed",
+                    help=(
+                        "Force-includes the region in the CONTROL candidate pool (it "
+                        "cannot be a test region). It is ELIGIBLE for — but not "
+                        "guaranteed in — the final control group: the matching "
+                        "strategy decides final selection. A region can only be "
+                        "force-included in one group."
+                    ),
+                    key="ctrl_include_select",
+                )
+                force_ctrl_include = [
+                    label_to_ctrl_include[label] for label in selected_ctrl_include_labels
+                ]
+
+                _ctrl_exclude_persisted = {
+                    label_to_geo[lbl] for lbl in st.session_state.get("ctrl_exclude_select", [])
+                }
+                eligible_for_ctrl_exclude = [
+                    g
+                    for g in all_geo_values
+                    if g in _ctrl_exclude_persisted
+                    or (
+                        g not in force_exp_include
+                        and g not in global_exclude
+                        and g not in force_ctrl_include
+                    )
+                ]
+                exclude_ctrl_options, label_to_ctrl_exclude = _geo_labels(eligible_for_ctrl_exclude)
+                st.markdown(
+                    "Control geographies to force <span style='color:#dc2626;font-weight:600'>exclude:</span>",
+                    unsafe_allow_html=True,
+                )
+                selected_ctrl_exclude_labels = st.multiselect(
+                    "ctrl_exclude",
+                    exclude_ctrl_options,
+                    label_visibility="collapsed",
+                    help=(
+                        "Excluded from the CONTROL group only — these regions remain "
+                        "available for test selection. To remove a region from the analysis "
+                        "entirely, use the 'exclude from both' field above instead."
+                    ),
+                    key="ctrl_exclude_select",
+                )
+                force_ctrl_exclude = [
+                    label_to_ctrl_exclude[label] for label in selected_ctrl_exclude_labels
+                ]
             st.session_state.force_ctrl_exclude = force_ctrl_exclude
             control_pool_geos = [
                 g
@@ -3234,9 +3266,8 @@ def render_structural_matching_tab():
     # ------------------------------------------------------------
     # Sidebar strategy parameters (keep in sidebar — do NOT move)
     # ------------------------------------------------------------
-    with st.sidebar:
-        st.write("---")
-        st.header("3. Strategy Parameters")
+    with st.sidebar, st.expander("⚙️ Advanced matching settings", expanded=False):
+        st.caption("Method, search effort and feature weighting. Defaults are safe to leave as-is.")
         force_1to1 = st.checkbox("Force 1-to-1 Match Ratio", value=False)
 
         if setup_mode == "Manual Selection (Pick Both)":
@@ -3273,14 +3304,13 @@ def render_structural_matching_tab():
                 max_value=CONFIG["genetic_iterations"]["max"],
                 value=CONFIG["genetic_iterations"]["default"],
                 step=100,
-                help="Number of random single-swap trials the stochastic search runs per control-group size. Higher values search more combinations but take longer.",
+                help="Number of random single-swap trials the search runs per control-group size. Higher values search more combinations but take longer.",
             )
         else:
             genetic_iterations = CONFIG["genetic_iterations"]["default"]
 
         st.write("---")
         if not st.session_state.get("kpi_pattern_mode"):
-            st.header("4. Matching Feature Importance")
             st.caption(f"📊 **{len(active_features)} numeric features** available for weighting")
             if "current_weights" not in st.session_state:
                 st.session_state.current_weights = {f: 1 for f in active_features}
@@ -4270,12 +4300,13 @@ def render_structural_matching_tab():
                 if st.button("📋 Copy Summary to Clipboard", width="stretch"):
                     _summary_test_share_pct = experiment_pop / eligible_market_pop * 100
                     _summary_control_share_pct = control_pop / eligible_market_pop * 100
-                    _guided_seed_line = (
-                        f"\nGuided Search Seed: {GUIDED_SEARCH_CONFIG.seed}"
-                        if setup_mode == "Set Rules & Auto-Build Groups"
-                        else ""
+                    # Plain-language label, not the internal strategy/algorithm name — the
+                    # seed is reproducibility metadata and stays out of this quick-share
+                    # summary; it remains available in the technical export.
+                    _summary_strategy_label = {v: k for k, v in strategy_labels.items()}.get(
+                        match_mode, "User selected"
                     )
-                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {match_mode}{_guided_seed_line}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {format_percentage(_summary_test_share_pct)}\n{kpi_share_label("Control Population Share")}: {format_percentage(_summary_control_share_pct)}"""
+                    summary_text = f"""GEO-MATCH RESULTS SUMMARY\n=========================\nMarket: {market}\nGeography Level: {geography_level}\nStrategy: {_summary_strategy_label}\n----------------------------------------\nMean Abs SMD (unweighted diagnostic): {mean_abs_smd:.4f}\nWeighted Structural Distance (optimisation objective): {weighted_structural_distance:.4f}\nControl Group Size: {len(st.session_state.final_controls)}\nTest Group Size: {len(st.session_state.test_df)}\n{kpi_share_label("Test Population Share")}: {format_percentage(_summary_test_share_pct)}\n{kpi_share_label("Control Population Share")}: {format_percentage(_summary_control_share_pct)}"""
                     st.code(summary_text, language="text")
                     st.caption("Copy the text above manually")
 
@@ -7353,18 +7384,22 @@ render_experiment_record()
 # ------------------------------------------------------------
 # Sidebar data quality footer
 # ------------------------------------------------------------
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 5. Data Quality Check")
-st.sidebar.caption(f"**{market}** - **{geography_level}**")
-if validation_issues:
-    for issue in validation_issues[:5]:
-        st.sidebar.caption(issue)
-    if recommendations:
-        with st.sidebar.expander("💡 Recommendations", expanded=False):
-            for rec in recommendations[:5]:
-                st.caption(rec)
-    st.sidebar.metric(
-        "Data Quality", issue_severity, help=f"Found {len(validation_issues)} potential issues"
-    )
-else:
-    st.sidebar.success(f"✅ Data quality check passed for {market} ({geography_level})")
+with st.sidebar:
+    st.markdown("---")
+    st.caption(f"**{market}** · **{geography_level}**")
+    if validation_issues:
+        _quality_tone = StatusTone.BAD if len(validation_issues) > 3 else StatusTone.WARNING
+        render_status_line(
+            "Data quality",
+            issue_severity,
+            _quality_tone,
+            detail=f"{len(validation_issues)} potential issue(s) found",
+        )
+        for issue in validation_issues[:5]:
+            st.caption(issue)
+        if recommendations:
+            with st.expander("💡 Recommendations", expanded=False):
+                for rec in recommendations[:5]:
+                    st.caption(rec)
+    else:
+        render_status_line("Data quality", "Passed", StatusTone.GOOD)
