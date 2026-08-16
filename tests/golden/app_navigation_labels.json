@@ -1,17 +1,16 @@
 {
-  "app_baseline_commit": "7ff25018deab6ed4103e3461b9a4cd53d858e2d5",
+  "app_baseline_commit": "bccaaa681ad755e65f4f3fdf771d1911272af3ab",
   "expected": {
-    "n_plan_steps": 5,
+    "n_plan_steps": 4,
     "plan_step_labels": [
       "Choose regions",
       "Check design",
-      "Media plan",
-      "Expected impact",
+      "Media and expected impact",
       "Review and approve"
     ]
   },
   "fixture_version": 1,
-  "golden_created_by_commit": "7ff25018deab6ed4103e3461b9a4cd53d858e2d5",
+  "golden_created_by_commit": "bccaaa681ad755e65f4f3fdf771d1911272af3ab",
   "known_limitations": [],
   "scenario": "app_navigation_labels",
   "schema_version": 1,
