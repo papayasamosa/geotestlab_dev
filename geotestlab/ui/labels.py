@@ -109,6 +109,25 @@ FIT_METHOD_LABELS: Final[dict[str, str]] = {
     "constant_mean": "Automatic (fallback)",
 }
 
+# --- Generic gate status (geotestlab/recommendation/ui.py: per-candidate
+# match/counterfactual/power/region-constraints gates). These are plain
+# strings, not a formal enum — the recommendation layer reuses a small shared
+# pass/fail/not-yet vocabulary across gates that don't each have their own
+# typed status (unlike delivery_status/effect_plausibility_status, which ARE
+# backed by real enums and use their own dedicated kind above). Migrated from
+# the former unused ``_STATUS_OPTIONS`` tuple in that module.
+GENERIC_GATE_STATUS_LABELS: Final[dict[str, str]] = {
+    "not_evaluated": "Not checked yet",
+    "pass": "Pass",
+    "supported": "Ready to use",
+    "credible": "Credible",
+    "valid": "Valid",
+    "incomplete": "Missing information",
+    "blocked": "Not suitable",
+    "not_feasible": "Not suitable",
+    "stale": "Inputs changed",
+}
+
 # Every internal vocabulary this module knows how to translate, keyed by an
 # explicit ``kind`` name so callers state which domain a raw value belongs to
 # instead of relying on a single ambiguous namespace.
@@ -124,6 +143,7 @@ _LABEL_REGISTRY: Final[dict[str, dict[str, str]]] = {
     "recommendation_status": RECOMMENDATION_STATUS_LABELS,
     "market_size_measure": MARKET_SIZE_MEASURE_LABELS,
     "fit_method": FIT_METHOD_LABELS,
+    "generic_gate_status": GENERIC_GATE_STATUS_LABELS,
 }
 
 

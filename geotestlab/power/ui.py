@@ -368,13 +368,16 @@ def _render_selected_design_power(
     )
     st.dataframe(curve, width="stretch", hide_index=True)
     st.line_chart(curve.set_index("Effect size")["Power"])
-    st.download_button(
-        "⬇ Download production power result (.json)",
-        data=json.dumps(result.to_dict(), indent=2, default=str),
-        file_name="production_power_result.json",
-        mime="application/json",
-        key="download_production_power_result",
-    )
+    with st.expander("Technical record", expanded=False):
+        st.text(f"input_fingerprint: {result.input_fingerprint}")
+        st.text(f"source_data_fingerprint: {result.source_data_fingerprint}")
+        st.download_button(
+            "⬇ Download production power result (.json)",
+            data=json.dumps(result.to_dict(), indent=2, default=str),
+            file_name="production_power_result.json",
+            mime="application/json",
+            key="download_production_power_result",
+        )
 
 
 def _scenario_weights(measure: MarketSizeMeasure, dataset) -> Mapping[str, float] | None:

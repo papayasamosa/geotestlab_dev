@@ -16,7 +16,6 @@ from geotestlab.effect.plausibility import (
     assess_effect_plausibility,
     effect_result_is_stale,
 )
-from geotestlab.ui.components import render_technical_details
 
 
 def render_effect_plausibility_tab() -> None:
@@ -206,12 +205,13 @@ def render_effect_plausibility_tab() -> None:
     )
     if not comparison_frame.empty:
         st.dataframe(comparison_frame, width="stretch", hide_index=True)
-    st.download_button(
-        "⬇️ Download effect plausibility result (.json)",
-        data=json.dumps(result.to_dict(), indent=2, default=str),
-        file_name="effect_plausibility_result.json",
-        mime="application/json",
-        key="download_effect_plausibility_result",
-    )
     st.caption(f"Evidence source: {result.evidence.source if result.evidence else 'none'}")
-    render_technical_details("Technical record", {"input_fingerprint": result.input_fingerprint})
+    with st.expander("Technical record", expanded=False):
+        st.text(f"input_fingerprint: {result.input_fingerprint}")
+        st.download_button(
+            "⬇️ Download effect plausibility result (.json)",
+            data=json.dumps(result.to_dict(), indent=2, default=str),
+            file_name="effect_plausibility_result.json",
+            mime="application/json",
+            key="download_effect_plausibility_result",
+        )

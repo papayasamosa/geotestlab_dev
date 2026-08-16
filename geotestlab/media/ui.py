@@ -23,7 +23,6 @@ from geotestlab.media.profiles import (
     MediaValue,
     list_platform_profiles,
 )
-from geotestlab.ui.components import render_technical_details
 from geotestlab.ui.labels import display_label
 
 
@@ -357,18 +356,14 @@ def render_media_delivery_tab() -> None:
             }
         )
     st.dataframe(pd.DataFrame(fields), width="stretch", hide_index=True)
-    st.download_button(
-        "⬇️ Download media delivery result (.json)",
-        data=json.dumps(result.to_dict(), indent=2, default=str),
-        file_name="media_delivery_result.json",
-        mime="application/json",
-        key="download_media_delivery_result",
-    )
-    render_technical_details(
-        "Technical record",
-        {
-            "profile": result.profile_id,
-            "input_fingerprint": result.input_fingerprint,
-            "calculated_fields": ", ".join(result.calculated_fields) or "none",
-        },
-    )
+    with st.expander("Technical record", expanded=False):
+        st.text(f"profile: {result.profile_id}")
+        st.text(f"input_fingerprint: {result.input_fingerprint}")
+        st.text(f"calculated_fields: {', '.join(result.calculated_fields) or 'none'}")
+        st.download_button(
+            "⬇️ Download media delivery result (.json)",
+            data=json.dumps(result.to_dict(), indent=2, default=str),
+            file_name="media_delivery_result.json",
+            mime="application/json",
+            key="download_media_delivery_result",
+        )

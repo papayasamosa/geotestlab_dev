@@ -188,6 +188,8 @@ def test_selected_design_power_run_and_short_dataset_warning(monkeypatch):
         power_curve=(0.2, 0.82),
         power_ci_lower=(0.1, 0.7),
         power_ci_upper=(0.3, 0.9),
+        input_fingerprint="fp1:power-input",
+        source_data_fingerprint="fp1:power-source",
         to_dict=lambda: {"status": "supported"},
     )
 
@@ -241,6 +243,8 @@ def test_selected_design_power_run_and_short_dataset_warning(monkeypatch):
     monkeypatch.setattr(power_ui.st, "dataframe", lambda *args, **kwargs: None)
     monkeypatch.setattr(power_ui.st, "line_chart", lambda *args, **kwargs: None)
     monkeypatch.setattr(power_ui.st, "download_button", lambda *args, **kwargs: None)
+    monkeypatch.setattr(power_ui.st, "expander", lambda *_args, **_kwargs: nullcontext())
+    monkeypatch.setattr(power_ui.st, "text", lambda *args, **kwargs: None)
     monkeypatch.setattr(power_ui, "run_production_power", lambda *_args, **_kwargs: result)
     monkeypatch.setattr(power_ui, "production_result_is_stale", lambda *_args, **_kwargs: False)
 
