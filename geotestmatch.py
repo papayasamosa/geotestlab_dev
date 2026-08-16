@@ -124,6 +124,17 @@ from geotestlab.power.production import (
 )
 from geotestlab.power.ui import render_power_test_sizing_tab
 from geotestlab.recommendation.ui import render_design_recommendation_tab
+from geotestlab.ui import (
+    PLAN_STEP_ORDER,
+    PLAN_STEP_TITLES,
+    JourneyArea,
+    NavigationState,
+    PlanStep,
+    display_label,
+    get_navigation_state,
+    set_navigation_state,
+)
+from geotestlab.ui.components import StatusTone, render_status_summary
 
 # Validation core (geotestlab.validation) — pure functions, no Streamlit imports.
 from geotestlab.validation import (
@@ -1702,8 +1713,19 @@ def _lifecycle_status_rows() -> list[dict[str, str]]:
     return rows
 
 
+_LIFECYCLE_STATUS_TONES: dict[str, StatusTone] = {
+    "completed": StatusTone.GOOD,
+    "needs_attention": StatusTone.WARNING,
+    "stale": StatusTone.WARNING,
+    "not_started": StatusTone.NEUTRAL,
+    "planned": StatusTone.NEUTRAL,
+    "in_progress": StatusTone.NEUTRAL,
+    "not_applicable": StatusTone.NEUTRAL,
+}
+
+
 def render_lifecycle_status_summary() -> None:
-    """Render the workflow map and the next action outside collapsible panels."""
+    """Render the workflow map and the next action as compact status lines."""
 
     rows = _lifecycle_status_rows()
     st.subheader("Workflow status")
@@ -1711,7 +1733,16 @@ def render_lifecycle_status_summary() -> None:
         "Plan a Test covers matching through design approval. Evaluate a Completed Test covers "
         "observed impact and Bayesian TBR. Statuses remain separate; a warning is never a pass."
     )
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    render_status_summary(
+        [
+            (
+                f"{row['Lifecycle']} — {row['Stage']}",
+                display_label("stage_status", row["Status"]),
+                _LIFECYCLE_STATUS_TONES.get(row["Status"], StatusTone.NEUTRAL),
+            )
+            for row in rows
+        ]
+    )
 
     attention = next(
         (row for row in rows if row["Status"] in {"stale", "needs_attention"}),
@@ -2261,6 +2292,55 @@ except Exception as e:
 
 _default_market_index = available_markets.index("UK") if "UK" in available_markets else 0
 
+# =============================================================================
+# Task-led navigation shell — entry screen
+# =============================================================================
+_nav_state = get_navigation_state()
+
+if _nav_state.area == JourneyArea.ENTRY:
+    st.subheader("What would you like to do?")
+    _entry_cols = st.columns(3)
+    with _entry_cols[0]:
+        if st.button("📝 Plan a new geo test", width="stretch", type="primary"):
+            set_navigation_state(_nav_state.with_area(JourneyArea.PLAN))
+            st.rerun()
+    with _entry_cols[1]:
+        if st.button("📊 Analyse a completed geo test", width="stretch"):
+            set_navigation_state(_nav_state.with_area(JourneyArea.EVALUATE))
+            st.rerun()
+    with _entry_cols[2]:
+        if st.button("📂 Open a saved experiment", width="stretch"):
+            st.session_state["_show_entry_experiment_loader"] = True
+            st.rerun()
+
+    _entry_snapshot = st.session_state.get("match_run_snapshot")
+    if _entry_snapshot:
+        st.caption(
+            f"Current in-progress design: {len(_entry_snapshot.get('test_geos') or [])} test "
+            f"region(s), {len(_entry_snapshot.get('selected_controls') or [])} control region(s)."
+        )
+
+    if st.session_state.get("_show_entry_experiment_loader"):
+        st.markdown("**Open local experiment record**")
+        st.caption(
+            "Load a previously exported JSON record to review its frozen design and audit "
+            "metadata. Source workbooks and analytical data are never embedded or restored."
+        )
+        _entry_record_upload = st.file_uploader(
+            "Experiment record JSON", type=["json"], key="entry_load_experiment_record_uploader"
+        )
+        if st.button(
+            "📂 Load experiment record",
+            key="entry_load_experiment_record_btn",
+            disabled=_entry_record_upload is None,
+        ):
+            # Sets navigation to Plan before loading: on success the loader's own
+            # st.rerun() (see _load_local_experiment_record) immediately restarts
+            # the script, which then reads this Plan state back out.
+            set_navigation_state(_nav_state.with_area(JourneyArea.PLAN))
+            _load_local_experiment_record(_entry_record_upload)
+    st.stop()
+
 with st.sidebar:
     st.header("Matching Method")
     matching_method = st.radio(
@@ -2642,24 +2722,118 @@ issue_severity = (
 )
 
 # =============================================================================
-# Main app – Tabs
+# Main app – task-led navigation shell (Plan / Evaluate journeys)
 # =============================================================================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
-    [
-        "⚙️ Region Matching",
-        "🔍 Validate Test Design",
-        "📈 Power & Test Sizing",
-        "📣 Media Delivery Feasibility",
-        "🎯 Effect Plausibility",
-        "✅ Design Recommendation / Approve Design",
-        "📊 Measure Test Impact",
-        "🧠 Bayesian TBR",
-    ]
-)
+# ``_active_slot`` identifies which of the eight original tab bodies below
+# should render this rerun; the bodies themselves are unchanged (each former
+# ``with tabN:`` block became ``if _active_slot == "tabN":``). ``tab8``
+# (Bayesian TBR) is additionally gated by ``_show_advanced_uncertainty``: it
+# is reachable as an optional action from Results rather than its own step.
+_active_slot: str | None = None
+_show_advanced_uncertainty = False
+_PLAN_STEP_RADIO_KEY = "_plan_step_radio"
 
-# Render a persistent status surface before any tab-local ``st.stop()`` path.
-# The same slot is refreshed after the tabs complete when the rerun reaches the
-# bottom of the script.
+
+def _go_to_plan_step(step: PlanStep) -> None:
+    # A keyed st.radio ignores a freshly-passed `index=` once it has rendered
+    # once — Streamlit treats st.session_state[key] as the only source of
+    # truth for a keyed widget from then on. An on_click callback runs before
+    # the next rerun's widgets are instantiated, so it's the only place a
+    # keyed widget's own session-state entry can be reassigned programmatically
+    # (writing to it inline, after the widget has already rendered this run,
+    # raises StreamlitAPIException).
+    _current = get_navigation_state()
+    set_navigation_state(
+        NavigationState(area=JourneyArea.PLAN, plan_step=step, evaluate_step=_current.evaluate_step)
+    )
+    st.session_state[_PLAN_STEP_RADIO_KEY] = PLAN_STEP_TITLES[step]
+
+
+def _go_to_entry() -> None:
+    set_navigation_state(NavigationState())
+    st.session_state.pop(_PLAN_STEP_RADIO_KEY, None)
+
+
+def _toggle_advanced_uncertainty() -> None:
+    st.session_state["_show_advanced_uncertainty"] = not st.session_state.get(
+        "_show_advanced_uncertainty", False
+    )
+
+
+if _nav_state.area == JourneyArea.PLAN:
+    _plan_step_labels = [PLAN_STEP_TITLES[step] for step in PLAN_STEP_ORDER]
+    _current_plan_index = PLAN_STEP_ORDER.index(_nav_state.plan_step)
+    if _PLAN_STEP_RADIO_KEY not in st.session_state:
+        st.session_state[_PLAN_STEP_RADIO_KEY] = _plan_step_labels[_current_plan_index]
+
+    st.markdown("### Plan a new geo test")
+    _chosen_plan_label = st.radio(
+        "Step",
+        _plan_step_labels,
+        horizontal=True,
+        label_visibility="collapsed",
+        key=_PLAN_STEP_RADIO_KEY,
+    )
+    _chosen_plan_step = PLAN_STEP_ORDER[_plan_step_labels.index(_chosen_plan_label)]
+    if _chosen_plan_step != _nav_state.plan_step:
+        _nav_state = NavigationState(
+            area=JourneyArea.PLAN,
+            plan_step=_chosen_plan_step,
+            evaluate_step=_nav_state.evaluate_step,
+        )
+        set_navigation_state(_nav_state)
+
+    _plan_nav_cols = st.columns([1, 1, 1, 5])
+    with _plan_nav_cols[0]:
+        st.button(
+            "◀ Back",
+            disabled=_current_plan_index == 0,
+            key="_plan_back_btn",
+            on_click=_go_to_plan_step,
+            args=(_nav_state.retreat_plan().plan_step,),
+        )
+    with _plan_nav_cols[1]:
+        st.button(
+            "Next ▶",
+            disabled=_current_plan_index == len(PLAN_STEP_ORDER) - 1,
+            key="_plan_next_btn",
+            on_click=_go_to_plan_step,
+            args=(_nav_state.advance_plan().plan_step,),
+        )
+    with _plan_nav_cols[2]:
+        st.button("🏠 Start over", key="_plan_home_btn", on_click=_go_to_entry)
+
+    _active_slot = {
+        PlanStep.REGIONS: "tab1",
+        PlanStep.VALIDATE_DESIGN: "tab2",
+        PlanStep.POWER_SIZING: "tab3",
+        PlanStep.MEDIA_DELIVERY: "tab4",
+        PlanStep.EFFECT_PLAUSIBILITY: "tab5",
+        PlanStep.REVIEW: "tab6",
+    }[_nav_state.plan_step]
+
+elif _nav_state.area == JourneyArea.EVALUATE:
+    st.markdown("### Analyse a completed geo test")
+    _evaluate_home_col, _evaluate_toggle_col = st.columns([1, 3])
+    with _evaluate_home_col:
+        st.button("🏠 Start over", key="_evaluate_home_btn", on_click=_go_to_entry)
+    _active_slot = "tab7"
+    _show_advanced_uncertainty = bool(st.session_state.get("_show_advanced_uncertainty", False))
+    with _evaluate_toggle_col:
+        _advanced_uncertainty_label = (
+            "🔬 Hide advanced uncertainty analysis"
+            if _show_advanced_uncertainty
+            else "🔬 Run advanced uncertainty analysis"
+        )
+        st.button(
+            _advanced_uncertainty_label,
+            key="_toggle_advanced_uncertainty_btn",
+            on_click=_toggle_advanced_uncertainty,
+        )
+
+# Render a persistent status surface before any step-local ``st.stop()`` path.
+# The same slot is refreshed after the steps complete when the rerun reaches
+# the bottom of the script.
 _lifecycle_status_slot = st.empty()
 _reconcile_experiment_record()
 with _lifecycle_status_slot.container():
@@ -4109,7 +4283,7 @@ def render_structural_matching_tab():
 # =============================================================================
 # TAB 1: MATCHING SETUP
 # =============================================================================
-with tab1:
+if _active_slot == "tab1":
     render_structural_matching_tab()
 
 # =============================================================================
@@ -6527,14 +6701,14 @@ def render_time_series_validation(mode: str):
                     )
 
 
-with tab2:
+if _active_slot == "tab2":
     st.subheader("🔍 Validate Test Design")
     st.caption(
         "Validate whether your selected control regions can reliably predict the test regions before running a live geo-test."
     )
     render_time_series_validation("Design")
 
-with tab7:
+if _active_slot == "tab7":
     st.subheader("📊 Measure Test Impact")
     st.caption(
         "Estimate the uplift from your completed geo test and compare results against expected historical variation."
@@ -6544,7 +6718,7 @@ with tab7:
 # =============================================================================
 # TAB 4: BAYESIAN TIME-BASED REGRESSION
 # =============================================================================
-with tab8:
+if _active_slot == "tab7" and _show_advanced_uncertainty:
     st.subheader("🧠 Bayesian Time-Based Regression (TBR)")
     st.caption(
         "Run a Bayesian time-based regression on the results from the Measure Test Impact tab."
@@ -7151,19 +7325,19 @@ with tab8:
                 """)
 
 
-with tab3:
+if _active_slot == "tab3":
     render_power_test_sizing_tab(
         experiment_record_factory=_experiment_record,
         save_experiment_record=_save_experiment_record,
     )
 
-with tab4:
+if _active_slot == "tab4":
     render_media_delivery_tab()
 
-with tab5:
+if _active_slot == "tab5":
     render_effect_plausibility_tab()
 
-with tab6:
+if _active_slot == "tab6":
     render_design_recommendation_tab()
 
 

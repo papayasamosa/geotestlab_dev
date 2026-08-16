@@ -34,7 +34,7 @@ REQUIRED_GOLDEN_FIELDS = [
 
 # Scenario-specific expected keys
 SCENARIO_EXPECTED_KEYS = {
-    "app_tab_labels": {"n_tabs", "tab_labels"},
+    "app_navigation_labels": {"n_plan_steps", "plan_step_labels"},
     "bundled_workbook_structure": {"n_sheets", "sheet_names"},
     "available_markets": {"markets", "default_market"},
 }
@@ -145,23 +145,21 @@ class TestLiveAppStartup:
         assert live_app.title[0].value == "GeoTestLab"
 
     @pytest.mark.smoke
-    def test_exact_tab_labels(self, live_app):
-        tab_labels = [t.label for t in live_app.tabs]
-        assert tab_labels == [
-            "\u2699\ufe0f Region Matching",
-            "\U0001f50d Validate Test Design",
-            "\U0001f4c8 Power & Test Sizing",
-            "\U0001f4e3 Media Delivery Feasibility",
-            "\U0001f3af Effect Plausibility",
-            "\u2705 Design Recommendation / Approve Design",
-            "\U0001f4ca Measure Test Impact",
-            "\U0001f9e0 Bayesian TBR",
+    def test_exact_plan_step_labels(self, live_app):
+        plan_step_radio = next(r for r in live_app.radio if r.label == "Step")
+        assert list(plan_step_radio.options) == [
+            "Choose regions",
+            "Check design quality",
+            "Can we detect the effect?",
+            "Media plan",
+            "Expected impact",
+            "Review and approve",
         ]
 
     @pytest.mark.smoke
     def test_lifecycle_status_summary_is_visible(self, live_app):
         assert any(item.value == "Workflow status" for item in live_app.subheader)
-        assert any("Plan a Test" in str(item.value) for item in live_app.dataframe)
+        assert any("Plan a Test" in str(item.value) for item in live_app.markdown)
         assert any("Next recommended action" in item.value for item in live_app.info)
 
     @pytest.mark.smoke
@@ -244,7 +242,7 @@ class TestGoldenSchema:
     @pytest.mark.smoke
     def test_golden_files_are_read_only(self):
         """Tests must fail when a golden file is missing — no auto-creation."""
-        for name in ["app_tab_labels", "bundled_workbook_structure", "available_markets"]:
+        for name in ["app_navigation_labels", "bundled_workbook_structure", "available_markets"]:
             path = REPO_ROOT / "tests" / "golden" / f"{name}.json"
             assert path.exists(), (
                 f"Golden file {path.name} is missing. "

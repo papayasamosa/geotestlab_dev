@@ -30,6 +30,8 @@ from geotestlab.experiment import (
     freeze_design,
     material_file_identity,
 )
+from geotestlab.ui import PlanStep
+from tests.conftest import seed_evaluate, seed_plan_step
 from tests.fixture_factories.write_correlated_kpi_xlsx import write_correlated_kpi_xlsx
 from tests.fixtures.live_scenarios import (
     CONTROL_REGIONS,
@@ -73,12 +75,27 @@ def _write_geo_workbook(path: Path, regions, market="UK", population_delta=0) ->
 
 def _new_app() -> AppTest:
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.REGIONS)
     app.run(timeout=RUN_TIMEOUT)
     return app
 
 
 def _record(app: AppTest) -> dict:
     return dict(app.session_state["experiment_record"])
+
+
+def _manual_match_then_design(app: AppTest) -> None:
+    """Match on Region Matching, then switch to Validate Test Design's uploader."""
+    _manual_match(app)
+    seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+    app.run(timeout=RUN_TIMEOUT)
+
+
+def _manual_match_then_evaluate(app: AppTest) -> None:
+    """Match on Region Matching, then switch to the Evaluate journey's Results."""
+    _manual_match(app)
+    seed_evaluate(app)
+    app.run(timeout=RUN_TIMEOUT)
 
 
 def test_experiment_panel_renders_with_default_stage_statuses():
@@ -140,7 +157,7 @@ def test_validation_completion_stamps_and_requires_recommendation(tmp_path: Path
         seed=123,
     )
     app = _new_app()
-    _manual_match(app)
+    _manual_match_then_design(app)
     _upload_kpi(app, "design", "weekly.xlsx", kpi_path.read_bytes())
 
     run_btn = [b for b in app.button if b.key == "design_run_button"][0]
@@ -173,7 +190,7 @@ def test_changing_validation_input_marks_stage_stale(tmp_path: Path):
         seed=123,
     )
     app = _new_app()
-    _manual_match(app)
+    _manual_match_then_design(app)
     _upload_kpi(app, "design", "weekly.xlsx", kpi_path.read_bytes())
 
     run_btn = [b for b in app.button if b.key == "design_run_button"][0]
@@ -211,7 +228,7 @@ def test_validation_completes_observed_impact_without_bayesian(tmp_path: Path):
         seed=123,
     )
     app = _new_app()
-    _manual_match(app)
+    _manual_match_then_evaluate(app)
     _upload_kpi(app, "evaluate", "weekly_eval.xlsx", kpi_path.read_bytes())
 
     run_btn = [b for b in app.button if b.key == "evaluate_run_button"][0]
@@ -245,7 +262,7 @@ def test_design_validation_does_not_complete_observed_impact(tmp_path: Path):
         seed=123,
     )
     app = _new_app()
-    _manual_match(app)
+    _manual_match_then_design(app)
     _upload_kpi(app, "design", "weekly_design.xlsx", kpi_path.read_bytes())
     run_btn = [b for b in app.button if b.key == "design_run_button"][0]
     run_btn.click()
@@ -270,7 +287,7 @@ def test_freeze_requires_recommendation_before_snapshot(tmp_path: Path):
         seed=123,
     )
     app = _new_app()
-    _manual_match(app)
+    _manual_match_then_design(app)
     _upload_kpi(app, "design", "weekly_freeze.xlsx", kpi_path.read_bytes())
     run_btn = [b for b in app.button if b.key == "design_run_button"][0]
     run_btn.click()
@@ -354,6 +371,12 @@ freeze_design(rec, app._current_planned_periods(), rec.input_fingerprint,
 app._save_experiment_record(rec)
 """
     app = AppTest.from_string(script)
+    # ``import geotestmatch as app`` inside the script above runs the whole
+    # top-level module, including the task-led entry gate; without seeding,
+    # that gate's st.stop() would halt the import before the module-level
+    # helper functions used below (_experiment_record, _save_experiment_record,
+    # ...) are ever defined.
+    seed_plan_step(app, PlanStep.REGIONS)
     app.run(timeout=RUN_TIMEOUT)
 
     frozen = _record(app)["frozen_versions"][0]
@@ -375,7 +398,7 @@ app._save_experiment_record(rec)
 
 def test_evaluate_can_inherit_active_frozen_design():
     app = _new_app()
-    _manual_match(app)
+    _manual_match_then_evaluate(app)
     rec = create_experiment_record(datetime(2026, 8, 15, tzinfo=UTC))
     rec.input_fingerprint = "fp1:approved"
     freeze_design(
@@ -426,7 +449,7 @@ def test_same_content_workbook_replacement_invalidates_caches(tmp_path, monkeypa
         seed=123,
     )
     app = _new_app()
-    _manual_match(app)
+    _manual_match_then_design(app)
     _upload_kpi(app, "design", "weekly_cache.xlsx", kpi_path.read_bytes())
     run_btn = [b for b in app.button if b.key == "design_run_button"][0]
     run_btn.click()

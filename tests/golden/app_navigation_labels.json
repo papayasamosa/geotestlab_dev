@@ -1,0 +1,21 @@
+{
+  "app_baseline_commit": "3ceb34000bd76b7fa49baa59e0eefe9118242bf2",
+  "expected": {
+    "n_plan_steps": 6,
+    "plan_step_labels": [
+      "Choose regions",
+      "Check design quality",
+      "Can we detect the effect?",
+      "Media plan",
+      "Expected impact",
+      "Review and approve"
+    ]
+  },
+  "fixture_version": 1,
+  "golden_created_by_commit": "9e88739525f9850fc7d824c321247c9f94e5a18d",
+  "known_limitations": [],
+  "scenario": "app_navigation_labels",
+  "schema_version": 1,
+  "settings": {},
+  "tolerances": {}
+}

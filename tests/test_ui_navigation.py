@@ -1,8 +1,7 @@
 """Coverage for the target task-led navigation state model.
 
-This state model is not wired into ``geotestmatch.py`` yet (see
-``geotestlab/ui/navigation.py``); these tests exercise the model in
-isolation ahead of that wiring.
+This exercises the model in isolation; ``tests/test_navigation_app.py``
+covers how ``geotestmatch.py`` wires it into the running app.
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ def test_every_evaluate_step_has_a_title_and_an_order_position():
 def test_default_state_starts_at_entry():
     state = NavigationState()
     assert state.area is JourneyArea.ENTRY
-    assert state.plan_step is PlanStep.SETUP
+    assert state.plan_step is PlanStep.REGIONS
     assert state.evaluate_step is EvaluateStep.SETUP
 
 
@@ -57,7 +56,7 @@ def test_retreat_plan_stops_at_first_step():
 
 def test_retreat_plan_moves_backward():
     state = NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.REVIEW)
-    assert state.retreat_plan().plan_step == PlanStep.MEDIA_AND_IMPACT
+    assert state.retreat_plan().plan_step == PlanStep.EFFECT_PLAUSIBILITY
 
 
 def test_advance_evaluate_moves_through_every_step_in_order():
@@ -85,17 +84,17 @@ def test_retreat_evaluate_moves_backward():
 
 
 def test_with_area_switches_area_and_preserves_step_positions():
-    state = NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.DESIGN)
+    state = NavigationState(area=JourneyArea.PLAN, plan_step=PlanStep.VALIDATE_DESIGN)
     switched = state.with_area(JourneyArea.EVALUATE)
     assert switched.area is JourneyArea.EVALUATE
-    assert switched.plan_step is PlanStep.DESIGN
+    assert switched.plan_step is PlanStep.VALIDATE_DESIGN
     assert switched.evaluate_step is EvaluateStep.SETUP
 
 
 def test_navigation_state_transitions_are_immutable_and_hashable():
     state = NavigationState()
     advanced = state.advance_plan()
-    assert state.plan_step is PlanStep.SETUP
-    assert advanced.plan_step is PlanStep.REGIONS
+    assert state.plan_step is PlanStep.REGIONS
+    assert advanced.plan_step is PlanStep.VALIDATE_DESIGN
     assert state != advanced
     assert hash(state) != hash(advanced)

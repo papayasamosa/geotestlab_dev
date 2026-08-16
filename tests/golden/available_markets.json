@@ -1,5 +1,5 @@
 {
-  "app_baseline_commit": "407f4a502a8726e6dd23b0257de1f4134b5af0ce",
+  "app_baseline_commit": "3ceb34000bd76b7fa49baa59e0eefe9118242bf2",
   "expected": {
     "default_market": "UK",
     "markets": [
@@ -15,7 +15,7 @@
     ]
   },
   "fixture_version": 1,
-  "golden_created_by_commit": "6b35f6863e27263c17c06b32159959ef89f29efd",
+  "golden_created_by_commit": "9e88739525f9850fc7d824c321247c9f94e5a18d",
   "known_limitations": [
     "Market list depends on bundled workbook sheets."
   ],

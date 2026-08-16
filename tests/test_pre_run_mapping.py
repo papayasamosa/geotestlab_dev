@@ -32,6 +32,8 @@ from geotestlab.data.models import (
     RegionMappingReport,
     compute_mapping_report,
 )
+from geotestlab.ui import PlanStep
+from tests.conftest import seed_plan_step
 from tests.fixtures.live_scenarios import (
     RUN_TIMEOUT,
     _manual_match,
@@ -325,11 +327,16 @@ class TestPreRunMappingUI:
     @staticmethod
     def _new_app() -> AppTest:
         app = AppTest.from_file(str(REPO_ROOT / "geotestmatch.py"))
+        seed_plan_step(app, PlanStep.REGIONS)
         app.run(timeout=RUN_TIMEOUT)
         return app
 
     @staticmethod
     def _uploaded(app: AppTest, path: Path) -> AppTest:
+        # Matching happens on Region Matching; the design KPI uploader lives
+        # on Validate Test Design — switch steps to reach it.
+        seed_plan_step(app, PlanStep.VALIDATE_DESIGN)
+        app.run(timeout=RUN_TIMEOUT)
         _upload_kpi(app, "design", path.name, path.read_bytes())
         return app
 

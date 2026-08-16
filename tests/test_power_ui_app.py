@@ -8,6 +8,8 @@ import pandas as pd
 from streamlit.testing.v1 import AppTest
 
 from geotestlab.data import RegionalKPIConfig, prepare_regional_kpi
+from geotestlab.ui import PlanStep
+from tests.conftest import seed_plan_step
 from tests.fixtures.live_scenarios import RUN_TIMEOUT
 
 APP_PATH = str(Path(__file__).resolve().parent.parent / "geotestmatch.py")
@@ -15,6 +17,7 @@ APP_PATH = str(Path(__file__).resolve().parent.parent / "geotestmatch.py")
 
 def test_power_tab_explains_canonical_dataset_prerequisite():
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.POWER_SIZING)
     app.run(timeout=RUN_TIMEOUT)
 
     assert any("Power Analysis & Test Sizing" in item.value for item in app.subheader)
@@ -24,6 +27,7 @@ def test_power_tab_explains_canonical_dataset_prerequisite():
 
 def test_media_delivery_tab_renders_without_power_dataset():
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.MEDIA_DELIVERY)
     app.run(timeout=RUN_TIMEOUT)
 
     assert any("Media Delivery Feasibility" in item.value for item in app.subheader)
@@ -34,6 +38,7 @@ def test_media_delivery_tab_renders_without_power_dataset():
 
 def test_effect_plausibility_tab_renders_without_evidence():
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.EFFECT_PLAUSIBILITY)
     app.run(timeout=RUN_TIMEOUT)
 
     assert any("Effect Plausibility" in item.value for item in app.subheader)
@@ -44,6 +49,7 @@ def test_effect_plausibility_tab_renders_without_evidence():
 
 def test_design_recommendation_tab_renders_without_stage_results():
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.REVIEW)
     app.run(timeout=RUN_TIMEOUT)
 
     assert any("Integrated Design Recommendation" in item.value for item in app.subheader)
@@ -54,6 +60,7 @@ def test_design_recommendation_tab_renders_without_stage_results():
 
 def test_power_tab_renders_explicit_design_inputs_for_canonical_dataset():
     app = AppTest.from_file(APP_PATH)
+    seed_plan_step(app, PlanStep.POWER_SIZING)
     app.run(timeout=RUN_TIMEOUT)
     dates = pd.date_range("2025-01-05", periods=6, freq="7D")
     frame = {"Region": ["A", "B"], "Metric": ["Sales", "Sales"]}
