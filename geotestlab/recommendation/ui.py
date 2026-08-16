@@ -453,7 +453,7 @@ def _assessment_frame(result) -> pd.DataFrame:
 def render_design_recommendation_tab() -> None:
     """Render explicit candidate comparison and limiting-factor output."""
 
-    st.subheader("✅ Integrated Design Recommendation")
+    st.subheader("Integrated Design Recommendation")
     st.caption(
         "Compare complete design candidates under an explicit objective. Match quality, "
         "counterfactual validation, power, delivery, effect plausibility, constraints, "

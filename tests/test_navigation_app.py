@@ -40,9 +40,9 @@ def test_entry_screen_shows_exactly_three_choices_and_nothing_else():
     assert not app.exception
     assert [s.value for s in app.subheader] == ["What would you like to do?"]
     button_labels = [b.label for b in app.button]
-    assert "📝 Plan a new geo test" in button_labels
-    assert "📊 Analyse a completed geo test" in button_labels
-    assert "📂 Open a saved experiment" in button_labels
+    assert "Plan a new geo test" in button_labels
+    assert "Analyse a completed geo test" in button_labels
+    assert "Open a saved experiment" in button_labels
     # No model settings, workflow status or sidebar content on the entry screen.
     assert len(app.sidebar.selectbox) == 0
     assert len(app.sidebar.radio) == 0
@@ -58,7 +58,7 @@ def test_plan_button_reaches_region_matching_with_sidebar_and_step_radio():
     step_radio = next(r for r in app.radio if r.label == "Step")
     assert list(step_radio.options) == EXPECTED_PLAN_STEP_LABELS
     assert step_radio.value == "Choose regions"
-    assert any(s.value == "🧩 MATCHING SETUP" for s in app.subheader)
+    assert any(s.value == "Matching setup" for s in app.subheader)
     # The sidebar (matching method/geography setup) is visible past the entry screen.
     assert any(r.label == "Matching method" for r in app.sidebar.radio)
 
@@ -96,9 +96,9 @@ def test_jumping_directly_to_a_step_via_the_radio_updates_content():
     app.run(timeout=RUN_TIMEOUT)
 
     assert not app.exception
-    assert any(s.value == "📣 Media Delivery Feasibility" for s in app.subheader)
-    assert any(s.value == "🎯 Effect Plausibility" for s in app.subheader)
-    assert not any(s.value == "🧩 MATCHING SETUP" for s in app.subheader)
+    assert any(s.value == "Media Delivery Feasibility" for s in app.subheader)
+    assert any(s.value == "Effect Plausibility" for s in app.subheader)
+    assert not any(s.value == "Matching setup" for s in app.subheader)
 
 
 def test_start_over_returns_to_entry_screen_and_resets_step():
@@ -124,10 +124,10 @@ def test_evaluate_journey_shows_results_without_bayesian_by_default():
     app.run(timeout=RUN_TIMEOUT)
 
     assert not app.exception
-    assert any(s.value == "📊 Measure Test Impact" for s in app.subheader)
+    assert any(s.value == "Measure Test Impact" for s in app.subheader)
     assert not any("Bayesian" in s.value for s in app.subheader)
     toggle_labels = [b.label for b in app.button if b.label and "uncertainty" in b.label]
-    assert toggle_labels == ["🔬 Run advanced uncertainty analysis"]
+    assert toggle_labels == ["Run advanced uncertainty analysis"]
 
 
 def test_advanced_uncertainty_toggle_reveals_and_hides_bayesian_content():

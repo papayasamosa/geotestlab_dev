@@ -62,3 +62,6 @@ htmlcov/
 
 # --- Pytest temp ---
 .pytest_tmp/
+
+# --- Playwright MCP session artifacts ---
+.playwright-mcp/

@@ -688,7 +688,7 @@ def render_power_test_sizing_tab(
 ) -> None:
     """Render selected-design power and the candidate scenario comparison workflow."""
 
-    st.subheader("📈 Power Analysis & Test Sizing")
+    st.subheader("Power Analysis & Test Sizing")
     st.caption(
         "Statistical detectability is separate from media delivery and effect plausibility. Use the candidate comparison to inspect real matched and historically validated designs."
     )
